@@ -1,0 +1,136 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Public and private user profile data.",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["Administrator", "Manager", "Audit", "Staff", "Viewer"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["displayName", "email", "createdAt"]
+    },
+    "Post": {
+      "title": "Forum Post",
+      "description": "A discussion thread in the property forum.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "category": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content", "authorId", "authorName", "createdAt"]
+    },
+    "Comment": {
+      "title": "Post Comment",
+      "description": "A reply to a forum post.",
+      "type": "object",
+      "properties": {
+        "content": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["content", "authorId", "authorName", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "An alert for a specific user about an event.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["forum", "maintenance", "system"] },
+        "read": { "type": "boolean" },
+        "link": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "message", "type", "read", "createdAt"]
+    },
+    "Complaint": {
+      "title": "Guest Complaint",
+      "description": "A formal complaint lodged via the Guest Recovery portal.",
+      "type": "object",
+      "properties": {
+        "guestName": { "type": "string" },
+        "roomNumber": { "type": "string" },
+        "type": { "type": "string", "enum": ["Folio Correction", "Key Sync Failure", "Profile Restoration", "Service Issue", "Restroom Issue", "Other"] },
+        "priority": { "type": "string", "enum": ["Low", "Medium", "High", "Urgent"] },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "In Progress", "Resolved"] },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["guestName", "roomNumber", "type", "priority", "description", "status", "authorId", "authorName", "createdAt"]
+    },
+    "LostItem": {
+      "title": "Lost & Found Item",
+      "description": "An item found in the property reported by staff.",
+      "type": "object",
+      "properties": {
+        "itemName": { "type": "string" },
+        "description": { "type": "string" },
+        "locationFound": { "type": "string" },
+        "staffName": { "type": "string" },
+        "staffPosition": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["Found", "Claimed", "Disposed"] },
+        "authorId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "dispatchDetails": {
+          "type": "object",
+          "properties": {
+            "guestName": { "type": "string" },
+            "guestEmail": { "type": "string" },
+            "guestPhone": { "type": "string" },
+            "roomNumber": { "type": "string" },
+            "releaseDate": { "type": "string" },
+            "idProofType": { "type": "string" },
+            "idProofNumber": { "type": "string" },
+            "idDocumentUrl": { "type": "string" },
+            "recipientPhotoUrl": { "type": "string" },
+            "systemAutoNote": { "type": "string" },
+            "dispatchedBy": { "type": "string" },
+            "dispatchedAt": { "type": "string", "format": "date-time" },
+            "notes": { "type": "string" }
+          }
+        }
+      },
+      "required": ["itemName", "description", "locationFound", "staffName", "status", "authorId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles for forum identification."
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Real-time notifications for specific users."
+    },
+    "/posts/{postId}": {
+      "schema": "Post",
+      "description": "Discussion threads for the property."
+    },
+    "/posts/{postId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Replies to specific discussion threads."
+    },
+    "/complaints/{complaintId}": {
+      "schema": "Complaint",
+      "description": "Guest recovery complaints lodged by staff."
+    },
+    "/lost-and-found/{itemId}": {
+      "schema": "LostItem",
+      "description": "Lost and found items reported by property staff."
+    }
+  }
+}

@@ -1,0 +1,157 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&family=Montserrat:wght@100;200;300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Cormorant Garamond", serif;
+  --font-display: "Montserrat", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-gold: #C5A059;
+  --color-gold-light: #E5C384;
+  --color-gold-dark: #8D6E32;
+  --color-luxury-black: #1A1A1A;
+  --color-luxury-cream: #F9F8F6;
+}
+
+@layer base {
+  body {
+    @apply bg-luxury-cream text-luxury-black antialiased font-sans;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif;
+  }
+}
+
+@layer components {
+  .luxury-card {
+    @apply bg-white border border-slate-200 shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:border-gold transition-all duration-500;
+  }
+  
+  .luxury-button {
+    @apply bg-luxury-black text-white px-6 py-2 tracking-widest text-[10px] font-bold uppercase transition-all duration-300 hover:bg-gold;
+  }
+  
+  .luxury-label {
+    @apply font-display text-[10px] uppercase tracking-[0.2em] font-bold text-slate-600;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 3px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-gold/20 rounded-full;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-gold/40;
+  }
+
+  @keyframes spin-once {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .animate-spin-once {
+    animation: spin-once 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+@media print {
+  /* Hide non-printable elements */
+  nav, 
+  header, 
+  .no-print,
+  button:not(.print-only),
+  textarea::placeholder {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  .luxury-cream {
+    background-color: white !important;
+  }
+
+  /* Optimize Checklist for Print */
+  .printable-area {
+    display: block !important;
+    column-count: 2 !important;
+    column-gap: 20px !important;
+    width: 100% !important;
+  }
+
+  .luxury-card {
+    break-inside: avoid-column !important;
+    margin-bottom: 15px !important;
+    border: 1px solid #eee !important;
+    box-shadow: none !important;
+    page-break-inside: avoid !important;
+  }
+
+  .luxury-card h4 {
+    font-size: 9px !important;
+    margin-bottom: 8px !important;
+    padding-bottom: 4px !important;
+    border-bottom: 1px solid #eee !important;
+    color: black !important;
+  }
+
+  .printable-area p {
+    font-size: 8px !important;
+    line-height: 1.2 !important;
+    color: black !important;
+  }
+
+  /* Signature and Notes area */
+  .notes-area {
+    column-span: all !important;
+    margin-top: 20px !important;
+    border: 1px solid #eee !important;
+    padding: 10px !important;
+  }
+
+  .notes-area h4 {
+    font-size: 10px !important;
+  }
+
+  .notes-area p {
+    font-size: 9px !important;
+    min-height: 50px;
+  }
+
+  /* Signature line for physical sign-off */
+  .signature-line {
+    display: block !important;
+    column-span: all !important;
+    margin-top: 30px !important;
+    border-top: 1px solid black !important;
+    width: 250px !important;
+    padding-top: 5px !important;
+    font-size: 8px !important;
+    text-transform: uppercase !important;
+    font-weight: bold !important;
+  }
+
+  /* Force page breaks if needed */
+  .page-break {
+    page-break-before: always !important;
+  }
+}
