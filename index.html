@@ -2,10 +2,79 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+    <title>CML Corporate Portal</title>
+    
+    <!-- PWA Installation Configuration -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.jpg" />
+    <link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.jpg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/jpeg" sizes="192x192" href="/icon-192.jpg" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+    <link rel="icon" type="image/jpeg" sizes="512x512" href="/icon-512.jpg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" />
+    <meta name="theme-color" content="#c5a02d" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="CML Portal" />
   </head>
   <body>
+    <script>
+      window.addEventListener('error', function(event) {
+        // Ignore benign development-only HMR/websocket/Vite connection errors
+        var msgStr = event.message || '';
+        var filenameStr = event.filename || '';
+        if (msgStr.indexOf('vite') !== -1 || msgStr.indexOf('websocket') !== -1 || filenameStr.indexOf('vite') !== -1) {
+          console.warn("[Vite HMR] Supressed benign dev error:", msgStr, "from", filenameStr);
+          return;
+        }
+
+        var errDiv = document.getElementById('error-overlay-box');
+        if (!errDiv) {
+          errDiv = document.createElement('div');
+          errDiv.id = 'error-overlay-box';
+          errDiv.style = 'position:fixed;top:10px;left:10px;right:10px;padding:20px;background:#fff5f5;border:2px solid #feb2b2;color:#9b2c2c;font-family:monospace;z-index:999999;font-size:12px;border-radius:6px;box-shadow:0 10px 25px rgba(0,0,0,0.15);max-height:90vh;overflow:auto;word-break:break-all;white-space:pre-wrap;';
+          var title = document.createElement('h3');
+          title.style = 'margin:0 0 10px 0;font-size:16px;font-weight:bold;';
+          title.textContent = '🚨 Inline Runtime Error Caught:';
+          errDiv.appendChild(title);
+          document.body.appendChild(errDiv);
+        }
+        var msg = document.createElement('div');
+        msg.style = 'margin-top:8px;border-top:1px dashed #feb2b2;padding-top:8px;';
+        msg.textContent = (event.error ? event.error.stack : event.message) + '\n(From: ' + event.filename + ':' + event.lineno + ':' + event.colno + ')';
+        errDiv.appendChild(msg);
+      });
+      window.addEventListener('unhandledrejection', function(event) {
+        // Ignore benign development-only HMR/websocket/Vite connection promise rejections
+        var reasonStr = event.reason ? (event.reason.stack || event.reason.message || String(event.reason)) : '';
+        if (reasonStr.indexOf('vite') !== -1 || reasonStr.indexOf('websocket') !== -1 || reasonStr.indexOf('ws://') !== -1) {
+          console.warn("[Vite HMR] Suppressed benign dev promise rejection:", reasonStr);
+          return;
+        }
+
+        var errDiv = document.getElementById('error-overlay-box');
+        if (!errDiv) {
+          errDiv = document.createElement('div');
+          errDiv.id = 'error-overlay-box';
+          errDiv.style = 'position:fixed;top:10px;left:10px;right:10px;padding:20px;background:#fff5f5;border:2px solid #feb2b2;color:#9b2c2c;font-family:monospace;z-index:999999;font-size:12px;border-radius:6px;box-shadow:0 10px 25px rgba(0,0,0,0.15);max-height:90vh;overflow:auto;word-break:break-all;white-space:pre-wrap;';
+          var title = document.createElement('h3');
+          title.style = 'margin:0 0 10px 0;font-size:16px;font-weight:bold;';
+          title.textContent = '🚨 Unhandled Promise Rejection Caught:';
+          errDiv.appendChild(title);
+          document.body.appendChild(errDiv);
+        }
+        var msg = document.createElement('div');
+        msg.style = 'margin-top:8px;border-top:1px dashed #feb2b2;padding-top:8px;';
+        msg.textContent = reasonStr || 'Promise rejected with no reason';
+        errDiv.appendChild(msg);
+      });
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

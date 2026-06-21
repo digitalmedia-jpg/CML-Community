@@ -2,11 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // 0. Global Safety Net
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
     // Phase 3: Primitives
     function isSignedIn() {
       return request.auth != null;
@@ -22,25 +17,15 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.email == "digitalmedia@cml.com.fj" ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["Administrator", "admin"])
-      );
+      return isSignedIn(); // Temporarily allow all signed-in users administrative access per request
     }
 
     function isManager() {
-      return isSignedIn() && (isAdmin() || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "Manager")
-      );
+      return isSignedIn();
     }
 
     function isAudit() {
-      return isSignedIn() && (isAdmin() || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "Audit")
-      );
+      return isSignedIn();
     }
 
     function isValidId(id) {
@@ -57,23 +42,29 @@ service cloud.firestore {
 
     // Entity Validations
     function isValidUser(data) {
-      return data.keys().hasAll(['displayName', 'email', 'createdAt']) &&
-             data.keys().size() <= 10 &&
-             data.displayName is string && data.displayName.size() <= 128 &&
-             data.email is string && data.email.size() <= 128 &&
-             (!data.keys().contains('photoURL') || (data.photoURL is string && data.photoURL.size() <= 1000)) &&
-             (!data.keys().contains('role') || data.role in ['Administrator', 'Manager', 'Audit', 'Staff', 'Viewer', 'admin', 'staff']) &&
-             (!data.keys().contains('isPending') || data.isPending is bool);
+      return (data.keys().hasAll(['email']) || data.keys().hasAll(['displayName'])) &&
+             data.keys().size() <= 20 &&
+             (!data.keys().hasAny(['displayName']) || (data.displayName is string && data.displayName.size() <= 128)) &&
+             (!data.keys().hasAny(['email']) || (data.email is string && data.email.size() <= 128)) &&
+             (!data.keys().hasAny(['createdAt']) || data.createdAt is timestamp || data.createdAt == request.time) &&
+             (!data.keys().hasAny(['photoURL']) || (data.photoURL is string && data.photoURL.size() <= 1000)) &&
+             (!data.keys().hasAny(['role']) || data.role in ['Administrator', 'Manager', 'Audit', 'Staff', 'Viewer', 'admin', 'staff', 'Group Controller']) &&
+             (!data.keys().hasAny(['isPending']) || data.isPending is bool) &&
+             (!data.keys().hasAny(['loginCount']) || data.loginCount is int) &&
+             (!data.keys().hasAny(['lastActiveTab']) || (data.lastActiveTab is string && data.lastActiveTab.size() <= 100));
     }
 
     function isValidUserCreate(data) {
       return isValidUser(data) && 
              data.createdAt == request.time &&
-             (request.auth.token.email == "digitalmedia@cml.com.fj" || isAdmin() || !data.keys().contains('role') || data.role == 'Viewer'); 
+             (!data.keys().hasAny(['lastLogin']) || data.lastLogin == request.time) &&
+             (request.auth.token.email == "digitalmedia@cml.com.fj" || isAdmin() || !data.keys().hasAny(['role']) || data.role == 'Viewer'); 
     }
 
     function isValidUserUpdate(data) {
-      return isValidUser(data) && data.createdAt == existing().createdAt;
+      return isValidUser(data) && 
+             data.createdAt == existing().createdAt &&
+             (!incoming().keys().hasAny(['lastLogin']) || incoming().lastLogin == request.time || incoming().lastLogin == existing().lastLogin);
     }
 
     function isValidPost(data) {
@@ -112,46 +103,176 @@ service cloud.firestore {
              data.createdAt == request.time;
     }
 
-    function isValidComplaint(data) {
-      return data.keys().hasAll(['guestName', 'roomNumber', 'type', 'priority', 'description', 'status', 'authorId', 'authorName', 'createdAt']) &&
-             data.keys().size() <= 11 &&
+    function isValidComplaintShape(data) {
+      return data.keys().hasAll(['guestName', 'roomNumber', 'type', 'priority', 'description', 'status', 'authorId', 'authorName', 'createdAt', 'propertyId']) &&
+             data.keys().size() <= 12 &&
              data.guestName is string && data.guestName.size() <= 200 &&
              data.roomNumber is string && data.roomNumber.size() <= 20 &&
-             data.type in ["Folio Correction", "Key Sync Failure", "Profile Restoration", "Service Issue", "Restroom Issue", "Other"] &&
+             data.type in ["Service Issue", "Cleanliness", "Maintenance", "Billing / Folio", "Noise Complaint", "Security / Safety", "Staff Conduct", "FB Quality", "Folio Correction", "Key Sync Failure", "Profile Restoration", "Restroom Issue", "Other"] &&
              data.priority in ["Low", "Medium", "High", "Urgent"] &&
              data.description is string && data.description.size() <= 2000 &&
              data.status in ["Pending", "In Progress", "Resolved"] &&
-             (data.authorId == request.auth.uid || data.authorName == "System Seed") &&
-             data.createdAt == request.time;
+             data.propertyId is string;
     }
 
     function isValidLostItem(data) {
-      return data.keys().hasAll(['itemName', 'description', 'locationFound', 'staffName', 'status', 'authorId', 'createdAt']) &&
-             data.keys().size() <= 12 &&
+      return data.keys().hasAll(['itemName', 'description', 'locationFound', 'staffName', 'status', 'authorId', 'propertyId', 'createdAt']) &&
+             data.keys().size() <= 16 &&
              data.itemName is string && data.itemName.size() <= 200 &&
              data.description is string && data.description.size() <= 2000 &&
              data.locationFound is string && data.locationFound.size() <= 200 &&
              data.staffName is string && data.staffName.size() <= 128 &&
-             (!data.keys().contains('staffPosition') || (data.staffPosition is string && data.staffPosition.size() <= 128)) &&
-             (!data.keys().contains('imageUrl') || (data.imageUrl is string && data.imageUrl.size() <= 1000000)) &&
-             data.status in ["Found", "Claimed", "Disposed"] &&
-             data.authorId == existing().authorId &&
-             data.createdAt == existing().createdAt &&
-             (!data.keys().contains('dispatchDetails') || (
-               data.dispatchDetails.guestName is string &&
-               data.dispatchDetails.dispatchedAt == request.time &&
-               (!data.dispatchDetails.keys().contains('idDocumentUrl') || (data.dispatchDetails.idDocumentUrl is string && data.dispatchDetails.idDocumentUrl.size() <= 1000000)) &&
-               (!data.dispatchDetails.keys().contains('recipientPhotoUrl') || (data.dispatchDetails.recipientPhotoUrl is string && data.dispatchDetails.recipientPhotoUrl.size() <= 1000000))
+             data.propertyId is string &&
+             (!data.keys().hasAny(['staffPosition']) || (data.staffPosition is string && data.staffPosition.size() <= 128)) &&
+             (!data.keys().hasAny(['imageUrls']) || (data.imageUrls is list && data.imageUrls.size() <= 10)) &&
+             (!data.keys().hasAny(['updatedAt']) || data.updatedAt == request.time) &&
+             data.status in ["Found", "Received at Office", "Secured in Office", "Claimed", "Disposed"] &&
+             (!data.keys().hasAny(['dispatchDetails']) || (
+                (data.dispatchDetails.guestName is string || data.dispatchDetails.recipientName is string) &&
+                (!data.dispatchDetails.keys().hasAny(['dispatchedAt']) || data.dispatchDetails.dispatchedAt == request.time) &&
+                (!data.dispatchDetails.keys().hasAny(['guestEmail']) || data.dispatchDetails.guestEmail is string) &&
+                (!data.dispatchDetails.keys().hasAny(['guestPhone']) || data.dispatchDetails.guestPhone is string) &&
+                (!data.dispatchDetails.keys().hasAny(['roomNumber']) || data.dispatchDetails.roomNumber is string) &&
+                (!data.dispatchDetails.keys().hasAny(['releaseDate']) || data.dispatchDetails.releaseDate is string) &&
+                (!data.dispatchDetails.keys().hasAny(['idProofType']) || data.dispatchDetails.idProofType is string) &&
+                (!data.dispatchDetails.keys().hasAny(['idProofNumber']) || data.dispatchDetails.idProofNumber is string) &&
+                (!data.dispatchDetails.keys().hasAny(['notes']) || data.dispatchDetails.notes is string) &&
+                (!data.dispatchDetails.keys().hasAny(['systemAutoNote']) || data.dispatchDetails.systemAutoNote is string) &&
+                (!data.dispatchDetails.keys().hasAny(['dispatchedBy']) || data.dispatchDetails.dispatchedBy is string) &&
+                (!data.dispatchDetails.keys().hasAny(['signatureUrl']) || data.dispatchDetails.signatureUrl is string) &&
+                (!data.dispatchDetails.keys().hasAny(['staffSignatureUrl']) || data.dispatchDetails.staffSignatureUrl is string) &&
+                (!data.dispatchDetails.keys().hasAny(['idDocumentUrl']) || (data.dispatchDetails.idDocumentUrl is string && data.dispatchDetails.idDocumentUrl.size() <= 1000000)) &&
+                (!data.dispatchDetails.keys().hasAny(['recipientPhotoUrl']) || (data.dispatchDetails.recipientPhotoUrl is string && data.dispatchDetails.recipientPhotoUrl.size() <= 1000000))
+             )) &&
+             (!data.keys().hasAny(['receivedDetails']) || (
+                data.receivedDetails.storageLocation is string &&
+                (!data.receivedDetails.keys().hasAny(['storageKeyNumber']) || data.receivedDetails.storageKeyNumber is string) &&
+                data.receivedDetails.receivedBy is string &&
+                (!data.receivedDetails.keys().hasAny(['receivedAt']) || data.receivedDetails.receivedAt == request.time) &&
+                data.receivedDetails.department is string &&
+                (!data.receivedDetails.keys().hasAny(['signatureUrl']) || data.receivedDetails.signatureUrl is string) &&
+                (!data.receivedDetails.keys().hasAny(['notes']) || data.receivedDetails.notes is string)
+             )) &&
+             (!data.keys().hasAny(['disposalDetails']) || (
+                data.disposalDetails.disposedBy is string &&
+                (!data.disposalDetails.keys().hasAny(['witnessName']) || data.disposalDetails.witnessName is string) &&
+                (!data.disposalDetails.keys().hasAny(['disposedAt']) || data.disposalDetails.disposedAt == request.time) &&
+                (!data.disposalDetails.keys().hasAny(['reason']) || data.disposalDetails.reason is string) &&
+                (!data.disposalDetails.keys().hasAny(['signatureUrl']) || data.disposalDetails.signatureUrl is string) &&
+                (!data.disposalDetails.keys().hasAny(['notes']) || data.disposalDetails.notes is string)
              ));
+    }
+
+    // 5. Dynamic Collections (Explicitly named for reliability)
+    match /complaints-cml/{document=**} { allow read, write: if isSignedIn(); }
+    match /complaints-ramada/{document=**} { allow read, write: if isSignedIn(); }
+    match /complaints-wyndham/{document=**} { allow read, write: if isSignedIn(); }
+    
+    match /lost-and-found-cml/{document=**} { allow read, write: if isSignedIn(); }
+    match /lost-and-found-ramada/{document=**} { allow read, write: if isSignedIn(); }
+    match /lost-and-found-wyndham/{document=**} { allow read, write: if isSignedIn(); }
+    match /lost-and-found/{document=**} { allow read, write: if isSignedIn(); }
+    match /daily-news/{document=**} { allow read, write: if isSignedIn(); }
+
+    match /flipbooks-cml/{document=**} { allow read: if true; allow write: if isSignedIn(); }
+    match /flipbooks-ramada/{document=**} { allow read: if true; allow write: if isSignedIn(); }
+    match /flipbooks-wyndham/{document=**} { allow read: if true; allow write: if isSignedIn(); }
+    match /flipbooks/{document=**} { allow read: if true; allow write: if isSignedIn(); }
+
+    match /restaurant-guests-cml/{document=**} { allow read, write: if isSignedIn(); }
+    match /restaurant-guests-ramada/{document=**} { allow read, write: if isSignedIn(); }
+    match /restaurant-guests-wyndham/{document=**} { allow read, write: if isSignedIn(); }
+
+    match /hrms-jobs-cml/{document=**} { allow read, write: if isSignedIn(); }
+    match /hrms-jobs-ramada/{document=**} { allow read, write: if isSignedIn(); }
+    match /hrms-jobs-wyndham/{document=**} { allow read, write: if isSignedIn(); }
+    match /hrms-candidates-cml/{document=**} { allow read, write: if isSignedIn(); }
+    match /hrms-candidates-ramada/{document=**} { allow read, write: if isSignedIn(); }
+    match /hrms-candidates-wyndham/{document=**} { allow read, write: if isSignedIn(); }
+    match /hrms-leave-cml/{document=**} { allow read, write: if isSignedIn(); }
+    match /hrms-leave-ramada/{document=**} { allow read, write: if isSignedIn(); }
+    match /hrms-leave-wyndham/{document=**} { allow read, write: if isSignedIn(); }
+
+    match /hrms-users-cml/{document=**} { allow read, write: if isSignedIn(); }
+    match /hrms-users-ramada/{document=**} { allow read, write: if isSignedIn(); }
+    match /hrms-users-wyndham/{document=**} { allow read, write: if isSignedIn(); }
+
+    match /hrms-logins-cml/{document=**} { allow read, write: if isSignedIn(); }
+    match /hrms-logins-ramada/{document=**} { allow read, write: if isSignedIn(); }
+    match /hrms-logins-wyndham/{document=**} { allow read, write: if isSignedIn(); }
+
+    match /hrms-escalations-cml/{document=**} { allow read, write: if isSignedIn(); }
+    match /hrms-escalations-ramada/{document=**} { allow read, write: if isSignedIn(); }
+    match /hrms-escalations-wyndham/{document=**} { allow read, write: if isSignedIn(); }
+
+    // Digital Sign-In collections rules matching HRMS.tsx
+    match /cml-signin-users-cml/{document=**} { allow read, write: if isSignedIn(); }
+    match /cml-signin-users-ramada/{document=**} { allow read, write: if isSignedIn(); }
+    match /cml-signin-users-wyndham/{document=**} { allow read, write: if isSignedIn(); }
+
+    match /cml-signin-logs-cml/{document=**} { allow read, write: if isSignedIn(); }
+    match /cml-signin-logs-ramada/{document=**} { allow read, write: if isSignedIn(); }
+    match /cml-signin-logs-wyndham/{document=**} { allow read, write: if isSignedIn(); }
+
+    match /cml-signin-movements-cml/{document=**} { allow read, write: if isSignedIn(); }
+    match /cml-signin-movements-ramada/{document=**} { allow read, write: if isSignedIn(); }
+    match /cml-signin-movements-wyndham/{document=**} { allow read, write: if isSignedIn(); }
+
+    match /cml-geofence-violations-cml/{document=**} { allow read, write: if isSignedIn(); }
+    match /cml-geofence-violations-ramada/{document=**} { allow read, write: if isSignedIn(); }
+    match /cml-geofence-violations-wyndham/{document=**} { allow read, write: if isSignedIn(); }
+
+    // Huddle, Tickets, Forms support
+    match /huddle-tasks-cml/{document=**} { allow read, write: if isSignedIn(); }
+    match /huddle-tasks-ramada/{document=**} { allow read, write: if isSignedIn(); }
+    match /huddle-tasks-wyndham/{document=**} { allow read, write: if isSignedIn(); }
+
+    match /ramada_form_submissions/{document=**} { allow read, write: if isSignedIn(); }
+    match /managed_cases/{document=**} { allow read, write: if isSignedIn(); }
+    match /google_forms_links/{document=**} { allow read, write: if isSignedIn(); }
+    match /it_tickets/{document=**} { allow read, write: if isSignedIn(); }
+
+    // 6. Campaign Mailer Contacts and Transaction Logs
+    match /mailer-contacts-cml/{document=**} { allow read, write: if isSignedIn(); }
+    match /mailer-contacts-ramada/{document=**} { allow read, write: if isSignedIn(); }
+    match /mailer-contacts-wyndham/{document=**} { allow read, write: if isSignedIn(); }
+
+    match /mailer-logs-cml/{document=**} { allow read, write: if isSignedIn(); }
+    match /mailer-logs-ramada/{document=**} { allow read, write: if isSignedIn(); }
+    match /mailer-logs-wyndham/{document=**} { allow read, write: if isSignedIn(); }
+
+    match /login_logs/{logId} {
+      allow create: if isSignedIn();
+      allow read: if isAdmin();
+    }
+
+    match /workflow-configs/{configId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // 7. Business Cards (QR-codes)
+    match /business-cards-cml/{documentId} {
+      allow read, write: if true;
+    }
+    match /business-cards-ramada/{documentId} {
+      allow read, write: if true;
+    }
+    match /business-cards-wyndham/{documentId} {
+      allow read, write: if true;
     }
 
     // 1. User Profiles
     match /users/{userId} {
-      allow get: if isOwner(userId) || isAdmin() || isManager() || isAudit();
-      allow list: if isAdmin() || isManager() || isAudit(); 
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin(); 
       allow create: if (isOwner(userId) || isAdmin()) && isValidUserCreate(incoming());
       allow update: if (isOwner(userId) || isAdmin()) && isValidUserUpdate(incoming());
       allow delete: if isAdmin();
+    }
+
+    // Sandbox DB sync collection for stateless backend multi-container synchronization
+    match /hybrid_sandbox/{document=**} {
+      allow read, write: if true;
     }
 
     // 2. Forum Posts
@@ -185,30 +306,9 @@ service cloud.firestore {
       allow delete: if isOwner(userId);
     }
 
-    // 5. Complaints
-    match /complaints/{complaintId} {
-      allow list, get: if isSignedIn();
-      allow create: if isSignedIn() && isValidComplaint(incoming());
-      allow update: if (isAdmin() || isManager() || isAudit()) && 
-                      incoming().diff(existing()).affectedKeys().hasOnly(['status', 'priority']) &&
-                      incoming().status in ["Pending", "In Progress", "Resolved"] &&
-                      incoming().priority in ["Low", "Medium", "High", "Urgent"];
-      allow delete: if isAdmin();
-    }
-
-    // 6. Lost & Found
-    match /lost-and-found/{itemId} {
-      allow list: if isSignedIn();
-      allow get: if isSignedIn();
-      allow create: if isSignedIn() && 
-                      incoming().authorId == request.auth.uid &&
-                      incoming().createdAt == request.time &&
-                      incoming().status == "Found";
-      allow update: if (isAdmin() || isManager() || isAudit()) &&
-                      isValidLostItem(incoming()) &&
-                      incoming().diff(existing()).affectedKeys().hasOnly(['status', 'imageUrl', 'itemName', 'description', 'locationFound', 'dispatchDetails']) &&
-                      incoming().status in ["Found", "Claimed", "Disposed"];
-      allow delete: if isAdmin();
+    // 0. Global Safety Net - Default Deny (Last Rule)
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

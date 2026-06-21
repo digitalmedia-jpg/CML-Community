@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
+  db, 
+  auth,
   collection, 
   query, 
   orderBy, 
@@ -9,8 +11,7 @@ import {
   deleteDoc,
   limit,
   writeBatch
-} from 'firebase/firestore';
-import { db, auth } from '../lib/firebase';
+} from '../lib/firebase';
 import { 
   Bell, 
   X, 
@@ -47,7 +48,11 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onNa
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser) {
+      setNotifications([]);
+      setUnreadCount(0);
+      return;
+    }
 
     const q = query(
       collection(db, 'users', auth.currentUser.uid, 'notifications'),
@@ -55,6 +60,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onNa
       limit(20)
     );
 
+    let isInitial = true;
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const notifs = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -62,10 +68,34 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onNa
       })) as Notification[];
       setNotifications(notifs);
       setUnreadCount(notifs.filter(n => !n.read).length);
+
+      if (!isInitial && snapshot && typeof snapshot.docChanges === 'function') {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const data = change.doc.data();
+            import('../services/notificationService').then(({ notificationService }) => {
+              notificationService.triggerMobileNotification(
+                data.title || "CML Portal Notification",
+                data.message || "New alert received.",
+                {
+                  link: data.link || "/",
+                  icon: data.icon,
+                  badge: data.badge,
+                  tag: change.doc.id,
+                  type: data.type
+                }
+              ).catch(err => console.warn("Failed to fire receiving push alert:", err));
+            });
+          }
+        });
+      }
+      isInitial = false;
+    }, (error) => {
+      console.warn("Notification listener permission or fetch error:", error);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth.currentUser?.uid]);
 
   const markAsRead = async (id: string) => {
     if (!auth.currentUser) return;
@@ -220,7 +250,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onNa
                               {notif.title}
                             </h5>
                             <span className="text-[9px] text-slate-400 italic shrink-0">
-                              {notif.createdAt ? formatDistanceToNow(notif.createdAt.toDate(), { addSuffix: false }) : 'now'}
+                              {notif.createdAt ? (notif.createdAt.toDate ? formatDistanceToNow(notif.createdAt.toDate(), { addSuffix: false }) : new Date(notif.createdAt).toLocaleDateString()) : 'now'}
                             </span>
                           </div>
                           <p className="text-[10px] text-slate-500 font-serif italic leading-relaxed line-clamp-2">

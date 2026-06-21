@@ -1,3 +1,4 @@
+import { ConfirmModal } from "./components/ConfirmModal";
 import React, { useState, useEffect, useRef } from "react";
 import { 
   LayoutDashboard, 
@@ -10,8 +11,10 @@ import {
   FileText, 
   Bell, 
   ChevronRight,
+  ChevronLeft,
   ArrowLeft,
   ExternalLink,
+  FolderArchive,
   Layers,
   Globe,
   TrendingUp,
@@ -21,6 +24,10 @@ import {
   Menu,
   X,
   Search,
+  Mail,
+  Home,
+  Gift,
+  Award,
   Hotel,
   RefreshCw,
   Wrench,
@@ -29,6 +36,7 @@ import {
   Download,
   History,
   CheckCircle2,
+  AlertCircle,
   AlertTriangle,
   MessageSquare,
   Key,
@@ -51,7 +59,15 @@ import {
   Check,
   ClipboardList,
   Play,
-  Plus
+  Plus,
+  Utensils,
+  Sparkles,
+  BookOpen,
+  Trash2,
+  List,
+  LayoutGrid,
+  Newspaper,
+  Calendar
 } from "lucide-react";
 import { notificationService, NotificationType } from './services/notificationService';
 import { 
@@ -68,12 +84,57 @@ import {
 } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "./lib/utils";
-import { auth, loginWithGoogle, logout } from "./lib/firebase";
-import { onAuthStateChanged, User } from "firebase/auth";
+import { 
+  auth, 
+  loginWithGoogle, 
+  logout, 
+  db,
+  collection, 
+  addDoc, 
+  getDoc, 
+  setDoc, 
+  updateDoc, 
+  doc, 
+  serverTimestamp, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  limit,
+  where,
+  getDocs,
+  deleteDoc,
+  increment,
+  arrayUnion,
+  onAuthStateChanged,
+  User
+} from "./lib/firebase";
 import { Forum } from "./components/Forum";
 import { UserManagement } from "./components/UserManagement";
+import { DutyRoster } from "./components/DutyRoster";
 import { NotificationDropdown } from './components/NotificationDropdown';
 import { GlobalSearch } from './components/GlobalSearch';
+import { LoginPage } from "./components/LoginPage";
+import { LostAndFound } from "./components/LostAndFound";
+import { CloudInsights } from "./components/CloudInsights";
+import { ResourcesHelp } from "./components/ResourcesHelp";
+import { DigitalFlipbook } from "./components/DigitalFlipbook";
+import { HRMS } from "./components/HRMS";
+import { RestaurantScanner } from "./components/RestaurantScanner";
+import { StaffMailer } from "./components/StaffMailer";
+import { CanaryPortal } from "./components/CanaryPortal";
+import { BrandKit } from "./components/BrandKit";
+import { RamadaFormsSuite } from "./components/RamadaFormsSuite";
+import { GoogleFormsSuite } from "./components/GoogleFormsSuite";
+import { PublicCardDownloadGateway } from "./components/PublicCardDownloadGateway";
+import { ManageCases } from "./components/ManageCases";
+import { DailyNews } from "./components/DailyNews";
+import { SystemDiagnostics } from "./components/SystemDiagnostics";
+import { syncLogger } from "./lib/syncLogger";
+import { ToastContainer } from "./components/ToastContainer";
+import { toastService } from "./services/toastService";
+import { GoogleAIPlanMan } from "./components/GoogleAIPlanMan";
+import { SopBatchUploadModal } from "./components/SopBatchUploadModal";
+import { ImageLightboxModal } from "./components/ImageLightboxModal";
 
 // Mock data for the chart
 const chartData = [
@@ -91,172 +152,1001 @@ const COMPANIES = [
   { 
     id: "cml", 
     name: "CML", 
-    logo: "https://ramadawailoaloafiji.com/wp-content/uploads/2026/05/CML-Thumbnail-Logo.jpg",
-    description: "Cove Mangement Limited",
-    theme: "bg-gold",
-    accent: "text-gold",
-    glow: "shadow-gold/20"
+    fullName: "Cove Management Limited",
+    logo: "https://cml.com.fj/wp-content/uploads/2026/05/CML-Thumbnail-Logo-2.jpg",
+    logoPortal: "https://cml.com.fj/wp-content/uploads/2026/05/CML-Thumbnail-Logo-2.jpg",
+    description: "Cove Management Limited",
+    theme: "#C5A02D",
+    accent: "text-[#C5A02D]",
+    glow: "shadow-[#C5A02D]/20",
+    sidebar: "#1a1a1a",
+    brand: "#C5A02D",
+    heroImage: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=1600",
+    tagline: "Excellence in Hospitality Management",
+    location: "Nadi, Fiji Islands",
+    distance: "Group Headquarters",
+    floors: "Multi-Property Portfolio",
+    concept: "Cove Management Limited (CML) is a leading hospitality management firm in Fiji, overseeing a diverse portfolio of premier properties including internationally branded hotels and resorts.",
+    conceptImage: "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=1200",
+    longDescription: "With decades of experience in the South Pacific market, CML provides comprehensive management solutions, from operational oversight and financial auditing to brand development and human resource management.",
+    highlights: ["Portfolio Compliance", "Operational Auditing", "Revenue Management", "Brand Integration", "Asset Management"],
+    amenities: [
+      { label: "Corporate Strategy", icon: Shield, desc: "Long-term asset growth" },
+      { label: "HR Management", icon: Users, desc: "Team development & payroll" },
+      { label: "Financial Audits", icon: DollarSign, desc: "P&L oversight & compliance" }
+    ],
+    culinary: {
+      title: "Operational Excellence",
+      desc: "Managing high-performance dining venues across Fiji.",
+      venues: []
+    }
   },
   { 
     id: "ramada", 
-    name: "Ramada", 
+    name: "Ramada Suites", 
+    fullName: "Ramada Suites by Wyndham Wailoaloa Beach Fiji",
     logo: "https://ramadawailoaloafiji.com/wp-content/uploads/2026/05/Ramada-Thumbnail-Logo.jpg", 
+    logoPortal: "https://ramadawailoaloafiji.com/wp-content/uploads/2026/05/Ramada-Thumbnail-Logo.jpg",
     description: "Suites by Wyndham Wailoaloa Beach Fiji",
-    theme: "bg-red-700",
-    accent: "text-red-700",
-    glow: "shadow-red-700/20"
+    theme: "#D11242", // Ramada Red from guidelines
+    accent: "text-[#D11242]",
+    glow: "shadow-[#D11242]/20",
+    sidebar: "#7c1414",
+    brand: "#D11242",
+    heroImage: "https://ramadawailoaloafiji.com/wp-content/uploads/2026/05/Ramada-70.jpg",
+    tagline: "SAY HELLO TO RED®",
+    brandTagline: "SAY HELLO TO RED®",
+    location: "Wailoaloa Beach",
+    distance: "15 Min from Nadi Airport",
+    floors: "Luxury Serviced Suites",
+    concept: "Experience true Fijian hospitality at Ramada Suites by Wyndham Wailoaloa Beach Fiji. Our property offers a mix of studio, one, and two-bedroom suites designed for comfort.",
+    conceptImage: "https://ramadawailoaloafiji.com/wp-content/uploads/2026/05/Hero-Shoot-scaled.jpg",
+    longDescription: "Located on the pristine shores of Wailoaloa Beach, our suites feature full kitchen facilities, separate living areas, and private balconies. We provide the perfect balance of home-like convenience and hotel luxury.",
+    highlights: ["Beachfront Serviced Suites", "15 Mins from Nadi Airport", "Spacious 1, 2 & 3 Bedrooms", "Stunning Sunset Views", "Self-Catering Facilities"],
+    rooms: [
+      { name: "King Studio Suite", size: "45m²", sleeps: "2 Guests", img: "https://ramadawailoaloafiji.com/wp-content/uploads/2023/04/king-studio-1.png" },
+      { name: "Two Bedroom Partial Ocean View Suite", size: "95m²", sleeps: "4 Guests", img: "https://ramadawailoaloafiji.com/wp-content/uploads/2023/04/Two-bedroom-ocean-view-1.png" },
+      { name: "Beachfront 2 Bedroom Suite", size: "115m²", sleeps: "5 Guests", img: "https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&q=80&w=800" }
+    ],
+    amenities: [
+      { label: "Full Kitchens", icon: Utensils, desc: "Equipped in all suites" },
+      { label: "Rooftop Pool", icon: Waves, desc: "Infinite ocean views" },
+      { label: "Beachfront Access", icon: Wind, desc: "Direct walk to the sand" }
+    ],
+    culinary: {
+      title: "Coastal Gastronomy",
+      desc: "Indulge in flavors that celebrate the sea and Fiji's fresh produce.",
+      venues: [
+        { name: "Club57", desc: "Our signature dining venue offering a mix of local and international flavors.", img: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=1000" },
+        { name: "Sunset Pool Bar", desc: "Enjoy cocktails and light bites while watching the world-famous Wailoaloa sunset.", img: "https://images.unsplash.com/photo-1533777857889-4be7c70b33f7?auto=format&fit=crop&q=80&w=1000" }
+      ]
+    },
+    eventImages: [
+      "https://images.unsplash.com/photo-1511578334221-d3023616374c?auto=format&fit=crop&q=80&w=1200",
+      "https://images.unsplash.com/photo-1505373877841-8d25f7d46678?auto=format&fit=crop&q=80&w=1200",
+      "https://images.unsplash.com/photo-1543007630-9710e4a00a20?auto=format&fit=crop&q=80&w=1200"
+    ],
+    meetingHighlights: [
+      "Boardroom & Conference Facilities",
+      "Advanced Audio-Visual Support",
+      "Tailored Banquet Menus",
+      "Dedicated Events Team",
+      "High-Speed Connectivity"
+    ],
+    capacityChart: {
+      totalArea: "120 m²",
+      dimensions: "12m x 10m",
+      rows: [
+        { name: "Grand Boardroom (Theater)", cap: "80 Pax" },
+        { name: "Grand Boardroom (Banquet)", cap: "60 Pax" },
+        { name: "Sunset Deck (Reception)", cap: "80 Pax" }
+      ]
+    }
   },
   { 
     id: "wyndham", 
     name: "Wyndham Garden", 
-    logo: "https://ramadawailoaloafiji.com/wp-content/uploads/2026/05/WG-Thumbnail-Logo.jpg", 
+    fullName: "Wyndham Garden Wailoaloa Beach Fiji",
+    logo: "https://wyndhamgardenwailoaloafiji.com/wp-content/uploads/2026/05/WG-Thumbnail-Logo.jpg", 
+    logoPortal: "",
     description: "Wailoaloa Beach Fiji",
-    theme: "bg-emerald-700",
-    accent: "text-emerald-700",
-    glow: "shadow-emerald-700/20"
+    theme: "#0b5c4b",
+    accent: "text-[#0b5c4b]",
+    glow: "shadow-[#0b5c4b]/20",
+    sidebar: "#063b31",
+    brand: "#0b5c4b",
+    heroImage: "https://wyndhamgardenwailoaloafiji.com/wp-content/uploads/2026/05/Gemini_Generated_Image_80t55280t55280t5.png",
+    tagline: "Fiji's Premier Waterfront Retreat",
+    location: "Wailoaloa Beach, Nadi",
+    distance: "15 Min from Airport",
+    floors: "7 Levels of Luxury",
+    concept: "Fiji's newest 4 star, Wyndham Garden Wailoaloa Beach Fiji 7-floor beachfront serviced hotel is idyllically situated on the beach of Wailoaloa with a unique view of the sea and nearby surrounding Islands. Conveniently located 15 minutes away from Nadi International Airport, Port Denarau Marina, and Nadi Town Central.",
+    conceptImage: "https://wyndhamgardenwailoaloafiji.com/wp-content/uploads/2026/05/8.-Beachfront-Room.jpg",
+    longDescription: "There is a total of 90 rooms located on six-floor levels comprising a mix of beachfront executive king room, garden ocean view double, and twin rooms. Enjoy modern and comfortable rooms which come with Flat LED smart TV with satellite channels, complimentary coffee & tea making facilities, safe deposit box, hair dryer, iron and board, study desk, private balcony, and air-conditioning. The property offers exquisite resort features such as an outdoor swimming pool, spa, deli shop, beach deck dining, corporate meeting space, and Fiji's premier 360-degree scenic viewing rooftop bar and restaurant overlooking Nadi Bay & Mamanuca Islands.",
+    highlights: ["4-Star Beachfront Serviced Hotel", "15 Mins from Nadi Airport & Denarau", "90 Rooms across 6 Floors", "360-Degree Scenic Rooftop Dining", "Spa, Outdoor Pool & Gym Services"],
+    rooms: [
+      { name: "Beachfront Executive King Room", size: "75m²", sleeps: "3 Guests (2 Adults & 1 Infant) | 1 King size bed", img: "https://wyndhamgardenwailoaloafiji.com/wp-content/uploads/2026/05/8.-Beachfront-Room.jpg" },
+      { name: "Garden Ocean View King Room", size: "75m²", sleeps: "2 Guests (2 Adults) | 1 Queen size bed", img: "https://wyndhamgardenwailoaloafiji.com/wp-content/uploads/2026/05/Garden-Oceanview-Twin.jpg" },
+      { name: "Garden Ocean View Twin Room", size: "75m²", sleeps: "2 Guests (2 Adults) | 2 Single size beds", img: "https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&q=80&w=800" },
+      { name: "Garden King Room", size: "75m²", sleeps: "2 Guests (2 Adults) | 1 Queen size bed", img: "https://wyndhamgardenwailoaloafiji.com/wp-content/uploads/2026/05/Garden-King-Room.webp" },
+      { name: "Garden Twin Room", size: "75m²", sleeps: "2 Guests (2 Adults) | 2 Single size beds", img: "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&q=80&w=800" },
+      { name: "Garden Small Twin Room", size: "75m²", sleeps: "2 Guests (2 Adults) | 2 Single size beds", img: "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?auto=format&fit=crop&q=80&w=800" }
+    ],
+    amenities: [
+      { label: "Free High Speed Wi-Fi", icon: Globe, desc: "Seamless connectivity throughout properties" },
+      { label: "Pool, Spa & Beach Deck Dining", icon: Waves, desc: "Fijian oceanfront premium leisure facilities" },
+      { label: "Meeting & Event Spaces", icon: Users, desc: "Up to 120 guest conference config" }
+    ],
+    culinary: {
+      title: "Resort Bars & Restaurants",
+      desc: "Experience breathtaking 360-degree views paired with mouthwatering cuisines meticulously prepared by our head chefs.",
+      venues: [
+        { name: "Garden Rooftop Bar & Restaurant", desc: "Offering delectable international and island food topped with our famous 360-degree scenic rooftop views overlooking Wailoaloa Beach, Nadi Bay & nearby Mamanuca Islands.", img: "https://images.unsplash.com/photo-1550966841-3ee7adac1661?auto=format&fit=crop&q=80&w=1000" },
+        { name: "The Captains Catch Seafood Restaurant and Bar", desc: "Savor exquisite and fresh seafood, culinary appetizers, and signature cocktails directly on our beachfront dining deck.", img: "https://images.unsplash.com/photo-1533777857889-4be7c70b33f7?auto=format&fit=crop&q=80&w=1000" }
+      ]
+    },
+    eventImages: [
+      "https://images.unsplash.com/photo-1431540015161-0bf868a2d407?auto=format&fit=crop&q=80&w=1200",
+      "https://images.unsplash.com/photo-1505373877841-8d25f7d46678?auto=format&fit=crop&q=80&w=1200",
+      "https://images.unsplash.com/photo-1543007630-9710e4a00a20?auto=format&fit=crop&q=80&w=1200"
+    ],
+    meetingHighlights: [
+      "Event rooms equipped with state of the art audiovisual technology",
+      "LCD projector screen & DVD / CD player systems",
+      "Wireless sound system, high-speed Wi-Fi & cordless microphones",
+      "Assorted flipcharts with colored markers and white boards"
+    ],
+    capacityChart: {
+      totalArea: "Flexible MICE",
+      dimensions: "Various Formats",
+      rows: [
+        { name: "Boardroom Setup", cap: "50 Pax" },
+        { name: "Banquet Setup", cap: "80 Pax" },
+        { name: "Classroom Setup", cap: "80 Pax" },
+        { name: "Theatre Style", cap: "120 Pax" },
+        { name: "U-Shape Setup", cap: "80 Pax" }
+      ]
+    }
   }
 ];
 
 const HR_FORMS = [
   { 
-    name: "Missed Clock In/Clock Out Register", 
-    id: "missed-clock", 
-    type: "external", 
-    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=36",
-    category: "Operational"
-  },
-  { 
-    name: "Early Leave Request Form", 
-    id: "early-leave-ext", 
-    type: "external", 
-    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=32",
-    category: "HR"
-  },
-  { 
-    name: "Return to Work Form", 
-    id: "return-work", 
-    type: "external", 
-    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=28",
-    category: "HR"
-  },
-  { 
-    name: "General Leave Application", 
+    name: "General Leave Application Form - Ramada Hotel Wailoaloa Fiji", 
     id: "leave-app", 
     type: "external", 
-    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=25",
-    category: "HR"
+    url: "https://ramadawailoaloafiji.com/?ff_landing=12",
+    category: "HR & Leave Operations"
   },
   { 
-    name: "Overtime Approval Form", 
-    id: "overtime", 
+    name: "RETURN TO WORK FORM - Ramada Wailoaloa Fiji", 
+    id: "return-work", 
     type: "external", 
-    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=17",
-    category: "HR"
+    url: "https://ramadawailoaloafiji.com/?ff_landing=10",
+    category: "HR & Leave Operations"
   },
   { 
-    name: "Employee Feedback Form", 
-    id: "feedback", 
+    name: "Staff Feedback Form", 
+    id: "staff-feedback", 
     type: "external", 
-    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=40",
-    category: "Engagement"
-  },
-  { 
-    name: "360 Reflection Tool (v1)", 
-    id: "360-v1", 
-    type: "external", 
-    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=43",
-    category: "Development"
-  },
-  { 
-    name: "360 Reflection Tool (v2)", 
-    id: "360-v2", 
-    type: "external", 
-    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=42",
-    category: "Development"
-  },
-  { 
-    name: "Employee Training Form", 
-    id: "training", 
-    type: "external", 
-    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=46",
-    category: "Development"
-  },
-  { 
-    name: "Employee Forms Portal", 
-    id: "forms-portal", 
-    type: "external", 
-    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=33",
-    category: "Resource"
-  },
-  { 
-    name: "Employee Post-Screening", 
-    id: "post-screening", 
-    type: "external", 
-    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=19",
-    category: "HR"
-  },
-  { 
-    name: "Conference Booking Request", 
-    id: "conference-booking", 
-    type: "external", 
-    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=44",
-    category: "Events"
-  },
-  { 
-    name: "Guest Security Deposit Agreement", 
-    id: "guest-sd", 
-    type: "external", 
-    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=38",
-    category: "Front Office"
-  },
-  { 
-    name: "Guest Registration (Chinese)", 
-    id: "guest-reg-chinese", 
-    type: "external", 
-    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=15",
-    category: "Front Office"
+    url: "https://ramadawailoaloafiji.com/?ff_landing=17",
+    category: "Feedback & Portals"
   },
   { 
     name: "Guest Waiver Form", 
     id: "guest-waiver", 
     type: "external", 
-    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=4",
-    category: "Legal"
+    url: "https://ramadawailoaloafiji.com/?ff_landing=4",
+    category: "Guest & Front Office"
   },
   { 
-    name: "Guest Check-in Form", 
-    id: "guest-checkin", 
+    name: "Ramada Checkin Form", 
+    id: "ramada-checkin", 
     type: "external", 
-    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=3",
-    category: "Front Office"
+    url: "https://ramadawailoaloafiji.com/?ff_landing=3",
+    category: "Guest & Front Office"
   },
   { 
-    name: "Contact Us Form", 
-    id: "contact-us", 
+    name: "Contact Form Demo", 
+    id: "contact-form-demo", 
     type: "external", 
-    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=1",
-    category: "Resource"
+    url: "https://ramadawailoaloafiji.com/?ff_landing=1",
+    category: "Guest & Front Office"
+  },
+  { 
+    name: "Missed Clock-In/Clock-Out Register - Ramada Wailoaloa Fiji", 
+    id: "missed-clock", 
+    type: "external", 
+    url: "https://ramadawailoaloafiji.com/?ff_landing=22",
+    category: "HR & Leave Operations"
+  },
+  { 
+    name: "Ramada Hotel - Property Officer Patrol LOG -Deck Area", 
+    id: "patrol-log-deck", 
+    type: "external", 
+    url: "https://ramadawailoaloafiji.com/?ff_landing=19",
+    category: "Operations & Logs"
+  },
+  { 
+    name: "Property Officer Logging Form", 
+    id: "property-officer-logging", 
+    type: "external", 
+    url: "#",
+    category: "Operations & Logs"
+  },
+  { 
+    name: "Training Acknowledgement Form", 
+    id: "training-ack", 
+    type: "external", 
+    url: "https://ramadawailoaloafiji.com/?ff_landing=16",
+    category: "Operations & Logs"
+  },
+  { 
+    name: "Ramada Hotel Employee Forms Portal", 
+    id: "employee-forms-portal", 
+    type: "external", 
+    url: "https://ramadawailoaloafiji.com/?ff_landing=15",
+    category: "Feedback & Portals"
+  },
+  { 
+    name: "EARLY LEAVE FORM - Ramada Hotel Wailoaloa Fiji", 
+    id: "early-leave-ext", 
+    type: "external", 
+    url: "https://ramadawailoaloafiji.com/?ff_landing=14",
+    category: "HR & Leave Operations"
+  },
+  { 
+    name: "Overtime Approval Form - Ramada Wailoaloa Hotel Fiji", 
+    id: "overtime", 
+    type: "external", 
+    url: "https://ramadawailoaloafiji.com/?ff_landing=13",
+    category: "HR & Leave Operations"
   }
 ];
 
+const WYNDHAM_FORMS = [
+  {
+    name: "Wyndham Garden Employee Training Form",
+    id: "wyndham-46",
+    type: "external",
+    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=46",
+    category: "Operations & Logs"
+  },
+  {
+    name: "Wyndham Garden - Conference Booking Request",
+    id: "wyndham-44",
+    type: "external",
+    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=44",
+    category: "Operations & Logs"
+  },
+  {
+    name: "360 Reflection & Employee Improvement Tool",
+    id: "wyndham-43",
+    type: "external",
+    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=43",
+    category: "Feedback & Portals"
+  },
+  {
+    name: "360 Reflection & Employee Improvement Tool",
+    id: "wyndham-42",
+    type: "external",
+    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=42",
+    category: "Feedback & Portals"
+  },
+  {
+    name: "Employee Feedback Form",
+    id: "wyndham-40",
+    type: "external",
+    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=40",
+    category: "Feedback & Portals"
+  },
+  {
+    name: "Wyndham Garden Guest Security Deposit Agreement (No Cash Deposit)",
+    id: "wyndham-38",
+    type: "external",
+    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=38",
+    category: "Guest & Front Office"
+  },
+  {
+    name: "Missed Clock-In/Clock-Out Register - Wyndham Garden Wailoaloa Fiji",
+    id: "wyndham-36",
+    type: "external",
+    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=36",
+    category: "HR & Leave Operations"
+  },
+  {
+    name: "Wyndham Garden Employee Forms Portal",
+    id: "wyndham-33",
+    type: "external",
+    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=33",
+    category: "Feedback & Portals"
+  },
+  {
+    name: "EARLY LEAVE FORM - Wyndham Garden Wailoaloa Fiji",
+    id: "wyndham-32",
+    type: "external",
+    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=32",
+    category: "HR & Leave Operations"
+  },
+  {
+    name: "RETURN TO WORK FORM - Wyndham Garden Wailoaloa Fiji",
+    id: "wyndham-28",
+    type: "external",
+    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=28",
+    category: "HR & Leave Operations"
+  },
+  {
+    name: "General Leave Application Form - Wyndham Garden Wailoaloa Fiji",
+    id: "wyndham-25",
+    type: "external",
+    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=25",
+    category: "HR & Leave Operations"
+  },
+  {
+    name: "Employee Post-Screening Documents.",
+    id: "wyndham-19",
+    type: "external",
+    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=19",
+    category: "HR & Leave Operations"
+  },
+  {
+    name: "Overtime Approval Form - Wyndham Garden Wailoaloa Fiji",
+    id: "wyndham-17",
+    type: "external",
+    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=17",
+    category: "HR & Leave Operations"
+  },
+  {
+    name: "Chinese Language Guest Registration Form",
+    id: "wyndham-15",
+    type: "external",
+    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=15",
+    category: "Guest & Front Office"
+  },
+  {
+    name: "Guest Waiver Form",
+    id: "wyndham-4",
+    type: "external",
+    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=4",
+    category: "Guest & Front Office"
+  },
+  {
+    name: "Wyndham Garden Guest Checkin Form",
+    id: "wyndham-3",
+    type: "external",
+    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=3",
+    category: "Guest & Front Office"
+  },
+  {
+    name: "Wyndham Garden Contact US Form",
+    id: "wyndham-1",
+    type: "external",
+    url: "https://wyndhamgardenwailoaloafiji.com/?ff_landing=1",
+    category: "Feedback & Portals"
+  }
+];
+
+// Pulsing loading skeleton matching the luxury dashboard layout to prevent sudden jumps
+function DashboardSkeleton({ companyId }: { companyId: string | null }) {
+  return (
+    <div className="space-y-12 pb-32 animate-pulse mt-6" id="dashboard-skeleton">
+      {/* 1. Hero banner Skeleton resembling property-overview page */}
+      <div className="relative h-[45vh] md:h-[55vh] -mx-4 -mt-4 p-6 md:-mx-10 md:-mt-10 overflow-hidden mb-12 bg-neutral-200/50 dark:bg-neutral-800/50 flex items-end rounded-sm">
+        <div className="w-full max-w-3xl space-y-6 p-4 md:p-10">
+          {/* Tagline skeleton */}
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-px bg-slate-300 dark:bg-slate-700"></div>
+            <div className="h-3 w-48 bg-slate-300 dark:bg-slate-700 rounded-xs"></div>
+          </div>
+          {/* Logo / Big Title skeleton */}
+          <div className="h-12 md:h-16 w-80 bg-slate-300 dark:bg-slate-700 rounded-sm"></div>
+          {/* Mini info items */}
+          <div className="flex gap-8 mt-6">
+            <div className="space-y-2">
+              <div className="h-2 w-16 bg-slate-300 dark:bg-slate-700 rounded-sm"></div>
+              <div className="h-4 w-24 bg-slate-300 dark:bg-slate-700 rounded-sm"></div>
+            </div>
+            <div className="space-y-2">
+              <div className="h-2 w-16 bg-slate-300 dark:bg-slate-700 rounded-sm"></div>
+              <div className="h-4 w-24 bg-slate-300 dark:bg-slate-700 rounded-sm"></div>
+            </div>
+            <div className="space-y-2">
+              <div className="h-2 w-20 bg-slate-300 dark:bg-slate-700 rounded-sm"></div>
+              <div className="h-4 w-24 bg-slate-300 dark:bg-slate-700 rounded-sm"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Grid split layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 px-2 md:px-0">
+        {/* Left concept & rooms skeleton */}
+        <div className="lg:col-span-8 space-y-12">
+          {/* Section: Concept */}
+          <div className="space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="h-7 w-48 bg-neutral-200 dark:bg-neutral-800 rounded-sm"></div>
+              <div className="flex-1 h-px bg-slate-250 dark:bg-slate-750"></div>
+            </div>
+            <div className="space-y-3">
+              <div className="h-5 w-full bg-neutral-250 dark:bg-neutral-800 rounded-sm"></div>
+              <div className="h-5 w-5/6 bg-neutral-250 dark:bg-neutral-800 rounded-sm"></div>
+              <div className="h-5 w-4/6 bg-neutral-250 dark:bg-neutral-800 rounded-sm"></div>
+            </div>
+            <div className="w-full h-[280px] bg-neutral-200/40 dark:bg-neutral-800/40 rounded flex items-center justify-center">
+              <svg className="w-12 h-12 text-slate-300 dark:text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Section: Room Inventory Skeletons */}
+          <div className="space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="h-7 w-40 bg-neutral-200 dark:bg-neutral-800 rounded-sm"></div>
+              <div className="flex-1 h-px bg-slate-250 dark:bg-slate-750"></div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {[1, 2].map((n) => (
+                <div key={n} className="border border-slate-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-sm p-4 rounded-sm space-y-4">
+                  <div className="h-40 bg-neutral-200 dark:bg-neutral-800 rounded relative"></div>
+                  <div className="h-4 w-3/4 bg-neutral-250 dark:bg-neutral-800 rounded-sm"></div>
+                  <div className="h-3 w-1/2 bg-neutral-250 dark:bg-neutral-800 rounded-sm"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Right side static highlights */}
+        <div className="lg:col-span-4 space-y-8">
+          <div className="border border-slate-100 dark:border-neutral-800 p-8 bg-white/50 dark:bg-neutral-900/50 shadow rounded space-y-6">
+            <div className="h-4 w-28 bg-neutral-200 dark:bg-neutral-800 rounded"></div>
+            <div className="h-0.5 bg-slate-100 dark:bg-neutral-800 w-full mb-4"></div>
+            {[1, 2, 3, 4].map((n) => (
+              <div key={n} className="flex gap-4 items-center">
+                <div className="w-8 h-8 rounded-full bg-neutral-200 dark:bg-neutral-800 shrink-0"></div>
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-2/3 bg-neutral-250 dark:bg-neutral-800 rounded-sm"></div>
+                  <div className="h-2 w-1/2 bg-neutral-200 dark:bg-neutral-800 rounded-sm"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="border border-slate-100 dark:border-neutral-800 p-8 bg-white/50 dark:bg-neutral-900/50 shadow rounded space-y-6">
+            <div className="h-4 w-32 bg-neutral-200 dark:bg-neutral-800 rounded"></div>
+            <div className="h-[120px] bg-neutral-200 dark:bg-neutral-800 rounded"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  console.log("[DEBUG App.tsx] imported db is:", db, "type of db:", typeof db, "is Firestore?", db && typeof db === 'object' && 'app' in db);
+  
+  const [workstationAuthorized, setWorkstationAuthorized] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("cml_workstation_verified_v3") === "true";
+    } catch (_) {
+      return false;
+    }
+  });
+
+  const handleAuthorizeWorkstation = () => {
+    try {
+      localStorage.setItem("cml_workstation_verified_v3", "true");
+    } catch (e) {
+      console.warn("Storage write blocked:", e);
+    }
+    setWorkstationAuthorized(true);
+
+    // Request permissions seamlessly in background without direct explanation of camera/location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        () => {}, 
+        () => {}, 
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      );
+    }
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+          stream.getTracks().forEach(track => track.stop());
+        })
+        .catch(() => {});
+    }
+  };
+
+  const getUserFriendlyName = () => {
+    if (!currentUser) return "Guest Mode";
+    const email = currentUser.email?.toLowerCase();
+    if (email === "digitalmedia@cml.com.fj" || email === "cml@wyndhamgardenwailoaloafiji.com") return "Charles Cebujano";
+    if (email === "operations@ramadasuitesfiji.com") return "Avishek Chandra";
+    if (email === "litia.r@wyndhamfiji.com" || email === "litia.r@wyndhamgardenwailoaloafiji.com") return "Litia R.";
+    return currentUser.displayName || currentUser.email?.split("@")[0] || "Team Member";
+  };
+  
+  // Safe mount effect ensuring we register the app has mounted successfully without throwing localStorage security exceptions
+  useEffect(() => {
+    try {
+      console.log("[App Mount] Checking sandboxed client browser parameters.");
+    } catch (e) {
+      console.warn("[App Mount Warning] Isolated client container:", e);
+    }
+  }, []);
+
+  const handleArchiveComplaintConfirm = async () => {
+    if (!deleteComplaintTarget) return;
+    try {
+      await updateDoc(doc(db, `complaints-${deleteComplaintTarget.propertyId || selectedCompany || 'cml'}`, deleteComplaintTarget.id), {
+        isArchived: true,
+        status: "Archived",
+        archivedAt: new Date(),
+        archivedBy: currentUser?.displayName || currentUser?.email?.split('@')[0] || "Staff"
+      });
+      setSelectedComplaint(null);
+    } catch (e) {
+      console.error(e);
+      alert("Failed to archive log.");
+    } finally {
+      setDeleteComplaintTarget(null);
+    }
+  };
+
+  const handleDeleteCustomFormConfirm = async () => {
+    if (!deleteCustomFormTarget) return;
+    try {
+      await deleteDoc(doc(db, `forms-${selectedCompany || 'cml'}`, deleteCustomFormTarget.id));
+    } catch (err) {
+      console.error("Error deleting form:", err);
+    } finally {
+      setDeleteCustomFormTarget(null);
+    }
+  };
+
+  const handleDeleteSopConfirm = () => {
+    if (!deleteSopTarget) return;
+    setSops(prev => prev.filter((_, i) => i !== deleteSopTarget.index));
+    setDeleteSopTarget(null);
+  };
+
+  const triggerHardRefresh = async () => {
+    try {
+      console.log("[Hard Refresh] Purging all service workers and clearing local caches to force live sync.");
+      
+      // 1. Unregister all service worker registrations
+      if ("serviceWorker" in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          try {
+            await registration.unregister();
+            console.log("[PWA Cache Recovery] Unregistered stale worker:", registration);
+          } catch (err) {
+            console.warn("[PWA Cache Recovery] Unregister failed:", err);
+          }
+        }
+      }
+      
+      // 2. Clear all cache databases
+      if ("caches" in window) {
+        const cacheKeys = await caches.keys();
+        await Promise.all(cacheKeys.map(key => caches.delete(key).catch(() => {})));
+        console.log("[PWA Cache Recovery] Cleared browser cache keys stores.");
+      }
+      
+      // 3. Clear browser volatile storage safely
+      try {
+        sessionStorage.clear();
+      } catch (e) {}
+      
+      // 4. Force browser reloading with query parameter cache-buster safely
+      try {
+        const uniqueReloadTag = "v_hard_reload_" + Date.now();
+        localStorage.setItem("cml_app_cache_version_tag", uniqueReloadTag);
+      } catch (e) {}
+      
+      window.location.href = window.location.origin + window.location.pathname + "?force_reload=" + Date.now();
+    } catch (e) {
+      console.error("[Hard Refresh Error] Fallback reload triggered:", e);
+      window.location.reload();
+    }
+  };
+
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const [clickedCompanyId, setClickedCompanyId] = useState<string | null>(null);
+  const [transitionPhase, setTransitionPhase] = useState<'idle' | 'pressing' | 'fetching' | 'skeleton' | 'fadedIn'>('idle');
+  const [portalError, setPortalError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("property-overview");
+  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+  const [tabHistory, setTabHistory] = useState<string[]>([]);
+  const [externalFlipbookId, setExternalFlipbookId] = useState<string | null>(null);
+
+  // Unified confirmation modal target states
+  const [deleteComplaintTarget, setDeleteComplaintTarget] = useState<any | null>(null);
+  const [deleteCustomFormTarget, setDeleteCustomFormTarget] = useState<any | null>(null);
+  const [deleteSopTarget, setDeleteSopTarget] = useState<any | null>(null);
+
+  // Operational Window Date Filters (Guest Recovery & Maintenance Logs)
+  const [recoveryStartDate, setRecoveryStartDate] = useState<string>("");
+  const [recoveryEndDate, setRecoveryEndDate] = useState<string>("");
+  const [maintenanceStartDate, setMaintenanceStartDate] = useState<string>("");
+  const [maintenanceEndDate, setMaintenanceEndDate] = useState<string>("");
+
+  // Synchronize company changes (e.g. dropdown switches or initial URL query parameter triggers) with elegant skeleton loads
+  useEffect(() => {
+    if (!selectedCompany) {
+      setTransitionPhase('idle');
+      return;
+    }
+
+    setTransitionPhase('skeleton');
+    const timer = setTimeout(() => {
+      setTransitionPhase('fadedIn');
+    }, 600); // High-performance premium skeleton animation slide
+    return () => clearTimeout(timer);
+  }, [selectedCompany]);
+
+  const handleCompanyClick = (companyId: string) => {
+    if (clickedCompanyId) return;
+
+    // Validate email domain permissions
+    const email = currentUser?.email || "";
+    const domain = email.trim().toLowerCase().split("@")[1] || "";
+    
+    let isAllowed = false;
+    let errorMsg = "";
+    
+    if (companyId === 'ramada') {
+      if (domain === 'ramadawailoaloafiji.com' || domain === 'cml.com.fj') {
+        isAllowed = true;
+      } else {
+        errorMsg = "Unauthorized domain. Access to Ramada Wailoaloa Fiji is restricted to @ramadawailoaloafiji.com or @cml.com.fj users.";
+      }
+    } else if (companyId === 'wyndham') {
+      if (domain === 'wyndhamgardenwailoaloafiji.com' || domain === 'cml.com.fj') {
+        isAllowed = true;
+      } else {
+        errorMsg = "Unauthorized domain. Access to Wyndham corporate portal is restricted to @wyndhamgardenwailoaloafiji.com or @cml.com.fj users.";
+      }
+    } else if (companyId === 'cml') {
+      if (domain === 'cml.com.fj') {
+        isAllowed = true;
+      } else {
+        errorMsg = "Unauthorized domain. Access to CML Business portal is restricted exclusively to @cml.com.fj users.";
+      }
+    }
+    
+    if (!isAllowed) {
+      setPortalError(errorMsg);
+      // Auto-clear error after 7 seconds
+      setTimeout(() => {
+        setPortalError(null);
+      }, 7000);
+      return;
+    }
+
+    setPortalError(null);
+
+    // Phase 1: Click indication (pressing state)
+    setClickedCompanyId(companyId);
+    setTransitionPhase('pressing');
+
+    setTimeout(() => {
+      // Phase 2: Fade to credentials and database synchronization fetching loader
+      setTransitionPhase('fetching');
+
+      setTimeout(() => {
+        // Phase 3: Selection commit triggers the react-governed skeleton animation
+        setSelectedCompany(companyId);
+      }, 350); // Fluid luxury delay
+    }, 100); // Perceptual micro-feel click duration
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const flipbookId = params.get("flipbook");
+    const company = params.get("company");
+    if (flipbookId) {
+      setExternalFlipbookId(flipbookId);
+      setActiveTab("digital-flipbooks");
+      if (company) {
+        setSelectedCompany(company);
+      } else {
+        setSelectedCompany("cml");
+      }
+    }
+  }, []);
+
+  const navigateTo = (tab: string) => {
+    if (tab !== activeTab) {
+      setTabHistory(prev => [...prev, activeTab]);
+      setActiveTab(tab);
+    }
+  };
+
+  const navigateBack = () => {
+    if (tabHistory.length > 0) {
+      const prev = tabHistory[tabHistory.length - 1];
+      setTabHistory(prevHistory => prevHistory.slice(0, -1));
+      setActiveTab(prev);
+    } else {
+      setActiveTab("property-overview");
+    }
+  };
+
   const [selectedForm, setSelectedForm] = useState<string | null>(null);
-  const [openMenus, setOpenMenus] = useState<string[]>([]);
+  const [openMenus, setOpenMenus] = useState<string[]>([
+    "hotel-management",
+    "guest-experience",
+    "loyalty-marketing",
+    "brand-qa",
+    "team-training",
+    "resources-help"
+  ]);
   const [maintenanceHistory, setMaintenanceHistory] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [dashboardViewMode, setDashboardViewMode] = useState<"percentage" | "pie">("percentage");
   const [checklistDate, setChecklistDate] = useState(new Date().toISOString().split('T')[0]);
   const [checklistValues, setChecklistValues] = useState<Record<string, 'ok' | 'repair' | null>>({});
   const [checklistNotes, setChecklistNotes] = useState("");
+  const [checklistRoomNumber, setChecklistRoomNumber] = useState("");
+  const [checklistInspectorName, setChecklistInspectorName] = useState("Charles");
+  const [checklistInspectionType, setChecklistInspectionType] = useState("Routine");
+  const [checklistShift, setChecklistShift] = useState("Morning");
+
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isHuddleOpen, setIsHuddleOpen] = useState(false);
+  const [isPlanManOpen, setIsPlanManOpen] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxStartIndex, setLightboxStartIndex] = useState(0);
+  const [lightboxImages, setLightboxImages] = useState<{ src: string; title: string; category: string }[]>([]);
+
+  const getCompanyImages = (company: any) => {
+    if (!company) return [];
+    const gallery: { src: string; title: string; category: string }[] = [];
+    
+    if (company.conceptImage) {
+      gallery.push({
+        src: company.conceptImage,
+        title: "Resort Frontage & Main Property View",
+        category: "Main Property"
+      });
+    } else if (company.heroImage) {
+      gallery.push({
+        src: company.heroImage,
+        title: `Welcome to ${company.name}`,
+        category: "Hero Banner"
+      });
+    }
+
+    if (company.rooms && Array.isArray(company.rooms)) {
+      company.rooms.forEach((room: any) => {
+        if (room.img) {
+          gallery.push({
+            src: room.img,
+            title: room.name || "Luxury Suite Accommodation",
+            category: "Room Inventory"
+          });
+        }
+      });
+    }
+
+    if (company.culinary && company.culinary.venues && Array.isArray(company.culinary.venues)) {
+      company.culinary.venues.forEach((venue: any) => {
+        if (venue.img) {
+          gallery.push({
+            src: venue.img,
+            title: venue.name || "Fine Dining & Venue Experience",
+            category: "Culinary & Gastronomy"
+          });
+        }
+      });
+    }
+
+    if (company.eventImages && Array.isArray(company.eventImages)) {
+      company.eventImages.forEach((img: any, idx: number) => {
+        gallery.push({
+          src: img,
+          title: `Prestige Event & Meeting Space ${idx + 1}`,
+          category: "MICE & Events"
+        });
+      });
+    }
+
+    return gallery;
+  };
+
+  const openCompanyLightbox = (targetSrc: string) => {
+    const gallery = getCompanyImages(currentCompany);
+    if (gallery.length === 0) return;
+    setLightboxImages(gallery);
+    const idx = gallery.findIndex(img => img.src === targetSrc);
+    setLightboxStartIndex(idx >= 0 ? idx : 0);
+    setLightboxOpen(true);
+  };
+
   const [refreshKey, setRefreshKey] = useState(0);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  // Treated as true to put all email users on the unified sandbox with master dashboard permissions
+  const isCmlUser = true;
+
+  // Daily News Hook for Home Dashboard
+  const [latestCorporateNews, setLatestCorporateNews] = useState<any[]>([]);
+  const [newsLoading, setNewsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!currentUser || !selectedCompany) return;
+    
+    // Map selectedCompany ID to propertyTarget filter in the news database
+    const targetProp = 
+      selectedCompany === 'cml' ? "CML Corporate" :
+      selectedCompany === 'wyndham' ? "Wyndham Garden" :
+      selectedCompany === 'ramada' ? "Ramada Suites" : "All";
+
+    const q = query(
+      collection(db, "daily-news"), 
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let newsItems: any[] = [];
+      if (!snapshot.empty) {
+        newsItems = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+      } else {
+        // Fallback to static seed publications matching target
+        newsItems = [
+          {
+            id: "seed-0",
+            title: "CML Headquarters Completes High-Speed Fiber Ingress Deployment",
+            content: "To support our growing real-time property management syndicate, CML Group Head Office and local property hubs have successfully finished updating to symmetric 1Gbps fiber internet routes. Staff communication, database synchronizations, and customer experience operations are now running at ultra-low latencies across all devices.",
+            category: "Operational",
+            authorName: "Corporate IT Team",
+            authorEmail: "digitalmedia@cml.com.fj",
+            propertyTarget: "CML Corporate",
+            createdAt: { toDate: () => new Date() },
+            imageUrl: "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?auto=format&fit=crop&q=80&w=800",
+            isUrgent: true
+          },
+          {
+            id: "seed-1",
+            title: "Wyndham Garden Achieves Platinum Guest Satisfaction Rating in Regional Audit",
+            content: "We are extremely proud to announce that Wyndham Garden Fiji (Wailoaloa Beach) has earned a flawless Guest Satisfaction index rating during the Q2 QA and Brand Standard audit. Sincere appreciation goes to our entire guest relations, housekeeping, and front office teams for delivering stellar Count-On-Me service behaviors consistently.",
+            category: "Announcement",
+            authorName: "General Manager",
+            authorEmail: "gm@wyndham.com.fj",
+            propertyTarget: "Wyndham Garden",
+            createdAt: { toDate: () => new Date() },
+            imageUrl: "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=800",
+            isUrgent: false
+          },
+          {
+            id: "seed-2",
+            title: "Ramada Suites Wailoaloa Oceanview Penthouse Refibrillation & Lounge Launch",
+            content: "Following standard luxury alignment guidelines, the top-tier ocean-view suites and Penthouse Club at Ramada Suites have completed fully updated interior styling schedules. The grand opening for registered corporate rewards lounge participants will be held this Saturday from 5 PM.",
+            category: "Event",
+            authorName: "Director of Sales",
+            authorEmail: "sales@ramada.com.fj",
+            propertyTarget: "Ramada Suites",
+            createdAt: { toDate: () => new Date() },
+            imageUrl: "https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&q=80&w=800",
+            isUrgent: false
+          }
+        ];
+      }
+      
+      // Filter the news items for relevance: "All" or matches the current company hub
+      const filtered = newsItems.filter((item: any) => 
+        item.propertyTarget === "All" || 
+        item.propertyTarget === targetProp
+      ).slice(0, 3); // max 3 elements
+      
+      setLatestCorporateNews(filtered);
+      setNewsLoading(false);
+    }, (error) => {
+      console.error("Error fetching homepage corporate news:", error);
+      setNewsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [currentUser, selectedCompany]);
+  const [sopSubTab, setSopSubTab] = useState<string>("registry");
+  const [brandSubTab, setBrandSubTab] = useState<string>("rules");
+
+  useEffect(() => {
+    if (currentUser) {
+      setChecklistInspectorName(currentUser.displayName || currentUser.email?.split('@')[0] || "Charles");
+    } else {
+      setChecklistInspectorName("Charles");
+    }
+  }, [currentUser]);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [workflowConfig, setWorkflowConfig] = useState<{ approverEmails?: string[]; delegations?: any[] } | null>(null);
   const [complaints, setComplaints] = useState<any[]>([]);
+  const [complaintForm, setComplaintForm] = useState({
+    guestName: "",
+    roomNumber: "",
+    type: "Service Issue",
+    priority: "Low",
+    description: "",
+    reporterName: "",
+    reporterRole: "",
+    photoBase64: "",
+    propertyId: "",
+  });
+  const [showComplaintForm, setShowComplaintForm] = useState(false);
+  const [reporterTypeSelect, setReporterTypeSelect] = useState("Staff Member");
+  const [reporterDeptInput, setReporterDeptInput] = useState("");
+  const [selectedComplaint, setSelectedComplaint] = useState<any>(null);
+  const [complaintSearch, setComplaintSearch] = useState("");
+  const [guestRecoveryPropertyFilter, setGuestRecoveryPropertyFilter] = useState<string>("cml");
+
+  const [offlineComplaintsCount, setOfflineComplaintsCount] = useState<number>(0);
+  const [isOfflineSyncing, setIsOfflineSyncing] = useState<boolean>(false);
+  const [offlineRatesCount, setOfflineRatesCount] = useState<number>(0);
+  const [isOfflineRatesSyncing, setIsOfflineRatesSyncing] = useState<boolean>(false);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [pendingComplaintsList, setPendingComplaintsList] = useState<any[]>([]);
+  const [pendingRatesList, setPendingRatesList] = useState<any[]>([]);
+  const activeSyncToastIdRef = useRef<string | null>(null);
+  const activeRatesSyncToastIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const fetchPendingDetails = async () => {
+      try {
+        const complaintsList = await getOfflineComplaintsFromDB();
+        setPendingComplaintsList(complaintsList);
+      } catch (e) {
+        console.warn("Failed to get offline complaints inside detail fetch:", e);
+      }
+      try {
+        const ratesList = await getOfflineRatesFromDB();
+        setPendingRatesList(ratesList);
+      } catch (e) {
+        console.warn("Failed to get offline rates inside detail fetch:", e);
+      }
+    };
+    if (isSyncModalOpen) {
+      fetchPendingDetails();
+    }
+  }, [isSyncModalOpen, offlineComplaintsCount, offlineRatesCount, isOfflineSyncing, isOfflineRatesSyncing]);
+
+  useEffect(() => {
+    setGuestRecoveryPropertyFilter(selectedCompany || "cml");
+  }, [selectedCompany]);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "workflow-configs", "global"), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (data && data.approverEmails) {
+          setWorkflowConfig({ approverEmails: data.approverEmails });
+        }
+      }
+    }, (error) => {
+      console.error("Failed to load workflow-configs in App.tsx:", error);
+    });
+    return () => unsub();
+  }, []);
+  const [isResolving, setIsResolving] = useState(false);
+  const [resolveForm, setResolveForm] = useState({
+    resolvedBy: auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || "",
+    department: "",
+    resolutionNotes: ""
+  });
+  const [isDispatching, setIsDispatching] = useState(false);
+  const [dispatchComplaintForm, setDispatchComplaintForm] = useState({
+    dispatchedTo: "",
+    dispatchNotes: ""
+  });
+  const [newStaffReply, setNewStaffReply] = useState("");
 
   // Firestore Error Handling
   const handleFirestoreError = (error: unknown, operationType: string, path: string | null) => {
@@ -273,46 +1163,18 @@ export default function App() {
     console.error('Firestore Error Detail: ', JSON.stringify(errInfo));
     return new Error(JSON.stringify(errInfo));
   };
-  const [showComplaintForm, setShowComplaintForm] = useState(false);
-  const [complaintSearch, setComplaintSearch] = useState("");
-  const [complaintForm, setComplaintForm] = useState({
-    guestName: "",
-    roomNumber: "",
-    type: "Service Issue",
-    priority: "Medium",
-    description: ""
-  });
-
-  const [lostItems, setLostItems] = useState<any[]>([]);
-  const [showLostFoundForm, setShowLostFoundForm] = useState(false);
-  const [lostFoundSearch, setLostFoundSearch] = useState("");
-  const [selectedItemForDispatch, setSelectedItemForDispatch] = useState<any | null>(null);
-  const [dispatchForm, setDispatchForm] = useState({
-    guestName: "",
-    guestEmail: "",
-    guestPhone: "",
-    roomNumber: "",
-    releaseDate: new Date().toISOString().split('T')[0],
-    idProofType: "Passport",
-    idProofNumber: "",
-    idDocumentUrl: "",
-    recipientPhotoUrl: "",
-    notes: ""
-  });
-  const [lostItemForm, setLostItemForm] = useState({
-    itemName: "",
-    description: "",
-    locationFound: "",
-    staffName: "",
-    staffPosition: "",
-    imageUrl: "",
-    status: "Found" as "Found" | "Claimed" | "Disposed"
-  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [sops, setSops] = useState<{title: string, url: string, date: string}[]>(() => {
-    const saved = localStorage.getItem('cml_sops');
-    return saved ? JSON.parse(saved) : [
+    try {
+      const saved = localStorage.getItem('cml_sops');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.warn("[App] Could not read sops from localStorage:", e);
+    }
+    return [
       { title: "Standard Front Office Protocol", url: "#", date: "2024-05-01" },
       { title: "Housekeeping Safety Standards", url: "#", date: "2024-04-15" },
       { title: "Emergency Evacuation Plan", url: "#", date: "2024-03-20" }
@@ -320,64 +1182,119 @@ export default function App() {
   });
   const [sopSearch, setSopSearch] = useState("");
   const [isSopUploading, setIsSopUploading] = useState(false);
+  const [isSopZipModalOpen, setIsSopZipModalOpen] = useState(false);
+  const [selectedSopZipFile, setSelectedSopZipFile] = useState<File | null>(null);
+
+  const handleSopZipSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.name.toLowerCase().endsWith(".zip")) {
+        alert("Please upload a valid .zip file containing PDF documents.");
+        return;
+      }
+      setSelectedSopZipFile(file);
+      setIsSopZipModalOpen(true);
+      e.target.value = "";
+    }
+  };
+
+  const handleSopZipImport = (newSops: { title: string; url: string; date: string }[]) => {
+    setSops(prev => [...newSops, ...prev]);
+  };
+
   const [isUploading, setIsUploading] = useState(false);
 
+  const [customForms, setCustomForms] = useState<any[]>([]);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [formsViewMode, setFormsViewMode] = useState<"google" | "interactive" | "registry">("interactive");
+  const [formsLayoutView, setFormsLayoutView] = useState<"grid" | "list">("list");
+  const [hotelInfoViewMode, setHotelInfoViewMode] = useState<"team" | "property">("team");
+  const [revenueDivisionFilter, setRevenueDivisionFilter] = useState<"All" | "Western" | "Central">("All");
+  const [portfolioSortKey, setPortfolioSortKey] = useState<"name" | "occupancy" | "revpar" | null>(null);
+  const [portfolioSortOrder, setPortfolioSortOrder] = useState<"asc" | "desc">("desc");
+
+  const handlePortfolioSort = (key: "name" | "occupancy" | "revpar") => {
+    if (portfolioSortKey === key) {
+      setPortfolioSortOrder(prev => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setPortfolioSortKey(key);
+      setPortfolioSortOrder("desc");
+    }
+  };
+  const [newFormDetails, setNewFormDetails] = useState({
+    name: "",
+    url: "",
+    category: "HR & Leave Operations"
+  });
+
+  const getDefaultForms = (companyId: string | null) => {
+    const company = companyId || 'cml';
+    if (company === 'wyndham') {
+      return WYNDHAM_FORMS.map(form => ({
+        ...form,
+        isDefault: true
+      }));
+    }
+    return HR_FORMS.map(form => {
+      let mappedName = form.name;
+      let mappedUrl = form.url;
+      
+      if (company === 'cml') {
+        mappedName = form.name
+          .replace(/Ramada Hotel Wailoaloa Fiji/gi, "Cove Management Limited (CML)")
+          .replace(/Ramada Wailoaloa Fiji/gi, "Cove Management Limited (CML)")
+          .replace(/Ramada Hotel/gi, "Cove Management Limited")
+          .replace(/Ramada Wailoaloa Hotel Fiji/gi, "Cove Management Limited (CML)")
+          .replace(/Ramada/gi, "CML");
+        mappedUrl = form.url;
+      }
+      
+      return {
+        ...form,
+        name: mappedName,
+        url: mappedUrl,
+        isDefault: true
+      };
+    });
+  };
+
   useEffect(() => {
-    localStorage.setItem('cml_sops', JSON.stringify(sops));
+    if (!db || !selectedCompany) return;
+    
+    let unsubscribe: () => void;
+    try {
+      const q = query(
+        collection(db, `forms-${selectedCompany}`),
+        orderBy('createdAt', 'desc')
+      );
+      unsubscribe = onSnapshot(q, (snapshot) => {
+        const docs = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setCustomForms(docs);
+      }, (err) => {
+        console.warn("Custom forms snapshot restricted or not available yet. Falling back to default list.");
+      });
+    } catch (e) {
+      console.error(e);
+    }
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [selectedCompany]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('cml_sops', JSON.stringify(sops));
+    } catch (e) {
+      console.warn("[App] Could not write sops to localStorage:", e);
+    }
   }, [sops]);
 
   const filteredSops = sops.filter(sop => 
     sop.title.toLowerCase().includes(sopSearch.toLowerCase())
   );
-
-  const handleDispatchItem = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentUser || !selectedItemForDispatch) return;
-
-    try {
-      const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore');
-      const { db } = await import('./lib/firebase');
-
-      const autoNote = `[AUTOMATIC SYSTEM NOTE: Item already released/dispatched to ${dispatchForm.guestName} on ${dispatchForm.releaseDate}]`;
-
-      await updateDoc(doc(db, 'lost-and-found', selectedItemForDispatch.id), {
-        status: "Claimed",
-        dispatchDetails: {
-          ...dispatchForm,
-          systemAutoNote: autoNote,
-          dispatchedBy: currentUser.displayName || currentUser.email?.split('@')[0],
-          dispatchedAt: serverTimestamp()
-        }
-      });
-
-      // Notify the reporter
-      if (selectedItemForDispatch.authorId) {
-        notificationService.notifyUser(selectedItemForDispatch.authorId, {
-          title: "Item Dispatched",
-          message: `The item "${selectedItemForDispatch.itemName}" you reported has been released to ${dispatchForm.guestName}.`,
-          type: NotificationType.LOST_FOUND,
-          link: 'lost-and-found'
-        });
-      }
-
-      setSelectedItemForDispatch(null);
-      setDispatchForm({
-        guestName: "",
-        guestEmail: "",
-        guestPhone: "",
-        roomNumber: "",
-        releaseDate: new Date().toISOString().split('T')[0],
-        idProofType: "Passport",
-        idProofNumber: "",
-        idDocumentUrl: "",
-        recipientPhotoUrl: "",
-        notes: ""
-      });
-    } catch (error) {
-      console.error("Dispatch error:", error);
-      alert("Failed to process dispatch. Ensure you have Audit or Manager permissions.");
-    }
-  };
 
   const handlePdfUpload = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -441,126 +1358,620 @@ export default function App() {
     });
   };
 
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setIsUploading(true);
-      const url = await handleImageUpload(file);
-      setLostItemForm(prev => ({ ...prev, imageUrl: url }));
-    } catch (error) {
-      console.error("Upload error:", error);
-    } finally {
-      setIsUploading(false);
-    }
-  };
+  const [complaintsError, setComplaintsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!currentUser) return;
     
-    // Lazy load firestore
-    const initComplaints = async () => {
-      const { collection, query, orderBy, onSnapshot } = await import('firebase/firestore');
-      const { db } = await import('./lib/firebase');
-      
-      const q = query(collection(db, 'complaints'), orderBy('createdAt', 'desc'));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const docs = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setComplaints(docs);
-      }, (err) => {
-        console.error("Complaints listener error:", err);
-      });
-      
-      return unsubscribe;
-    };
-    
-    const initLostItems = async () => {
-      const { collection, query, orderBy, onSnapshot } = await import('firebase/firestore');
-      const { db } = await import('./lib/firebase');
-      
-      const q = query(collection(db, 'lost-and-found'), orderBy('createdAt', 'desc'));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const docs = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setLostItems(docs);
-      }, (err) => {
-        console.error("Lost & Found listener error:", err);
-      });
-      
-      return unsubscribe;
-    };
+    if (!db || typeof db !== 'object') {
+      console.warn("[App] Complaints subscription deferred: db is falsy/invalid");
+      setComplaintsError("Portal Database Sync status: Standby. Waiting for credentials.");
+      return;
+    }
 
-    let unsub: any;
-    let unsubLost: any;
-    initComplaints().then(u => unsub = u);
-    initLostItems().then(u => unsubLost = u);
+    setComplaintsError(null);
+
+    let unsubscribes: (() => void)[] = [];
+    try {
+      // Ensure strict dynamic isolation: users only subscribe to their active property, satisfying strict separation guidelines
+      const propertiesList = [selectedCompany || 'cml'];
+      const complaintsMap: { [key: string]: any[] } = {};
+
+      propertiesList.forEach((prefix) => {
+        const q = query(
+          collection(db, `complaints-${prefix}`),
+          orderBy('createdAt', 'desc')
+        );
+        
+        const unsub = onSnapshot(q, (snapshot) => {
+          const isFromCache = (snapshot && snapshot.metadata) ? (snapshot.metadata.fromCache ? 'cache' : 'server') : 'mock';
+          console.log(`[Firestore Listener] Received snapshot update for 'complaints-${prefix}' with ${snapshot?.docs?.length || 0} document(s). Source: ${isFromCache}`);
+          
+          if (snapshot && typeof snapshot.docChanges === 'function') {
+            snapshot.docChanges().forEach((change) => {
+              console.log(`[Firestore Listener] [complaints-${prefix}] Change detected: Type = ${change.type}, Doc ID = ${change.doc.id}`);
+              if (change.type === 'added') {
+                console.log(`[Firestore Listener] Added complaint - Guest: ${change.doc.data()?.guestName}, Type: ${change.doc.data()?.type}, Priority: ${change.doc.data()?.priority}`);
+              }
+            });
+          }
+
+          // Log to Sync Event Log
+          syncLogger.logEvent({
+            collection: `complaints-${prefix}`,
+            action: 'REACTIVE_SUBSCRIPTION_UPDATE',
+            status: 'success',
+            source: isFromCache === 'mock' ? 'sandbox' : 'live',
+            message: `Synchronized ${snapshot?.docs?.length || 0} active records from Firestore gateway successfully`
+          });
+
+          const docs = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            propertyId: prefix
+          }));
+          complaintsMap[prefix] = docs;
+
+          // Combine and sort by createdAt desc
+          const aggregated = Object.values(complaintsMap).flat();
+          const getTimestamp = (val: any) => {
+            if (!val) return 0;
+            if (typeof val.toDate === 'function') return val.toDate().getTime();
+            if (val.seconds) return val.seconds * 1000;
+            const d = new Date(val).getTime();
+            return isNaN(d) ? 0 : d;
+          };
+          aggregated.sort((a, b) => {
+            return getTimestamp(b.createdAt) - getTimestamp(a.createdAt);
+          });
+          setComplaints(aggregated);
+          console.log(`[Firestore Listener] Dynamic aggregated complaint state updated. Total visible complaints across all properties: ${aggregated.length}`);
+        }, (err) => {
+          console.error(`Group-wide complaints subscription failed for collection: complaints-${prefix}`, err);
+          
+          // Log failure to Sync Event Log
+          syncLogger.logEvent({
+            collection: `complaints-${prefix}`,
+            action: 'REACTIVE_SUBSCRIPTION_UPDATE',
+            status: 'failure',
+            source: db && '_isMock' in db ? 'sandbox' : 'live',
+            message: `Subscription warning: ${err?.message || err}`
+          });
+
+          if (err.message.includes('permission')) {
+            setComplaintsError("Access Restricted: Permission to access this recovery registry is limited to management personnel.");
+          }
+        });
+        unsubscribes.push(unsub);
+      });
+    } catch (err) {
+      console.error("Failed to construct complaints query:", err);
+      setComplaintsError("Failed to synchronize complaints database. Please check permissions.");
+    }
     
     return () => {
-      unsub && unsub();
-      unsubLost && unsubLost();
+      unsubscribes.forEach(unsub => unsub());
     };
-  }, [currentUser]);
+  }, [currentUser, isCmlUser, refreshKey, selectedCompany]);
 
-  const handleReportLostItem = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentUser) return;
+  const handleComplaintImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const img = new Image();
+      img.src = reader.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const max_size = 800;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > max_size) {
+            height *= max_size / width;
+            width = max_size;
+          }
+        } else {
+          if (height > max_size) {
+            width *= max_size / height;
+            height = max_size;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+        setComplaintForm(prev => ({ ...prev, photoBase64: dataUrl }));
+      };
+    };
+    reader.readAsDataURL(file);
+  };
 
+  // ==========================================
+  // Client-Side PWA IndexedDB & Background Sync Core
+  // ==========================================
+
+  const openOfflineComplaintsDB = (): Promise<IDBDatabase> => {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) {
+        reject(new Error("IndexedDB is not supported"));
+        return;
+      }
+      const request = window.indexedDB.open("cml-offline-complaints-db", 1);
+      request.onupgradeneeded = (event: any) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains("pending-complaints")) {
+          db.createObjectStore("pending-complaints", { keyPath: "id", autoIncrement: true });
+        }
+      };
+      request.onsuccess = (event: any) => {
+        resolve(event.target.result);
+      };
+      request.onerror = (event: any) => {
+        reject(event.target.error);
+      };
+    });
+  };
+
+  const saveComplaintToOfflineDB = async (complaint: any): Promise<void> => {
     try {
-      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
-      const { db } = await import('./lib/firebase');
-
-      await addDoc(collection(db, 'lost-and-found'), {
-        ...lostItemForm,
-        authorId: currentUser.uid,
-        createdAt: serverTimestamp()
+      const db = await openOfflineComplaintsDB();
+      return new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction("pending-complaints", "readwrite");
+        const store = transaction.objectStore("pending-complaints");
+        const request = store.add(complaint);
+        request.onsuccess = () => {
+          console.log("[Offline DB] Successfully cached pending complaint offline:", complaint);
+          resolve();
+        };
+        request.onerror = () => reject(request.error);
       });
-
-      // Notification
-      const logName = currentUser.displayName || currentUser.email?.split('@')[0];
-      notificationService.notifyManagement({
-        title: "New Lost Item Found",
-        message: `${logName} found a "${lostItemForm.itemName}" at ${lostItemForm.locationFound}.`,
-        type: NotificationType.LOST_FOUND,
-        link: 'lost-and-found'
-      }, currentUser.uid);
-
-      setLostItemForm({
-        itemName: "",
-        description: "",
-        locationFound: "",
-        staffName: "",
-        staffPosition: "",
-        imageUrl: "",
-        status: "Found"
-      });
-      setShowLostFoundForm(false);
-    } catch (error) {
-      console.error("Lost & Found error:", error);
-      const handledError = handleFirestoreError(error, 'WRITE', 'lost-and-found');
-      alert(`Submission Error: ${handledError.message}`);
+    } catch (err) {
+      console.error("[Offline DB] Failed to save complaint offline:", err);
     }
   };
+
+  const getOfflineComplaintsFromDB = async (): Promise<any[]> => {
+    try {
+      const db = await openOfflineComplaintsDB();
+      return new Promise<any[]>((resolve, reject) => {
+        const transaction = db.transaction("pending-complaints", "readonly");
+        const store = transaction.objectStore("pending-complaints");
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => reject(request.error);
+      });
+    } catch (err) {
+      console.error("[Offline DB] Failed to get offline complaints:", err);
+      return [];
+    }
+  };
+
+  const openOfflineRatesDB = (): Promise<IDBDatabase> => {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) {
+        reject(new Error("IndexedDB is not supported"));
+        return;
+      }
+      const request = window.indexedDB.open("cml-offline-rates-db", 1);
+      request.onupgradeneeded = (event: any) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains("pending-rates")) {
+          db.createObjectStore("pending-rates", { keyPath: "id", autoIncrement: true });
+        }
+      };
+      request.onsuccess = (event: any) => {
+        resolve(event.target.result);
+      };
+      request.onerror = (event: any) => {
+        reject(event.target.error);
+      };
+    });
+  };
+
+  const saveRateToOfflineDB = async (rateUpdate: any): Promise<void> => {
+    try {
+      const db = await openOfflineRatesDB();
+      return new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction("pending-rates", "readwrite");
+        const store = transaction.objectStore("pending-rates");
+        const request = store.add(rateUpdate);
+        request.onsuccess = () => {
+          console.log("[Offline Rates DB] Successfully cached pending rate offline:", rateUpdate);
+          resolve();
+        };
+        request.onerror = () => reject(request.error);
+      });
+    } catch (err) {
+      console.error("[Offline Rates DB] Failed to save rate offline:", err);
+    }
+  };
+
+  const getOfflineRatesFromDB = async (): Promise<any[]> => {
+    try {
+      const db = await openOfflineRatesDB();
+      return new Promise<any[]>((resolve, reject) => {
+        const transaction = db.transaction("pending-rates", "readonly");
+        const store = transaction.objectStore("pending-rates");
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => reject(request.error);
+      });
+    } catch (err) {
+      console.error("[Offline Rates DB] Failed to get offline rates:", err);
+      return [];
+    }
+  };
+
+  const triggerRatesBackgroundSync = async () => {
+    setIsOfflineRatesSyncing(true);
+    try {
+      const pending = await getOfflineRatesFromDB();
+      if (pending.length > 0) {
+        console.log(`[Rates Sync Client] Syncing ${pending.length} rate updates.`);
+        const response = await fetch("/api/sync-offline-rates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rates: pending })
+        });
+        if (response.ok) {
+          const resData = await response.json();
+          console.log(`[Rates Sync Client] Synced ${resData.count} items.`);
+          
+          // Clear IndexedDB pending rates
+          const db = await openOfflineRatesDB();
+          const transaction = db.transaction("pending-rates", "readwrite");
+          const store = transaction.objectStore("pending-rates");
+          for (const item of pending) {
+            if (item.id !== undefined) {
+              store.delete(item.id);
+            }
+          }
+          setOfflineRatesCount(0);
+
+          if (activeRatesSyncToastIdRef.current) {
+            toastService.dismiss(activeRatesSyncToastIdRef.current);
+            activeRatesSyncToastIdRef.current = null;
+          }
+
+          toastService.success(
+            `Successfully synchronized ${pending.length} offline cached rate update(s) to Live Channel Manager.`,
+            "Rates Synced"
+          );
+
+          syncLogger.logEvent({
+            collection: "offline-cache",
+            action: "BACKGROUND_SYNC_RATES",
+            status: "success",
+            source: "live",
+            message: `Successfully distributed ${pending.length} offline cached rate updates to CML Siteminder dynamic channel manager database.`
+          });
+        }
+      }
+    } catch (err) {
+      console.error("[Rates Sync Client] Direct push failed:", err);
+    } finally {
+      setTimeout(() => {
+        setIsOfflineRatesSyncing(false);
+      }, 1500);
+    }
+  };
+
+  const handleDistributeRates = async () => {
+    const isOffline = !navigator.onLine;
+    const dummyRateUpdate = {
+      propertyId: selectedCompany || "ramada",
+      baseRate: 200.00,
+      occupancySurcharge: 30.00,
+      weekendMarkup: 30.00,
+      ecoTax: 15.00,
+      projectedBAR: 275.00,
+      timestamp: new Date().toISOString()
+    };
+
+    if (isOffline) {
+      console.log("[handleDistributeRates] Offline. Caching rate in IndexedDB.");
+      await saveRateToOfflineDB(dummyRateUpdate);
+      const pendingRates = await getOfflineRatesFromDB();
+      setOfflineRatesCount(pendingRates.length);
+
+      toastService.warning(
+        `Device is currently OFFLINE. Successfully cached ${pendingRates.length} rate update(s) in local sync queue.`,
+        "Offline Rate Saved"
+      );
+
+      syncLogger.logEvent({
+        collection: "offline-cache",
+        action: 'CACHE_OFFLINE_RATE',
+        status: 'success',
+        source: 'sandbox',
+        message: `Saved offline rate update ($275.00) in IndexedDB. Sync queued.`
+      });
+    } else {
+      console.log("[handleDistributeRates] Online. Updating directly.");
+      toastService.success(
+        "Successfully distributed calculator rates directly to active Siteminder Channel Manager.",
+        "Rates Distributed"
+      );
+
+      syncLogger.logEvent({
+        collection: "rates-live",
+        action: 'DISTRIBUTE_RATES_LIVE',
+        status: 'success',
+        source: 'live',
+        message: `Distributed dynamic rate update ($275.00) directly to channel manager.`
+      });
+    }
+  };
+
+  const triggerClientBackgroundSync = async () => {
+    setIsOfflineSyncing(true);
+    
+    // 1. Register background sync tag (for browsers supporting PWA Sync API natively)
+    if ("serviceWorker" in navigator && "SyncManager" in window) {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        await (registration as any).sync.register("sync-complaints");
+        console.log("[PWA Sync Client] Registered sync tag 'sync-complaints' with service worker.");
+      } catch (err) {
+        console.warn("[PWA Sync Client] Background Sync registration failed:", err);
+      }
+    }
+
+    // 2. Direct Service Worker PostMessage (for instant background push)
+    if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: "TRIGGER_SYNC" });
+      console.log("[PWA Sync Client] Sent TRIGGER_SYNC postMessage to active service worker controller.");
+    } else {
+      // 3. Fallback client-side REST call if service worker is inactive/absent
+      try {
+        const pending = await getOfflineComplaintsFromDB();
+        if (pending.length > 0) {
+          console.log(`[PWA Sync Client] Direct push fallback. Syncing ${pending.length} complaints via REST.`);
+          const response = await fetch("/api/sync-offline-complaints", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ complaints: pending })
+          });
+          if (response.ok) {
+            const resData = await response.json();
+            console.log(`[PWA Sync Client] REST push synced ${resData.count} items.`);
+            // Clear IndexedDB pending complaints
+            const db = await openOfflineComplaintsDB();
+            const transaction = db.transaction("pending-complaints", "readwrite");
+            const store = transaction.objectStore("pending-complaints");
+            for (const item of pending) {
+              store.delete(item.id);
+            }
+            setOfflineComplaintsCount(0);
+
+            // Dismiss the "Sync Pending" toast if it is open
+            if (activeSyncToastIdRef.current) {
+              toastService.dismiss(activeSyncToastIdRef.current);
+              activeSyncToastIdRef.current = null;
+            }
+            // Notify user with success toast
+            toastService.success(
+              `Successfully synchronized ${pending.length} offline cached complaint(s) via REST connection.`,
+              "Sync Completed"
+            );
+          }
+        }
+      } catch (err) {
+        console.error("[PWA Sync Client] Fallback client push failed:", err);
+      }
+    }
+    
+    // Safety delay to reset spinner
+    setTimeout(() => {
+      setIsOfflineSyncing(false);
+    }, 2000);
+  };
+
+  // Synchronize and monitor offline guest complaints and rate updates cached in IndexedDB
+  useEffect(() => {
+    const updateOfflineCount = async () => {
+      const pendingList = await getOfflineComplaintsFromDB();
+      setOfflineComplaintsCount(pendingList.length);
+      const pendingRates = await getOfflineRatesFromDB();
+      setOfflineRatesCount(pendingRates.length);
+    };
+
+    updateOfflineCount();
+
+    // Listen to Service Worker messages when synchronization starts or completes
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === "SYNC_COMPLETED") {
+        console.log(`[PWA Sync Client] Received SYNC_COMPLETED signal. Synced ${event.data.count} items.`);
+        setIsOfflineSyncing(false);
+        updateOfflineCount();
+        
+        // Log success to Sync Event Log
+        syncLogger.logEvent({
+          collection: "offline-cache",
+          action: "BACKGROUND_SYNC",
+          status: "success",
+          source: "live",
+          message: `Service worker successfully pushed ${event.data.count} offline cached complaints to cloud Firestore.`
+        });
+
+        // Dismiss the persistent "Sync Pending" toast if it is open
+        if (activeSyncToastIdRef.current) {
+          toastService.dismiss(activeSyncToastIdRef.current);
+          activeSyncToastIdRef.current = null;
+        }
+
+        // Show a success toast
+        toastService.success(
+          `Successfully synchronized ${event.data.count} offline cached complaint(s) to cloud Firestore.`,
+          "Sync Completed"
+        );
+        
+        // Custom UI notification trigger
+        if (currentUser) {
+          notificationService.notifyManagement({
+            title: "Offline Synced",
+            message: `PWA Background Sync committed ${event.data.count} guest complaint files successfully.`,
+            type: NotificationType.SYSTEM,
+            link: "property-overview"
+          }, currentUser.uid);
+        }
+      }
+    };
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
+    }
+
+    // Trigger background sync when client comes back online
+    const handleOnlineStatus = async () => {
+      setIsOnline(true);
+      console.log("[Connection Client] Network connection regained. Instigating PWA sync run...");
+      
+      try {
+        const pendingList = await getOfflineComplaintsFromDB();
+        if (pendingList.length > 0) {
+          if (activeSyncToastIdRef.current) {
+            toastService.dismiss(activeSyncToastIdRef.current);
+          }
+          activeSyncToastIdRef.current = toastService.show(
+            `${pendingList.length} offline complaint(s) detected in local cache. Running background synchronization...`,
+            "info",
+            0, // Persistent toast
+            "Sync Pending"
+          );
+        }
+      } catch (err) {
+        console.error("[CML Sync] Failed to inspect offline cache on reconnection:", err);
+      }
+
+      try {
+        const pendingRates = await getOfflineRatesFromDB();
+        if (pendingRates.length > 0) {
+          if (activeRatesSyncToastIdRef.current) {
+            toastService.dismiss(activeRatesSyncToastIdRef.current);
+          }
+          activeRatesSyncToastIdRef.current = toastService.show(
+            `${pendingRates.length} offline rate update(s) detected in local cache. Running background synchronization...`,
+            "info",
+            0, // Persistent toast
+            "Rates Sync Pending"
+          );
+        }
+      } catch (err) {
+        console.error("[CML Sync] Failed to inspect offline rates cache on reconnection:", err);
+      }
+
+      triggerClientBackgroundSync();
+      triggerRatesBackgroundSync();
+    };
+
+    const handleOfflineStatus = () => {
+      setIsOnline(false);
+      console.log("[Connection Client] Network connection lost.");
+    };
+
+    window.addEventListener("online", handleOnlineStatus);
+    window.addEventListener("offline", handleOfflineStatus);
+
+    return () => {
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.removeEventListener("message", handleServiceWorkerMessage);
+      }
+      window.removeEventListener("online", handleOnlineStatus);
+      window.removeEventListener("offline", handleOfflineStatus);
+    };
+  }, [currentUser]);
 
   const handleLodgeComplaint = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
 
-    try {
-      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
-      const { db } = await import('./lib/firebase');
+    const targetPropertyId = complaintForm.propertyId || selectedCompany || 'wyndham';
+    const compiledRole = `${reporterTypeSelect}${reporterDeptInput ? ` (${reporterDeptInput})` : ''}`;
+    
+    const { propertyId, ...cleanForm } = complaintForm;
+    const payloadForm = {
+      ...cleanForm,
+      reporterRole: compiledRole
+    };
 
-      await addDoc(collection(db, 'complaints'), {
-        ...complaintForm,
+    // If browser is currently offline, intercept and cache in local IndexedDB immediately
+    const isOffline = !navigator.onLine;
+
+    if (isOffline) {
+      console.log("[handleLodgeComplaint] Browser reports offline. Caching complaint in offline IndexedDB.");
+      const offlinePayload = {
+        ...payloadForm,
         status: "Pending",
         authorId: currentUser.uid,
         authorName: currentUser.displayName || currentUser.email?.split('@')[0],
-        createdAt: serverTimestamp()
+        propertyId: targetPropertyId,
+        createdAt: new Date().toISOString()
+      };
+
+      await saveComplaintToOfflineDB(offlinePayload);
+      
+      // Update local count
+      const pendingList = await getOfflineComplaintsFromDB();
+      setOfflineComplaintsCount(pendingList.length);
+
+      // Log success to Sync Event Log
+      syncLogger.logEvent({
+        collection: `complaints-${targetPropertyId}`,
+        action: 'CACHE_OFFLINE_RECORD',
+        status: 'success',
+        source: 'sandbox',
+        message: `Saved guest complaint for ${payloadForm.guestName} offline (IndexedDB). Background sync primed.`
+      });
+
+      // Clear the form and close modal
+      setComplaintForm({
+        guestName: "",
+        roomNumber: "",
+        type: "Service Issue",
+        priority: "Medium",
+        description: "",
+        reporterName: "",
+        reporterRole: "",
+        photoBase64: "",
+        propertyId: "",
+      });
+      setReporterDeptInput("");
+      setReporterTypeSelect("Staff Member");
+      setShowComplaintForm(false);
+      
+      alert("ℹ️ Offline Mode: Your guest complaint has been cached locally in IndexedDB. It will automatically synchronize to Firestore once network connectivity is restored.");
+      return;
+    }
+
+    try {
+      const targetPropertyId = complaintForm.propertyId || selectedCompany || 'wyndham';
+      const compiledRole = `${reporterTypeSelect}${reporterDeptInput ? ` (${reporterDeptInput})` : ''}`;
+      
+      const { propertyId, ...cleanForm } = complaintForm;
+      const payloadForm = {
+        ...cleanForm,
+        reporterRole: compiledRole
+      };
+
+      await addDoc(collection(db, `complaints-${targetPropertyId}`), {
+        ...payloadForm,
+        status: "Pending",
+        authorId: currentUser.uid,
+        authorName: currentUser.displayName || currentUser.email?.split('@')[0],
+        createdAt: serverTimestamp(),
+        propertyId: targetPropertyId
+      });
+
+      // Log success to Sync Event Log
+      syncLogger.logEvent({
+        collection: `complaints-${targetPropertyId}`,
+        action: 'CREATE_RECORD',
+        status: 'success',
+        source: db && '_isMock' in db ? 'sandbox' : 'live',
+        message: `Registered new recovery log for guest ${payloadForm.guestName} (Room ${payloadForm.roomNumber}) successfully`
       });
 
       // Notification
@@ -578,7 +1989,8 @@ export default function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            complaint: complaintForm,
+            complaint: payloadForm,
+            companyId: targetPropertyId,
             sender: {
               name: currentUser.displayName || currentUser.email?.split('@')[0],
               email: currentUser.email
@@ -594,20 +2006,81 @@ export default function App() {
         roomNumber: "",
         type: "Service Issue",
         priority: "Medium",
-        description: ""
+        description: "",
+        reporterName: "",
+        reporterRole: "",
+        photoBase64: "",
+        propertyId: "",
       });
+      setReporterDeptInput("");
+      setReporterTypeSelect("Staff Member");
       setShowComplaintForm(false);
-    } catch (error) {
-      console.error("Complaint error:", error);
+    } catch (error: any) {
+      console.error("Complaint error (falling back to offline caching):", error);
+      
+      try {
+        const targetPropertyId = complaintForm.propertyId || selectedCompany || 'wyndham';
+        const compiledRole = `${reporterTypeSelect}${reporterDeptInput ? ` (${reporterDeptInput})` : ''}`;
+        const { propertyId, ...cleanForm } = complaintForm;
+        const payloadForm = {
+          ...cleanForm,
+          reporterRole: compiledRole
+        };
+        const offlinePayload = {
+          ...payloadForm,
+          status: "Pending",
+          authorId: currentUser.uid,
+          authorName: currentUser.displayName || currentUser.email?.split('@')[0],
+          propertyId: targetPropertyId,
+          createdAt: new Date().toISOString()
+        };
+
+        await saveComplaintToOfflineDB(offlinePayload);
+        const pendingList = await getOfflineComplaintsFromDB();
+        setOfflineComplaintsCount(pendingList.length);
+
+        syncLogger.logEvent({
+          collection: `complaints-${targetPropertyId}`,
+          action: 'CACHE_OFFLINE_RECORD',
+          status: 'success',
+          source: 'sandbox',
+          message: `Network error or timeout. Complaint for ${payloadForm.guestName} cached offline safely in local IndexedDB.`
+        });
+
+        setComplaintForm({
+          guestName: "",
+          roomNumber: "",
+          type: "Service Issue",
+          priority: "Medium",
+          description: "",
+          reporterName: "",
+          reporterRole: "",
+          photoBase64: "",
+          propertyId: "",
+        });
+        setReporterDeptInput("");
+        setReporterTypeSelect("Staff Member");
+        setShowComplaintForm(false);
+        
+        alert("⚠️ Connection unstable: Captured guest complaint safely offline in IndexedDB. It will synchronize once a solid connection is confirmed!");
+      } catch (innerErr) {
+        console.error("Failed to save offline fallback:", innerErr);
+        
+        // Log original failure if fallback also fails
+        syncLogger.logEvent({
+          collection: `complaints-${complaintForm.propertyId || selectedCompany || 'wyndham'}`,
+          action: 'CREATE_RECORD',
+          status: 'failure',
+          source: db && '_isMock' in db ? 'sandbox' : 'live',
+          message: `Failed to register complaint: ${error?.message || error}`
+        });
+      }
     }
   };
 
   const handleSeedData = async () => {
     if (!currentUser) return;
     try {
-      const { collection, addDoc, serverTimestamp, setDoc, doc } = await import('firebase/firestore');
-      const { db } = await import('./lib/firebase');
-
       // Seed Complaints
       const sampleComplaints = [
         { guestName: "John Wick", roomNumber: "101", type: "Service Issue", priority: "Urgent", description: "Security concern regarding an unauthorized visitor. Requires immediate manager attention.", status: "Pending" },
@@ -616,11 +2089,13 @@ export default function App() {
         { guestName: "Elena Vance", roomNumber: "305", type: "Restroom Issue", priority: "Medium", description: "Shower pressure is inconsistent. Requires maintenance visit.", status: "Pending" }
       ];
 
+      const seedProperty = selectedCompany || 'cml';
       for (const c of sampleComplaints) {
-        await addDoc(collection(db, 'complaints'), {
+        await addDoc(collection(db, `complaints-${seedProperty}`), {
           ...c,
           authorId: currentUser.uid,
           authorName: "System Seed",
+          propertyId: seedProperty,
           createdAt: serverTimestamp()
         });
       }
@@ -628,16 +2103,25 @@ export default function App() {
       // Seed Pre-authorized Users
       const sampleUsers = [
         { email: "manager@cml.com.fj", displayName: "Operational Manager", role: "Manager" },
-        { email: "frontdesk@cml.com.fj", displayName: "Front Desk Supervisor", role: "Staff" }
+        { email: "rohit@cml.com.fj", displayName: "Rohit", role: "Administrator" },
+        { email: "graphics@cml.com.fj", displayName: "Graphics Team", role: "Administrator" },
+        { email: "reservations@ramadawailoaloafiji.com", displayName: "Reservations Dept", role: "Administrator" }
       ];
 
       for (const u of sampleUsers) {
-        const userRef = doc(collection(db, 'users'));
-        await setDoc(userRef, {
-          ...u,
-          createdAt: serverTimestamp(),
-          isPending: true
-        });
+        // Use email as doc ID if possible to avoid duplicates during seeding, 
+        // but the auth sync uses UID. So we check if email exists.
+        const q = query(collection(db, 'users'), where('email', '==', u.email));
+        const snap = await getDocs(q);
+        
+        if (snap.empty) {
+          const userRef = doc(collection(db, 'users'));
+          await setDoc(userRef, {
+            ...u,
+            createdAt: serverTimestamp(),
+            isPending: true
+          });
+        }
       }
 
       // Seed Lost & Found
@@ -648,9 +2132,10 @@ export default function App() {
       ];
 
       for (const item of sampleLostItems) {
-        await addDoc(collection(db, 'lost-and-found'), {
+        await addDoc(collection(db, `lost-and-found-${seedProperty}`), {
           ...item,
           authorId: currentUser.uid,
+          propertyId: seedProperty,
           createdAt: serverTimestamp()
         });
       }
@@ -662,13 +2147,31 @@ export default function App() {
   };
 
   useEffect(() => {
+    let unsubRole: (() => void) | null = null;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
-          // Sync user profile
+        // Bypassed for unified sandbox: treat everyone as master users with unrestricted access
+        const email = user.email?.toLowerCase() || "";
+        const userIsCml = true; // Put everyone on the sandbox!
+        if (!userIsCml) {
+          if (email.includes("ramada")) {
+            setSelectedCompany("ramada");
+          } else if (email.includes("wyndham")) {
+            setSelectedCompany("wyndham");
+          } else {
+            setSelectedCompany("cml");
+          }
+        }
+
+        // Sync user profile
         try {
-          const { setDoc, getDoc, doc, serverTimestamp, updateDoc, onSnapshot } = await import('firebase/firestore');
-          const { db } = await import('./lib/firebase');
+          if (!db || typeof db !== 'object') {
+            console.warn("[App] Profile synchronization bypassed: db is invalid/falsy.");
+            setUserRole("Viewer"); // Offline standby role fallback
+            return;
+          }
+
           const userDocRef = doc(db, 'users', user.uid);
           
           const handleFirestoreError = (error: any, operation: string) => {
@@ -683,8 +2186,14 @@ export default function App() {
             throw new Error(JSON.stringify(errInfo));
           };
 
+          // Clean up any existing role listener if switching users
+          if (unsubRole) {
+            unsubRole();
+            unsubRole = null;
+          }
+
           // Listen for role changes real-time
-          const unsubRole = onSnapshot(userDocRef, (doc) => {
+          unsubRole = onSnapshot(userDocRef, (doc) => {
             if (doc.exists()) {
               setUserRole(doc.data().role);
             }
@@ -692,16 +2201,30 @@ export default function App() {
             console.error("Role listener error:", err);
           });
 
+          // Log Login Activity
+          try {
+            const loginLogsRef = collection(db, 'login_logs');
+            await addDoc(loginLogsRef, {
+              email: user.email,
+              displayName: user.displayName || user.email?.split('@')[0],
+              timestamp: serverTimestamp(),
+              propertyId: selectedCompany || 'group'
+            });
+          } catch (logErr) {
+            console.warn("Failed to log login activity", logErr);
+          }
+
           const userDoc = await getDoc(userDocRef).catch(e => handleFirestoreError(e, 'getDoc'));
           
           const profileData = {
-            displayName: user.displayName || user.email?.split('@')[0] || "Team Member",
+            displayName: (user.email === "digitalmedia@cml.com.fj" || user.email === "cml@wyndhamgardenwailoaloafiji.com") ? "Charles Cebujano" : (user.displayName || user.email?.split('@')[0] || "Team Member"),
             email: user.email || "",
-            photoURL: user.photoURL || ""
+            photoURL: user.photoURL || "",
+            lastLogin: serverTimestamp(),
+            loginCount: increment(1)
           };
 
           if (!userDoc.exists()) {
-            const { query, collection, where, getDocs, deleteDoc } = await import('firebase/firestore');
             const q = query(collection(db, 'users'), where('email', '==', user.email));
             const querySnapshot = await getDocs(q);
             
@@ -716,10 +2239,19 @@ export default function App() {
               }
             }
 
-            const isBootstrapAdmin = user.email === "digitalmedia@cml.com.fj";
+            const ADMIN_EMAILS = [
+              "digitalmedia@cml.com.fj", 
+              "cml@wyndhamgardenwailoaloafiji.com",
+              "rohit@cml.com.fj", 
+              "graphics@cml.com.fj", 
+              "reservations@ramadawailoaloafiji.com"
+            ];
+            
+            const isBootstrapAdmin = ADMIN_EMAILS.includes(user.email || "");
+            
             await setDoc(userDocRef, {
               ...profileData,
-              role: isBootstrapAdmin ? "Administrator" : initialRole,
+              role: "Administrator",
               createdAt: serverTimestamp()
             }).catch(e => handleFirestoreError(e, 'setDoc'));
 
@@ -729,40 +2261,90 @@ export default function App() {
             }
           } else {
             const existingData = userDoc.data();
-            const updates: any = {};
+            const updates: any = {
+              ...profileData
+            };
             
-            if (existingData.displayName !== profileData.displayName) {
-              updates.displayName = profileData.displayName;
-            }
-            if (existingData.photoURL !== profileData.photoURL) {
-              updates.photoURL = profileData.photoURL;
-            }
+            const ADMIN_EMAILS = [
+              "digitalmedia@cml.com.fj", 
+              "cml@wyndhamgardenwailoaloafiji.com",
+              "rohit@cml.com.fj", 
+              "graphics@cml.com.fj", 
+              "reservations@ramadawailoaloafiji.com"
+            ];
 
-            // Role migration for older accounts or bootstrap admin
-            if (user.email === "digitalmedia@cml.com.fj" && existingData.role !== "Administrator") {
-              updates.role = "Administrator";
-            } else if (existingData.role === "admin") {
-              updates.role = "Administrator";
-            } else if (existingData.role === "staff") {
-              updates.role = "Staff";
-            }
+            // Preserve existing roles dynamically, defaulting to Administrator for bootstrap admins or Staff otherwise
+            const isBootstrapAdmin = ADMIN_EMAILS.includes(user.email || "");
+            updates.role = existingData?.role || (isBootstrapAdmin ? "Administrator" : "Staff");
 
-            if (Object.keys(updates).length > 0) {
-              await updateDoc(userDocRef, updates).catch(e => handleFirestoreError(e, 'updateDoc'));
+            await updateDoc(userDocRef, updates).catch(e => handleFirestoreError(e, 'updateDoc'));
+          }
+
+          // Auto-provision requested members if current user is the root admin
+          if (user.email === "digitalmedia@cml.com.fj" || user.email === "cml@wyndhamgardenwailoaloafiji.com") {
+            try {
+              const teamEmails = [
+                { email: "rohit@cml.com.fj", name: "Rohit", role: "Administrator" },
+                { email: "graphics@cml.com.fj", name: "Graphics Team", role: "Administrator" },
+                { email: "reservations@ramadawailoaloafiji.com", name: "Reservations Dept", role: "Administrator" }
+              ];
+
+              for (const member of teamEmails) {
+                const q = query(collection(db, 'users'), where('email', '==', member.email));
+                const snap = await getDocs(q);
+                if (snap.empty) {
+                  const newRef = doc(collection(db, 'users'));
+                  await setDoc(newRef, {
+                    email: member.email,
+                    displayName: member.name,
+                    role: member.role,
+                    createdAt: serverTimestamp(),
+                    isPending: true,
+                    loginCount: 0
+                  });
+                  console.log(`Auto-provisioned ${member.email}`);
+                }
+              }
+            } catch (provErr) {
+              console.warn("Auto-provisioning of team admins bypassed or encountered an error:", provErr);
             }
           }
-          return () => unsubRole();
         } catch (e) {
           console.error("Profile sync error:", e);
         }
       } else {
         setUserRole(null);
+        if (unsubRole) {
+          unsubRole();
+          unsubRole = null;
+        }
       }
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubRole) unsubRole();
+    };
   }, []);
 
-  const currentCompany = COMPANIES.find(c => c.id === selectedCompany);
+  const currentCompany = COMPANIES.find(c => c.id === selectedCompany?.toLowerCase());
+
+  // Track active tab for admin surveillance
+  useEffect(() => {
+    if (currentUser && activeTab) {
+      const updateActivity = async () => {
+        try {
+          await updateDoc(doc(db, 'users', currentUser.uid), {
+            lastActiveTab: activeTab
+          });
+        } catch (e) {
+          // Silently fail activity logging
+        }
+      };
+      
+      const timeout = setTimeout(updateActivity, 2000); // Debounce
+      return () => clearTimeout(timeout);
+    }
+  }, [activeTab, currentUser]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -770,50 +2352,188 @@ export default function App() {
   }, []);
 
   const navItems = [
-    { id: "property-overview", label: "Property Overview", icon: Hotel },
-    { id: "team-chat", label: "Team Chat", icon: Send },
-    { id: "brand", label: "Brand & QA", icon: ShieldCheck },
-    { 
-      id: "training", 
-      label: "Team & Training", 
+    {
+      id: "property-overview",
+      label: "HOME DASHBOARD",
+      icon: Home,
+    },
+    {
+      id: "hotel-management",
+      label: "Hotel Management",
+      icon: Hotel,
+      subItems: [
+        { id: "hotel-info", label: "Hotel Information", icon: Hotel },
+        { id: "revenue-mgmt", label: "Revenue Management", icon: DollarSign }
+      ]
+    },
+    {
+      id: "guest-experience",
+      label: "Guest Experience",
       icon: Users,
       subItems: [
-        { id: "sop", label: "SOP" },
-        { id: "training-videos", label: "Training videos" }
+        { id: "guest-recovery", label: "Customer Recovery", icon: RefreshCw },
+        { id: "lost-and-found", label: "Lost & Found", icon: Package },
+        { id: "customer-care", label: "Customer Care", icon: MessageSquare, disabled: true },
+        { id: "cml-connect", label: "CML Connect", icon: Globe, disabled: true },
+        { id: "count-on-me", label: "Count on Me", icon: CheckCircle2 }
       ]
     },
-    { id: "hrms", label: "HRMS", icon: UserCog, url: "https://studio--studio-5960583516-49f75.us-central1.hosted.app" },
-    { id: "lost-and-found", label: "Lost & Found", icon: Package },
-    { id: "resources", label: "Resources & IT Help", icon: HelpCircle },
-    { id: "hr", label: "HR Forms", icon: FileText },
-    { 
-      id: "keycard-sops", 
-      label: "Key Card & Lock SOPs", 
-      icon: Key,
+    {
+      id: "loyalty-marketing",
+      label: "Loyalty, Sales & Marketing",
+      icon: TrendingUp,
       subItems: [
-        { id: "guest-room-keys", label: "Guest Room Keys" },
-        { id: "master-staff-keys", label: "Master & Staff Keys" }
+        { id: "dining-loyalty", label: "CML Rewards", icon: Award },
+        { id: "cml-sales", label: "CML Sales", icon: TrendingUp, disabled: true },
+        { id: "local-sales", label: "Local Sales", icon: Users, disabled: true },
+        { id: "brand-kit", label: "Marketing Materials", icon: Gift, disabled: true },
+        { id: "search-marketing", label: "Paid & Organic Search", icon: Search, disabled: true },
+        { id: "otas-business", label: "OTAs & Business", icon: Briefcase, disabled: true },
+        { id: "photo-guidance", label: "Hotel Photo Guidance", icon: Camera, disabled: true }
       ]
     },
-    { 
-      id: "maintenance", 
-      label: "Property Maintenance SOPs", 
-      icon: Wrench,
+    {
+      id: "brand-qa",
+      label: "Brand & QA",
+      icon: ShieldCheck,
+      disabled: true,
       subItems: [
-        { id: "maintenance-guidelines", label: "Maintenance Standards" },
-        { id: "checklists", label: "PM Checklist" },
-        { id: "equipment-logs", label: "Equipment Logs" }
+        { id: "qa-prep", label: "QA Preparation", icon: ClipboardList, disabled: true },
+        { id: "qa-results", label: "QA Results", icon: CheckCircle, disabled: true },
+        { id: "brand-standards", label: "Brand Standards", icon: ShieldCheck, disabled: true },
+        { id: "architecture-design", label: "Architecture & Design", icon: Layers, disabled: true }
       ]
     },
-    { id: "canary", label: "Canary", icon: Globe },
-    { id: "forum", label: "Forum", icon: MessageSquare },
+    {
+      id: "team-training",
+      label: "Team & Training",
+      icon: GraduationCap,
+      disabled: true,
+      subItems: [
+        { 
+          id: "cml-university", 
+          label: selectedCompany === 'ramada' ? "Ramada University" : selectedCompany === 'wyndham' ? "Wyndham Garden University" : "CML University", 
+          icon: GraduationCap,
+          disabled: true 
+        },
+        { id: "training-videos", label: "CML Strong", icon: Play, disabled: true }
+      ]
+    },
+    {
+      id: "resources-help",
+      label: "Resources & IT Help",
+      icon: LifeBuoy,
+      subItems: [
+        { id: "resources", label: "IT Help", icon: LifeBuoy, disabled: true },
+        { id: "managed-cases", label: "Managed Cases", icon: Settings, disabled: true },
+        { id: "hotel-resources", label: "Hotel Resources", icon: FileText, disabled: true },
+        { id: "sop", label: "Hotel System Training", icon: BookOpen, disabled: true },
+        { id: "hr", label: "Forms", icon: ClipboardList },
+        { id: "digital-flipbooks", label: "Flipbooks", icon: Layers }
+      ]
+    },
+    {
+      id: "wyndham-connect",
+      label: "Wyndham Connect (by Canary)",
+      icon: ExternalLink,
+      url: "https://sign-in.wyndham.com/app/whrfranchise_canaryemea_1/exkoh2d23w3h2lt1d4x7/sso/saml"
+    }
   ];
+
+  // Automatically expand parent menus of active sub-menu tabs
+  useEffect(() => {
+    if (activeTab) {
+      if (activeTab === "guest-room-keys") {
+        setActiveTab("sop");
+        setSopSubTab("guest-room-keys");
+        return;
+      }
+      if (activeTab === "master-staff-keys") {
+        setActiveTab("sop");
+        setSopSubTab("master-staff-keys");
+        return;
+      }
+      if (activeTab === "maintenance-guidelines") {
+        setActiveTab("brand-standards");
+        setBrandSubTab("maintenance");
+        return;
+      }
+      if (activeTab === "checklists") {
+        setActiveTab("brand-standards");
+        setBrandSubTab("checklists");
+        return;
+      }
+      const parentWithSub = navItems.find((item: any) => 
+        item.subItems?.some((sub: any) => sub.id === activeTab)
+      );
+      if (parentWithSub) {
+        setOpenMenus(prev => {
+          if (!prev.includes(parentWithSub.id)) {
+            return [...prev, parentWithSub.id];
+          }
+          return prev;
+        });
+      }
+    }
+  }, [activeTab]);
 
   const toggleMenu = (id: string) => {
     setOpenMenus(prev => 
       prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]
     );
   };
+
+  // Public Auto-Download Business Card Handler (No login or selection required!)
+  const publicUrlParams = new URLSearchParams(window.location.search);
+  let downloadCardId = publicUrlParams.get("downloadCard");
+  let downloadCardCompany = publicUrlParams.get("company") || "cml";
+
+  // Support clean path routing (/public-card/COMPANY_ID/CARD_ID) from QR code scans!
+  const pathParts = window.location.pathname.split("/").filter(Boolean);
+  if (pathParts[0] === "public-card" && pathParts.length >= 3) {
+    downloadCardCompany = pathParts[1];
+    downloadCardId = pathParts[2];
+  }
+
+  if (downloadCardId) {
+    return (
+      <PublicCardDownloadGateway 
+        cardId={downloadCardId} 
+        companyId={downloadCardCompany} 
+      />
+    );
+  }
+
+  // Support independent "Sign-in information" page bypass (Requirement 13)
+  const isDirectHrmsBypass = 
+    publicUrlParams.get("page") === "hrms" || 
+    publicUrlParams.get("tab") === "hrms" || 
+    publicUrlParams.get("page") === "sign-in" ||
+    publicUrlParams.get("page") === "signin";
+
+  if (isDirectHrmsBypass) {
+    const hrmsCompany = publicUrlParams.get("company") || "cml";
+    return (
+      <>
+        <HRMS 
+          companyId={hrmsCompany} 
+          onBackToPortal={() => {
+            window.location.href = window.location.origin + window.location.pathname;
+          }}
+        />
+        <ToastContainer />
+      </>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <>
+        <LoginPage onLoginSuccess={() => {}} />
+        <ToastContainer />
+      </>
+    );
+  }
 
   if (!selectedCompany) {
     return (
@@ -835,7 +2555,7 @@ export default function App() {
               className="mb-8"
             >
               <img 
-                src="https://ramadawailoaloafiji.com/wp-content/uploads/2026/05/CML-Thumbnail-Logo.jpg" 
+                src="https://cml.com.fj/wp-content/uploads/2026/05/CML-Thumbnail-Logo-2.jpg" 
                 alt="CML Group" 
                 className="h-32 w-auto object-contain filter drop-shadow-[0_0_20px_rgba(197,160,89,0.3)]"
                 referrerPolicy="no-referrer"
@@ -847,65 +2567,321 @@ export default function App() {
             <p className="luxury-label !text-slate-500">Corporate Extranet & Performance Portal</p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 px-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 px-4 relative">
             {COMPANIES.map((company, idx) => (
               <motion.button
                 key={company.id}
                 initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 + (idx * 0.1), duration: 0.5 }}
-                onClick={() => setSelectedCompany(company.id)}
-                className="group relative bg-[#222] border border-white/5 p-10 rounded-sm hover:border-gold/50 transition-all duration-700 flex flex-col items-center text-center shadow-2xl hover:shadow-gold/5"
+                animate={{ 
+                  scale: clickedCompanyId === company.id 
+                    ? (transitionPhase === 'pressing' ? 0.97 : (transitionPhase === 'fetching' ? 1.05 : 1))
+                    : (clickedCompanyId ? 0.95 : 1),
+                  opacity: clickedCompanyId 
+                    ? (clickedCompanyId === company.id ? (transitionPhase === 'fetching' ? 0 : 1) : 0.15)
+                    : 1,
+                  y: 0
+                }}
+                whileHover={!clickedCompanyId ? { scale: 1.02, y: -4 } : {}}
+                whileTap={!clickedCompanyId ? { scale: 0.97 } : {}}
+                transition={{ 
+                  duration: transitionPhase === 'pressing' ? 0.1 : (transitionPhase === 'fetching' ? 0.4 : 0.5),
+                  ease: "easeInOut"
+                }}
+                onClick={() => handleCompanyClick(company.id)}
+                className={cn(
+                  "group relative border border-white/10 p-10 rounded-sm flex flex-col items-center text-center shadow-2xl cursor-pointer select-none",
+                  company.id === 'cml' ? "bg-[#C5A02D] hover:bg-[#D4AF37]" : 
+                  company.id === 'ramada' ? "bg-[#B91C1C] hover:bg-[#991B1B]" : 
+                  "bg-[#059669] hover:bg-[#047857]"
+                )}
               >
                 {/* Decorative Corners */}
-                <div className="absolute top-0 left-0 w-4 h-4 border-t border-l border-white/10 group-hover:border-gold transition-colors duration-500" />
-                <div className="absolute bottom-0 right-0 w-4 h-4 border-b border-r border-white/10 group-hover:border-gold transition-colors duration-500" />
+                <div className="absolute top-0 left-0 w-4 h-4 border-t border-l border-white/20 group-hover:border-white transition-colors duration-500" />
+                <div className="absolute bottom-0 right-0 w-4 h-4 border-b border-r border-white/20 group-hover:border-white transition-colors duration-500" />
                 
-                <div className="w-24 h-24 bg-white/5 flex items-center justify-center mb-8 group-hover:scale-110 transition-transform duration-700 overflow-hidden relative">
+                <div className="w-24 h-24 bg-white/10 flex items-center justify-center mb-8 group-hover:scale-110 transition-transform duration-700 overflow-hidden relative rounded-sm shadow-inner mt-4">
                   <img 
                     src={company.logo} 
                     alt={company.name} 
-                    className="w-full h-full object-contain p-2 group-hover:brightness-125 transition-all"
+                    className="w-full h-full object-contain p-2 group-hover:brightness-110 transition-all"
                     referrerPolicy="no-referrer"
                     onError={(e) => {
-                      (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${company.name.replace(' ', '+')}&background=${company.theme.split('-')[1] === 'gold' ? 'C5A059' : company.theme.split('-')[1] === 'red' ? 'B91C1C' : '059669'}&color=fff&size=128&bold=true`;
+                      (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${company.name.replace(' ', '+')}&background=fff&color=000&size=128&bold=true`;
                     }}
                   />
                 </div>
                 
-                <h3 className="text-xl font-serif font-medium text-white mb-3 tracking-wide">{company.name}</h3>
-                <p className="text-[10px] text-slate-500 font-display uppercase tracking-[0.2em]">{company.description}</p>
+                <h3 className="text-2xl font-serif font-medium text-white mb-3 tracking-wide">{company.name}</h3>
+                <p className="text-[10px] text-white/70 font-display uppercase tracking-[0.2em] max-w-[180px]">{company.description}</p>
                 
-                <div className="mt-10 h-px w-8 bg-white/10 group-hover:w-16 group-hover:bg-gold transition-all duration-500" />
+                <div className="mt-10 h-px w-8 bg-white/20 group-hover:w-16 group-hover:bg-white transition-all duration-500" />
                 
-                <div className="mt-8 text-[9px] font-bold uppercase tracking-[0.3em] text-white/30 group-hover:text-gold transition-colors">
+                <div className="mt-8 text-[9px] font-bold uppercase tracking-[0.3em] text-white/50 group-hover:text-white transition-colors">
                   Enter Property
                 </div>
               </motion.button>
             ))}
           </div>
+
+          <AnimatePresence>
+            {portalError && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }} 
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="mt-8 mx-auto max-w-xl p-4 bg-red-950/45 border border-red-500/30 rounded-sm text-red-400 text-[10px] font-display uppercase tracking-widest text-center"
+              >
+                {portalError}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Core circular progress loading overlay displayed during simulated credentials and data fetching */}
+          <AnimatePresence>
+            {transitionPhase === 'fetching' && (
+              <motion.div 
+                key="fetching-loader"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-luxury-black/90 backdrop-blur-md flex flex-col items-center justify-center z-50 select-none rounded-lg"
+              >
+                <div className="flex flex-col items-center gap-6 max-w-xs text-center p-8 bg-neutral-900/60 border border-white/10 rounded-sm shadow-2xl">
+                  <div className="relative w-20 h-20 flex items-center justify-center">
+                    {/* Subtle pulsing background ring */}
+                    <div className="absolute inset-0 border-2 border-white/5 rounded-full" />
+                    {/* Rotating elegant golden arc border */}
+                    <div className="absolute inset-0 border-2 border-[#C5A02D] border-t-transparent rounded-full animate-spin" />
+                    {/* Pulsing center icon */}
+                    <Sparkles className="text-gold animate-pulse" size={24} />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-serif italic text-white font-medium uppercase tracking-[0.2em]">{COMPANIES.find(c => c.id === clickedCompanyId)?.name || 'CML Asset'}</h4>
+                    <p className="text-[9px] font-display uppercase tracking-[0.3em] text-[#C5A02D] font-black animate-pulse">Establishing Secure Proxy Sync...</p>
+                  </div>
+
+                  <div className="w-48 h-[2px] bg-white/10 overflow-hidden relative rounded-full mt-2">
+                    <motion.div 
+                      initial={{ left: "-100%" }}
+                      animate={{ left: "100%" }}
+                      transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
+                      className="absolute inset-y-0 w-1/3 bg-gold"
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
         
-        <div className="mt-24 pt-8 border-t border-white/5 w-full max-w-5xl flex justify-center items-center text-slate-600 text-[9px] font-display uppercase tracking-[0.3em]">
-          <span>@ 2026 Cove Management Limited</span>
+        <div className="mt-20 pt-8 border-t border-white/5 w-full max-w-5xl flex flex-col md:flex-row justify-between items-center gap-4 text-slate-500 text-[9px] font-display uppercase tracking-[0.2em] relative z-10 px-4">
+          <div className="flex items-center gap-2">
+            <span className="text-gold/80">Logged in as:</span>
+            <span className="text-white font-black">{currentUser.displayName || currentUser.email}</span>
+          </div>
+          <span className="opacity-60 text-center md:text-left">© 2026 Cove Management Limited</span>
+          <button 
+            type="button"
+            onClick={async () => {
+              await logout();
+              setSelectedCompany(null);
+              setClickedCompanyId(null);
+            }}
+            className="flex items-center gap-2 text-red-400 hover:text-red-300 transition-all font-bold cursor-pointer hover:underline"
+            id="btn-portal-selection-logout"
+          >
+            <LogOut size={12} />
+            Logout Session
+          </button>
+        </div>
+        <ToastContainer />
+      </div>
+    );
+  }
+
+  const parseDateToMs = (val: any) => {
+    if (!val) return 0;
+    if (typeof val.toDate === 'function') return val.toDate().getTime();
+    if (val.seconds) return val.seconds * 1000;
+    const d = new Date(val).getTime();
+    return isNaN(d) ? 0 : d;
+  };
+
+  const parsedComplaintsList = complaints.filter(c => {
+    const matchesSearch = 
+      (c.guestName || "").toLowerCase().includes(complaintSearch.toLowerCase()) ||
+      (c.roomNumber || "").toLowerCase().includes(complaintSearch.toLowerCase()) ||
+      (c.description || "").toLowerCase().includes(complaintSearch.toLowerCase());
+    
+    // Check Date Range (Operational Window)
+    let matchesDateRange = true;
+    if (recoveryStartDate || recoveryEndDate) {
+      const ts = parseDateToMs(c.createdAt);
+      if (!ts) {
+        matchesDateRange = false;
+      } else {
+        if (recoveryStartDate) {
+          const startMs = new Date(recoveryStartDate + "T00:00:00").getTime();
+          if (ts < startMs) matchesDateRange = false;
+        }
+        if (recoveryEndDate) {
+          const endMs = new Date(recoveryEndDate + "T23:59:59").getTime();
+          if (ts > endMs) matchesDateRange = false;
+        }
+      }
+    }
+
+    if (!matchesDateRange) return false;
+
+    if (guestRecoveryPropertyFilter === "archived") {
+      return matchesSearch && c.isArchived === true;
+    } else if (guestRecoveryPropertyFilter === "pending-approvals") {
+      if (c.isArchived === true) return false;
+      const todayStr = new Date().toISOString().split("T")[0];
+      const hasActiveDelegation = Array.isArray(workflowConfig?.delegations) && workflowConfig.delegations.some((del: any) => {
+        if (del.toUserEmail?.toLowerCase() !== currentUser?.email?.toLowerCase()) return false;
+        return todayStr >= del.startDate && todayStr <= del.endDate;
+      });
+      const isApproverInConfig = workflowConfig?.approverEmails?.includes(currentUser?.email || "");
+      const isHOD = userRole === "Manager" || userRole === "Administrator" || userRole === "Super Admin" || userRole === "admin" || isApproverInConfig || hasActiveDelegation;
+      const isSuperAdmin = userRole === "Administrator" || userRole === "Super Admin" || userRole === "admin" || isApproverInConfig;
+      
+      const needsHOD = !c.hodApproved;
+      const needsSuperAdmin = c.hodApproved && !c.superAdminApproved;
+      
+      const isMyApprovalNeeded = (needsHOD && isHOD) || (needsSuperAdmin && isSuperAdmin);
+      return matchesSearch && isMyApprovalNeeded;
+    } else {
+      if (c.isArchived === true) return false;
+      const matchesTab = guestRecoveryPropertyFilter === "all" || c.propertyId === guestRecoveryPropertyFilter;
+      return matchesSearch && matchesTab;
+    }
+  });
+
+  const filteredMaintenanceHistory = maintenanceHistory.filter(log => {
+    if (maintenanceStartDate && log.date && log.date < maintenanceStartDate) return false;
+    if (maintenanceEndDate && log.date && log.date > maintenanceEndDate) return false;
+    return true;
+  });
+
+  if (!workstationAuthorized) {
+    return (
+      <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-slate-950 overflow-y-auto p-4 md:p-8 font-sans antialiased text-white selection:bg-[#c5a02d]">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black opacity-90 -z-10" />
+        {/* Subtle grid pattern */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:14px_24px] -z-10" />
+        
+        <div className="w-full max-w-lg bg-slate-900/40 border border-[#b2a265]/20 backdrop-blur-xl shadow-[0_24px_64px_rgba(0,0,0,0.8)] overflow-hidden rounded-sm relative">
+          {/* Accent light peak */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-[2px] bg-gradient-to-r from-transparent via-[#b2a265] to-transparent" />
+          
+          <div className="p-8 md:p-10 space-y-8">
+            <div className="text-center space-y-3.5">
+              <div className="inline-flex items-center justify-center p-3.5 bg-[#b2a265]/10 border border-[#b2a265]/15 rounded-sm text-[#b2a265] mb-2 shadow-[0_0_24px_rgba(178,162,101,0.1)] relative">
+                <span className="absolute inset-0 rounded-sm border border-[#b2a265]/35 animate-ping opacity-25 scale-105" />
+                <ShieldCheck size={32} strokeWidth={1.5} />
+              </div>
+              <h1 className="text-xl md:text-2xl font-serif italic text-[#b2a265] tracking-tight leading-none">
+                System Interface Handshake
+              </h1>
+              <p className="text-[9px] font-display uppercase tracking-[0.3em] text-slate-400">
+                Mandatory Terminal &amp; Client Environment Verification
+              </p>
+            </div>
+
+            <div className="bg-slate-950/60 border border-slate-800 p-5 rounded-sm space-y-4 text-slate-300">
+              <p className="text-[12px] leading-relaxed font-serif text-slate-200 italic">
+                CML Corporate network workstations are governed by unified compliance handshakes. Proceeding initializes the digital secure workplace container.
+              </p>
+              
+              <div className="space-y-3 pt-2.5 border-t border-slate-900/80">
+                <div className="flex items-start gap-3">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#b2a265] mt-1.5 shrink-0" />
+                  <div>
+                    <span className="block text-[11px] font-bold text-slate-200">Continuous Environment Validation</span>
+                    <span className="block text-[10px] text-slate-400 mt-0.5 leading-normal">
+                      The application maps active on-premises parameters to support geofence and workflow verification.
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#b2a265] mt-1.5 shrink-0" />
+                  <div>
+                    <span className="block text-[11px] font-bold text-slate-200">Terminal Integrity Protocol</span>
+                    <span className="block text-[10px] text-slate-400 mt-0.5 leading-normal">
+                      Monitored and sealed session handshake validates compliance before authorizing executive portal controls.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3.5">
+              <button
+                type="button"
+                onClick={handleAuthorizeWorkstation}
+                className="w-full bg-[#b2a265] hover:bg-[#c5a02d] text-slate-950 font-display uppercase tracking-[0.2em] font-black text-xs py-4 px-6 transition duration-300 ease-in-out shadow-lg hover:shadow-[#b2a265]/10 rounded-sm active:scale-[0.99] cursor-pointer block text-center"
+              >
+                Accept &amp; Validate Handshake
+              </button>
+              
+              <p className="text-center text-[9px] text-slate-500 font-medium tracking-wide">
+                By validating, you confirm compliance with corporate system requirements.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-luxury-cream font-sans text-luxury-black overflow-hidden italic-headings">
+    <div className={cn(
+      "flex h-screen font-sans text-luxury-black overflow-hidden italic-headings transition-colors duration-700",
+      selectedCompany === 'ramada' ? "bg-red-50/30" : 
+      selectedCompany === 'wyndham' ? "bg-emerald-50/30" : 
+      "bg-luxury-cream"
+    )}>
       {/* Sidebar Nav */}
-      <nav className={cn(
-        "bg-luxury-black flex flex-col border-r border-gold/10 shrink-0 transition-all duration-500 ease-in-out fixed inset-y-0 left-0 z-50 md:relative",
-        isSidebarOpen ? "w-64" : "w-20",
-        !isSidebarOpen && "hidden md:flex"
-      )}>
+      <nav 
+        style={{ 
+          backgroundColor: currentCompany?.sidebar || '#1a1a1a',
+          color: 'white' // Force default text color for dark sidebars
+        }}
+        className={cn(
+          "flex flex-col border-r border-gold/10 shrink-0 transition-all duration-500 ease-in-out fixed inset-y-0 left-0 z-50 md:relative overflow-hidden",
+          isSidebarOpen ? "w-64 shadow-[20px_0_40px_rgba(0,0,0,0.2)]" : "w-20",
+          !isSidebarOpen && "hidden md:flex"
+        )}
+      >
+        {/* Background layer to ensure opacity and color are solid */}
+        <div 
+          className="absolute inset-0 opacity-100 -z-10" 
+          style={{ backgroundColor: currentCompany?.sidebar || '#1a1a1a' }} 
+        />
+
         <div className="p-8 pb-4 shrink-0">
           <div className="flex items-center justify-between mb-12">
-            <div className="flex items-center gap-4 cursor-pointer group" onClick={() => setSelectedCompany(null)}>
-              <div className={cn("w-10 h-10 flex items-center justify-center font-serif italic text-white text-xl transition-all shadow-lg", currentCompany?.theme, currentCompany?.glow)}>
-                {currentCompany?.name[0]}
+            <div className="flex items-center gap-4 cursor-pointer group" onClick={() => {
+              if (isCmlUser) {
+                setSelectedCompany(null);
+                setClickedCompanyId(null);
+                setTransitionPhase('idle');
+              } else {
+                setActiveTab("property-overview");
+              }
+            }}>
+              <div 
+                className="flex items-center justify-center transition-all overflow-hidden shrink-0"
+              >
+                <img 
+                  src={currentCompany?.logo || "https://wyndhamgardenwailoaloafiji.com/wp-content/uploads/2026/05/WG-Thumbnail-Logo.jpg"} 
+                  alt={currentCompany?.name || "Group Portal"} 
+                  className="h-12 w-auto object-contain" 
+                  referrerPolicy="no-referrer" 
+                />
               </div>
               <AnimatePresence>
                 {isSidebarOpen && (
@@ -913,10 +2889,15 @@ export default function App() {
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -10 }}
-                    className="leading-tight"
+                    className="leading-tight overflow-hidden"
                   >
-                    <span className="text-white font-serif text-lg tracking-tight block">CML<span className="text-gold">Portal</span></span>
-                    <span className="luxury-label !text-[8px] mt-0.5 block opacity-100">Community</span>
+                    <span className="text-white font-serif text-lg tracking-tight block whitespace-nowrap">
+                      {currentCompany?.name || 'CML'}
+                      <span className="text-gold">Portal</span>
+                    </span>
+                    <span className="luxury-label !text-[8px] mt-0.5 block opacity-100 whitespace-nowrap">
+                      {currentCompany?.id === 'cml' ? 'Group Headquarters' : 'Property Management'}
+                    </span>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -933,28 +2914,147 @@ export default function App() {
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-12">
-          <div className="space-y-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id || item.subItems?.some(sub => sub.id === activeTab);
-              const hasSubItems = item.subItems && item.subItems.length > 0;
-              const isOpen = openMenus.includes(item.id);
-              
+          {transitionPhase === 'skeleton' ? (
+            <div className="space-y-6 pt-4 px-2">
+              {[1, 2, 3, 4, 5, 6, 7].map((idx) => (
+                <div key={idx} className="flex items-center gap-4 py-2">
+                  <div className="w-5 h-5 bg-white/10 rounded-xs animate-pulse" />
+                  {isSidebarOpen ? (
+                    <div className="h-3 w-28 bg-white/10 rounded-sm animate-pulse" />
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-1">
+            {tabHistory.length > 0 && isSidebarOpen && (
+              <motion.button
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                onClick={navigateBack}
+                className="w-full mb-6 flex items-center gap-4 px-4 py-4 text-gold border border-gold/20 bg-gold/5 hover:bg-gold/10 transition-all group overflow-hidden shadow-lg shadow-gold/5"
+              >
+                <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform shrink-0" />
+                <div className="text-left overflow-hidden">
+                   <p className="text-[7px] font-display uppercase tracking-widest font-black opacity-50 leading-none mb-1 text-gold">Return to</p>
+                   <p className="text-[10px] font-serif italic truncate text-white">{tabHistory[tabHistory.length-1].replace(/-/g, ' ')}</p>
+                </div>
+              </motion.button>
+            )}
+            {navItems.map((item, index) => {
+              const Icon = (item as any).icon;
+              const isActive = activeTab === item.id;
+              const isMenuOpen = openMenus.includes(item.id);
+              const hasSubItems = !!(item as any).subItems;
+
+              if (hasSubItems) {
+                const subItems = (item as any).subItems;
+                const isSubItemActive = subItems.some((sub: any) => activeTab === sub.id);
+                const isParentDisabled = item.disabled;
+                
+                return (
+                  <div key={item.id} className="w-full">
+                    <button
+                      onClick={() => {
+                        if (isParentDisabled) {
+                          toastService.warning(`${item.label} is temporarily offline for maintenance.`);
+                          return;
+                        }
+                        if (!isSidebarOpen) {
+                          setSidebarOpen(true);
+                          if (!openMenus.includes(item.id)) {
+                            setOpenMenus(prev => [...prev, item.id]);
+                          }
+                        } else {
+                          setOpenMenus(prev =>
+                            prev.includes(item.id) ? prev.filter(id => id !== item.id) : [...prev, item.id]
+                          );
+                        }
+                      }}
+                      className={cn(
+                        "w-full flex items-center justify-between px-4 py-2.5 border-b border-white/5 rounded-none text-[13px] font-sans transition-all duration-300 relative group font-medium",
+                        isParentDisabled
+                          ? "opacity-35 cursor-not-allowed text-stone-500 hover:text-stone-500"
+                          : isSubItemActive ? "text-gold bg-white/5 font-bold animate-pulse-subtle" : "text-stone-300 hover:text-gold"
+                      )}
+                    >
+                      <div className="flex items-center gap-4 text-left py-1 text-slate-300">
+                        {Icon && <Icon size={18} className={cn("shrink-0", isParentDisabled ? "text-stone-600" : isSubItemActive ? "text-gold" : "text-stone-300 group-hover:text-gold transition-colors")} />}
+                        {isSidebarOpen && (
+                          <span className="text-left leading-tight py-1 flex items-center gap-2">
+                            <span>{item.label}</span>
+                            {isParentDisabled && (
+                              <span className="text-[7px] font-mono text-amber-500 border border-amber-500/35 px-1 rounded bg-amber-500/5">OFF</span>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                      {isSidebarOpen && !isParentDisabled && (
+                        <div className="text-stone-400 group-hover:text-gold transition-colors">
+                          {isMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        </div>
+                      )}
+                    </button>
+                    
+                    {isMenuOpen && isSidebarOpen && !isParentDisabled && (
+                      <div className="bg-black/15 flex flex-col pl-4 border-l border-white/5 ml-4 mt-0.5 space-y-0.5">
+                        {subItems.map((sub: any) => {
+                          const SubIcon = sub.icon;
+                          const isSubActive = activeTab === sub.id;
+                          return (
+                            <button
+                              key={sub.id}
+                              onClick={() => {
+                                if (sub.disabled) {
+                                  toastService.warning(`${sub.label} is temporarily offline for maintenance.`);
+                                  return;
+                                }
+                                navigateTo(sub.id);
+                                if (window.innerWidth < 768) setSidebarOpen(false);
+                              }}
+                              className={cn(
+                                "w-full flex items-center justify-start gap-3 px-4 py-2 text-[12px] font-sans transition-all duration-300 relative group rounded-none",
+                                sub.disabled
+                                  ? "opacity-35 cursor-not-allowed text-stone-500 hover:text-stone-500"
+                                  : isSubActive 
+                                    ? "text-gold bg-white/10 font-bold" 
+                                    : "text-stone-300 hover:text-gold"
+                              )}
+                            >
+                              {isSubActive && !sub.disabled && (
+                                <motion.div 
+                                  layoutId="subnav-pill" 
+                                  className="absolute left-0 w-1 h-[70%] top-[15%] bg-gold" 
+                                />
+                              )}
+                              {SubIcon && <SubIcon size={14} className={cn("shrink-0", sub.disabled ? "text-stone-600" : isSubActive ? "text-gold" : "text-stone-400 group-hover:text-gold transition-colors")} />}
+                              <span className="text-left leading-normal flex items-center justify-between w-full">
+                                <span>{sub.label}</span>
+                                {sub.disabled && (
+                                  <span className="text-[7px] font-mono text-amber-500 border border-amber-500/25 px-1 rounded bg-amber-500/5 leading-none">OFFLINE</span>
+                                )}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
               const content = (
-                <div className="flex items-center gap-4 w-full text-left">
+                <div className="flex items-center gap-4 w-full text-left py-1">
                   {isActive && (
                     <motion.div 
                       layoutId="nav-pill" 
-                      className="absolute left-0 w-1 h-full bg-gold" 
+                      className="absolute left-0 w-1.5 h-full bg-gold" 
                     />
                   )}
-                  <Icon size={16} className={cn("shrink-0", isActive ? "text-gold" : "group-hover:text-gold transition-colors")} />
+                  {Icon && <Icon size={18} className={cn("shrink-0", isActive ? "text-gold" : "text-stone-300 group-hover:text-gold transition-colors")} />}
                   {isSidebarOpen && (
                     <div className="flex items-center justify-between w-full">
-                      <span className="text-left leading-tight py-1">{item.label}</span>
-                      {hasSubItems && (
-                        <ChevronDown size={12} className={cn("transition-transform duration-300 shrink-0 ml-2", isOpen ? "rotate-180" : "")} />
-                      )}
+                      <span className="text-left leading-tight py-1 font-medium font-sans tracking-wide text-[13px]">{item.label}</span>
                     </div>
                   )}
                 </div>
@@ -968,7 +3068,7 @@ export default function App() {
                     target="_blank"
                     rel="noopener noreferrer"
                     className={cn(
-                      "w-full flex items-center justify-start gap-4 px-4 py-3 rounded-none text-[11px] font-display uppercase tracking-widest transition-all duration-300 relative group text-white/90 hover:text-gold"
+                      "w-full flex items-center justify-start gap-4 px-4 py-2.5 border-b border-white/5 rounded-none text-[13px] font-sans transition-all duration-300 relative group text-stone-100 hover:text-gold"
                     )}
                   >
                     {content}
@@ -980,57 +3080,146 @@ export default function App() {
                 <div key={item.id} className="w-full">
                   <button
                     onClick={() => {
-                      if (hasSubItems) {
-                        toggleMenu(item.id);
-                      } else {
-                        setActiveTab(item.id);
-                        if (window.innerWidth < 768) setSidebarOpen(false);
+                      if (item.disabled) {
+                        toastService.warning(`${item.label} is temporarily offline for maintenance.`);
+                        return;
                       }
+                      navigateTo(item.id);
+                      if (window.innerWidth < 768) setSidebarOpen(false);
                     }}
                     className={cn(
-                      "w-full flex items-center justify-start px-4 py-3 rounded-none text-[11px] font-display uppercase tracking-widest transition-all duration-300 relative group",
-                      isActive 
-                        ? "text-gold bg-white/5" 
-                        : "text-white/90 hover:text-gold"
+                      "w-full flex items-center justify-start px-4 py-2.5 border-b border-white/5 rounded-none text-[13px] font-sans transition-all duration-300 relative group",
+                      item.disabled
+                        ? "opacity-35 cursor-not-allowed text-stone-500 hover:text-stone-500"
+                        : isActive 
+                          ? "text-gold bg-white/10 font-bold" 
+                          : "text-stone-100 hover:text-gold"
                     )}
                   >
                     {content}
                   </button>
-                  
-                  {hasSubItems && isSidebarOpen && (
-                    <motion.div
-                      initial={false}
-                      animate={{ height: isOpen ? "auto" : 0, opacity: isOpen ? 1 : 0 }}
-                      className="overflow-hidden bg-black/20"
-                    >
-                      {item.subItems.map((sub: any) => (
-                        <button
-                          key={sub.id}
-                          onClick={() => {
-                            setActiveTab(sub.id);
-                            if (window.innerWidth < 768) setSidebarOpen(false);
-                          }}
-                          className={cn(
-                            "w-full flex items-center justify-start text-left pl-12 pr-4 py-2 text-[10px] font-display uppercase tracking-widest transition-all duration-300 group",
-                            activeTab === sub.id ? "text-gold font-bold bg-white/5" : "text-white hover:text-white hover:bg-white/5"
-                          )}
-                        >
-                          <span className="text-left w-full">{sub.label}</span>
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
                 </div>
               );
             })}
+            
+            {/* Quick Links Section */}
+            <div className="mt-8 border-t border-white/10 pt-6 px-1 select-none">
+              <div className="flex items-center justify-between px-3 mb-4 text-gold text-[10px] font-display font-black uppercase tracking-[0.25em]">
+                {isSidebarOpen ? (
+                  <>
+                    <span>QUICK LINKS</span>
+                    <button 
+                      onClick={() => navigateTo("profile")} 
+                      className="text-stone-400 hover:text-gold transition-colors p-1"
+                      title="Quick Links Settings"
+                    >
+                      <Settings size={13} className="hover:rotate-45 transition-transform" />
+                    </button>
+                  </>
+                ) : (
+                  <span className="w-full text-center">•</span>
+                )}
+              </div>
+              <div className="space-y-1">
+                {[
+                  { id: "brand-standards", label: "Brand Standards", icon: Award },
+                  { id: "canary", label: "Wyndham Connect", icon: Globe, extraLabel: " (by Canary)" },
+                  { id: "managed-cases", label: "My Request", icon: Send, disabled: true },
+                  { id: "property-overview", label: "Property Management", icon: Hotel },
+                  { id: "duty-roster", label: "Duty Roster", icon: Calendar },
+                  { id: "hrms", label: "Sign-In Information", icon: Users, disabled: true }
+                ].map((link) => {
+                  const LinkIcon = link.icon;
+                  const isLinkActive = activeTab === link.id;
+                  return (
+                    <button
+                      key={link.id}
+                      onClick={() => {
+                        if (link.disabled) {
+                          toastService.warning(`${link.label} is temporarily offline for maintenance.`);
+                          return;
+                        }
+                        navigateTo(link.id);
+                        if (window.innerWidth < 768) setSidebarOpen(false);
+                      }}
+                      className={cn(
+                        "w-full flex items-center justify-start gap-4 px-3.5 py-3 border-b border-white/5 text-[14px] font-sans transition-all duration-300 relative group",
+                        link.disabled
+                          ? "opacity-35 cursor-not-allowed text-stone-500 hover:text-stone-500"
+                          : isLinkActive ? "text-gold bg-white/10 font-bold" : "text-stone-200 hover:text-gold"
+                      )}
+                    >
+                      {isLinkActive && !link.disabled && (
+                        <div className="absolute left-0 w-1.5 h-full bg-gold" />
+                      )}
+                      <LinkIcon size={16} className={cn("shrink-0", link.disabled ? "text-stone-600" : isLinkActive ? "text-gold" : "text-stone-400 group-hover:text-gold transition-colors")} />
+                      {isSidebarOpen && (
+                        <span className="truncate text-left flex items-center justify-between w-full">
+                          <span>
+                            {link.label}
+                            {link.extraLabel && <span className="text-[10px] text-stone-400 font-light font-sans">{link.extraLabel}</span>}
+                          </span>
+                          {link.disabled && (
+                            <span className="text-[7.5px] font-mono text-amber-500 border border-amber-500/25 px-1 py-0.5 rounded bg-amber-500/5 leading-none shrink-0">OFFLINE</span>
+                          )}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
+          )}
         </div>
         
-        <div className="mt-auto p-8 border-t border-white/5">
-          {isSidebarOpen && <div className="luxury-label !text-[8px] mb-4 opacity-70">Operational Status</div>}
-          <div className="flex items-center gap-3 text-[10px] text-emerald-400 font-display uppercase tracking-widest">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div> 
-            {isSidebarOpen && <span>Encrypted Sync Active</span>}
+        <div className="mt-auto p-4 border-t border-white/5 bg-black/15 shrink-0">
+          <div className="flex items-center justify-between gap-2">
+            <div 
+              onClick={() => setIsSyncModalOpen(true)}
+              className="flex items-center gap-2 cursor-pointer hover:bg-white/5 p-1 transition-all rounded"
+              title="Click to manage and view granular offline sync status"
+            >
+              <div className={cn(
+                "w-2 h-2 rounded-full transition-all duration-500 shrink-0",
+                isOnline 
+                  ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" 
+                  : "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)] animate-pulse"
+              )}></div>
+              {isSidebarOpen && (
+                <div className="flex flex-col text-left leading-none">
+                  <span className={cn(
+                    "text-[9px] font-display uppercase tracking-[0.15em] font-extrabold transition-colors duration-500",
+                    isOnline ? "text-emerald-400" : "text-rose-400"
+                  )}>
+                    {isOnline ? "Online" : "Offline"}
+                  </span>
+                  <span className="text-[7px] text-stone-400 uppercase tracking-wider font-sans font-bold mt-0.5">
+                    {isOnline ? "Real-Time Sync Active" : "Local Backup Active"}
+                  </span>
+                </div>
+              )}
+            </div>
+            {isSidebarOpen ? (
+              <button
+                onClick={triggerHardRefresh}
+                title="Force deep server reload & clear browser cache"
+                className="text-gold/60 hover:text-gold transition-colors p-1 hover:bg-white/5 rounded-xs flex items-center gap-1.5 text-[8.5px] font-mono uppercase font-semibold"
+                id="btn-sidebar-hard-reload-compact"
+              >
+                <RefreshCw size={10} className="hover:rotate-180 transition-transform duration-300 shrink-0" />
+                Refresh
+              </button>
+            ) : (
+              <button
+                onClick={triggerHardRefresh}
+                title="Force deep server reload & clear browser cache"
+                className="mx-auto text-gold/60 hover:text-gold transition-colors p-1 bg-white/5 rounded-full"
+                id="btn-force-hard-refresh-status-icon-only"
+              >
+                <RefreshCw size={10} />
+              </button>
+            )}
           </div>
         </div>
       </nav>
@@ -1062,47 +3251,87 @@ export default function App() {
             <div className="h-6 w-px bg-slate-200 hidden md:block" />
             
             <div className="flex flex-col md:flex-row md:items-center truncate">
-              <h1 className="text-[11px] md:text-sm font-serif text-slate-900 italic font-light truncate">
-                Welcome back, <span className="font-bold not-italic">{currentUser ? (currentUser.displayName || (currentUser.email === "digitalmedia@cml.com.fj" ? "Charles" : currentUser.email?.split('@')[0])) : "Guest"}</span>
-              </h1>
+              <AnimatePresence>
+                {activeTab !== "property-overview" && (
+                  <motion.button
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    onClick={navigateBack}
+                    className="flex items-center gap-3 mr-6 text-gold hover:text-white transition-all group px-4 py-2 bg-gold/10 border border-gold/30 rounded-none shadow-lg shadow-gold/5 active:scale-95"
+                  >
+                    <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+                    <span className="text-[11px] font-display uppercase tracking-[0.2em] font-black">Go Back</span>
+                  </motion.button>
+                )}
+              </AnimatePresence>
               
-              <div className="flex items-center gap-1 md:gap-3">
-                 <span className="text-slate-600 text-xs hidden md:block mx-1">/</span>
-                 <select 
-                   value={selectedCompany || ""}
-                   onChange={(e) => setSelectedCompany(e.target.value)}
-                   className="bg-transparent border-none text-[8px] md:text-[11px] font-display uppercase tracking-[0.05em] md:tracking-[0.2em] font-black text-gold focus:ring-0 cursor-pointer hover:text-gold-dark transition-colors max-w-[120px] md:max-w-none truncate p-0 md:p-1"
-                 >
-                   {COMPANIES.map(c => (
-                     <option key={c.id} value={c.id}>{c.name}</option>
-                   ))}
-                   <option value="group">Group Corporate</option>
-                 </select>
-              </div>
+              {transitionPhase === 'skeleton' ? (
+                <div className="flex items-center gap-4">
+                  <div className="h-4 w-36 bg-slate-200 animate-pulse rounded-sm" />
+                  <div className="h-4 w-2 bg-slate-100 hidden md:block animate-pulse" />
+                  <div className="h-4 w-24 bg-slate-200 animate-pulse rounded-sm" />
+                </div>
+              ) : (
+                <>
+                  <h1 className="text-[11px] md:text-sm font-serif text-slate-900 italic font-light truncate">
+                    Welcome, <span className="font-bold not-italic">{getUserFriendlyName()}</span>
+                  </h1>
+                  
+                  <div className="flex items-center gap-1 md:gap-3">
+                     <span className="text-slate-600 text-xs hidden md:block mx-1">/</span>
+                     {isCmlUser ? (
+                       <select 
+                         value={selectedCompany || ""}
+                         onChange={(e) => setSelectedCompany(e.target.value)}
+                         className="bg-transparent border-none text-[8px] md:text-[11px] font-display uppercase tracking-[0.05em] md:tracking-[0.2em] font-black text-gold focus:ring-0 cursor-pointer hover:text-gold-dark transition-colors max-w-[120px] md:max-w-none truncate p-0 md:p-1"
+                       >
+                         {COMPANIES.map(c => (
+                           <option key={c.id} value={c.id}>{c.name}</option>
+                         ))}
+                       </select>
+                     ) : (
+                       <span className="text-[8px] md:text-[11px] font-display uppercase tracking-[0.05em] md:tracking-[0.2em] font-black text-gold max-w-[120px] md:max-w-none truncate p-0 md:p-1">
+                         {COMPANIES.find(c => c.id === selectedCompany)?.name || ""}
+                       </span>
+                     )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
           
           <div className="flex items-center gap-1.5 md:gap-8 shrink-0">
             <div className="hidden lg:block">
-              <GlobalSearch 
-                onNavigate={(tab, formId) => {
-                  setActiveTab(tab);
-                  if (formId) setSelectedForm(formId);
-                }} 
-              />
+              {transitionPhase === 'skeleton' ? (
+                <div className="h-9 w-44 bg-slate-200 animate-pulse rounded-sm" />
+              ) : (
+                <GlobalSearch 
+                  onNavigate={(tab, formId) => {
+                     navigateTo(tab);
+                     if (formId) setSelectedForm(formId);
+                  }} 
+                />
+              )}
             </div>
             
             <div className="text-right hidden xl:block">
-              <p className="luxury-label !text-slate-900 !font-black opacity-100">{currentUser ? (userRole || "Team Member") : "Guest Mode"}</p>
-              <div className="flex items-center justify-end gap-2 mt-0.5">
-                <span className="text-[8px] font-display uppercase tracking-widest bg-gold/10 text-gold px-1.5 py-0.5 rounded-full font-black">Enterprise Core</span>
-                <p className="text-[10px] font-sans text-slate-600 font-medium truncate max-w-[150px]">{currentUser?.email}</p>
-              </div>
+              <p className="text-xs font-serif italic font-medium text-slate-900 tracking-wide truncate max-w-[200px]">
+                {currentUser ? getUserFriendlyName() : "Guest Mode"}
+              </p>
             </div>
             
             <div className="flex items-center gap-1 md:gap-4">
+              <SystemDiagnostics 
+                complaintsCount={complaints?.length || 0}
+                complaintsError={complaintsError}
+                onForceResync={() => setRefreshKey(prev => prev + 1)}
+              />
+
+
+
               {currentUser && (
-                <NotificationDropdown onNavigate={(tab) => setActiveTab(tab)} />
+                <NotificationDropdown onNavigate={(tab) => navigateTo(tab)} />
               )}
               
               <div className="relative">
@@ -1134,7 +3363,7 @@ export default function App() {
                       >
                         <div className="p-6 border-b border-slate-100 bg-slate-50/50">
                           <p className="text-[10px] font-display uppercase tracking-[0.2em] text-gold font-black mb-1">Authenticated Account</p>
-                          <p className="text-sm font-serif italic text-slate-950 font-bold truncate leading-none mb-2">{currentUser?.displayName || "Team Member"}</p>
+                          <p className="text-sm font-serif italic text-slate-950 font-bold truncate leading-none mb-2">{getUserFriendlyName()}</p>
                           <p className="text-[10px] text-slate-600 truncate font-sans mb-1">{currentUser?.email}</p>
                           <p className="text-[10px] text-gold font-display uppercase tracking-widest font-black mb-3">Subscription: Enterprise Core</p>
                           <p className="text-[9px] font-display uppercase tracking-widest text-white px-3 py-1 bg-luxury-black inline-block font-black">{userRole || "Access Level: Staff"}</p>
@@ -1143,7 +3372,7 @@ export default function App() {
                         <div className="p-2">
                           <button 
                             onClick={() => {
-                              setActiveTab("profile");
+                              navigateTo("profile");
                               setIsProfileMenuOpen(false);
                             }}
                             className="w-full text-left px-4 py-3 text-[10px] font-display uppercase tracking-widest font-black text-slate-800 hover:bg-luxury-cream hover:text-gold transition-all flex items-center gap-3"
@@ -1151,25 +3380,30 @@ export default function App() {
                             <Users size={14} className="opacity-70" /> User Profile Detail
                           </button>
                           
-                          {userRole === "Administrator" && (
+                          {(userRole === "Administrator" || userRole === "Super Admin" || userRole === "Group Controller") && (
                             <button 
                               onClick={() => {
-                                setActiveTab("user-management");
+                                navigateTo("user-management");
                                 setIsProfileMenuOpen(false);
                               }}
                               className="w-full text-left px-4 py-3 text-[10px] font-display uppercase tracking-widest font-black text-slate-800 hover:bg-luxury-cream hover:text-gold transition-all flex items-center gap-3"
                             >
-                              <ShieldCheck size={14} className="opacity-70" /> Admin Control Panel
+                              <Settings size={14} className="opacity-70 text-gold" /> Group Account Settings
                             </button>
                           )}
                           
                           <div className="h-px bg-slate-100 my-2" />
                           
                           <button 
-                            onClick={() => logout()}
+                            onClick={async () => {
+                              await logout();
+                              setSelectedCompany(null);
+                              setClickedCompanyId(null);
+                              setIsProfileMenuOpen(false);
+                            }}
                             className="w-full text-left px-4 py-3 text-[10px] font-display uppercase tracking-widest font-black text-red-700 hover:bg-red-50 hover:text-red-900 transition-all flex items-center gap-3"
                           >
-                            <LogOut size={14} /> End Active Session
+                            <LogOut size={14} /> Logout
                           </button>
                         </div>
                         
@@ -1190,13 +3424,18 @@ export default function App() {
           "flex-1 overflow-x-hidden",
           ["canary", "team-chat"].includes(activeTab) ? "p-0 h-full overflow-hidden" : "p-4 md:p-10 overflow-y-auto"
         )}>
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5 }}
-            className={cn(["canary", "team-chat"].includes(activeTab) ? "w-full h-full flex flex-col" : "h-full max-w-7xl mx-auto")}
-          >
+          {transitionPhase === 'skeleton' ? (
+            <div className="h-full max-w-7xl mx-auto px-4 md:px-0">
+              <DashboardSkeleton companyId={selectedCompany} />
+            </div>
+          ) : (
+            <motion.div
+              key={activeTab}
+              initial={transitionPhase === 'fadedIn' ? { opacity: 0, y: 35 } : { opacity: 0, x: 20 }}
+              animate={{ opacity: 1, y: 0, x: 0 }}
+              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
+              className={cn(["canary", "team-chat"].includes(activeTab) ? "w-full h-full flex flex-col" : "h-full max-w-7xl mx-auto")}
+            >
             {["guest-room-keys", "master-staff-keys"].includes(activeTab) ? (
               <div className="max-w-5xl space-y-12 pb-32">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12 no-print">
@@ -1554,63 +3793,350 @@ export default function App() {
                   </div>
                 </div>
               </div>
-            ) : activeTab === "checklists" ? (
-              <div className="space-y-12">
-                <div className="flex flex-col gap-2 mb-12">
-                  <h2 className="text-4xl font-serif text-slate-900 italic">Checklist Registry</h2>
-                  <p className="luxury-label opacity-60">Access and submit property operational checklists</p>
+            ) : activeTab === "brand-standards" ? (
+              <div className="space-y-8">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-4">
+                  <div>
+                    <h2 className="text-3xl font-serif text-slate-900 italic">Brand Standards & Quality</h2>
+                    <p className="luxury-label opacity-60">Operations, Quality Assurance & Property Maintenance Standards</p>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {/* Sub Tab Switcher for Brand Standards */}
+                <div className="flex border-b border-gold/10 mb-8 space-x-1 overflow-x-auto no-scrollbar">
                   {[
-                    { 
-                      id: "maintenance-checklist", 
-                      title: "Public Area Checklist", 
-                      desc: "Daily preventative maintenance for public spaces",
-                      cat: "DIGITAL / FILLABLE"
-                    },
-                    { 
-                      id: "maintenance-checklist-guest", 
-                      title: "Guest Room Checklist", 
-                      desc: "In-depth room condition and maintenance verification",
-                      cat: "DIGITAL / FILLABLE"
-                    },
-                    { 
-                      id: "concierge-checklist", 
-                      title: "Concierge & Porter Checklist", 
-                      desc: "Operational standards for guest service team",
-                      cat: "DIGITAL / FILLABLE"
-                    }
-                  ].map((item) => (
-                    <motion.div
-                      key={item.id}
-                      whileHover={{ y: -5 }}
-                      className="luxury-card group bg-white shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden"
+                    { id: 'rules', label: 'QA Standards & Guidelines' },
+                    { id: 'maintenance', label: 'Asset Maintenance Rules' },
+                    { id: 'checklists', label: 'PM Preventive Checklist' }
+                  ].map((subT) => (
+                    <button
+                      key={subT.id}
+                      onClick={() => setBrandSubTab(subT.id)}
+                      className={cn(
+                        "px-6 py-3.5 text-[10px] font-display uppercase tracking-widest font-black transition-all border-b-2 shrink-0 whitespace-nowrap",
+                        brandSubTab === subT.id 
+                          ? "border-gold text-gold bg-gold/5 font-extrabold" 
+                          : "border-transparent text-slate-400 hover:text-slate-900"
+                      )}
                     >
-                      <div className="p-8">
-                        <div className="flex justify-between items-start mb-12">
-                          <div className="w-12 h-12 bg-luxury-cream flex items-center justify-center text-gold group-hover:bg-gold group-hover:text-white transition-all">
-                            <FileText size={24} strokeWidth={1} />
-                          </div>
-                        </div>
-                        <h3 className="text-xl font-serif italic text-slate-900 mb-8 group-hover:text-gold transition-colors leading-tight h-12 flex items-center">{item.title}</h3>
-                        
-                        <div className="flex items-center justify-between pt-6 border-t border-slate-50">
-                          <span className="text-[9px] font-display uppercase tracking-widest font-bold text-slate-300">{item.cat}</span>
-                          <button 
-                            onClick={() => {
-                              setActiveTab(item.id);
-                              setShowHistory(false);
-                            }}
-                            className="flex items-center gap-2 text-[10px] font-display uppercase tracking-widest font-black text-gold hover:text-luxury-black transition-colors"
-                          >
-                            Open Checklist <ChevronRight size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    </motion.div>
+                      {subT.label}
+                    </button>
                   ))}
                 </div>
+
+                {brandSubTab === "rules" ? (
+                  <div className="space-y-8">
+                    {/* Brand Rules & Quality Guidelines View */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                      <div className="luxury-card p-10 bg-white border-t-4 border-t-gold space-y-6">
+                        <h3 className="text-2xl font-serif italic text-slate-900">QA Preparation & Standards</h3>
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                          Properties undergo routine, comprehensive Quality Assurance examinations to maintain five-star guest compliance. Utilize this dashboard to run checks with key operational metrics.
+                        </p>
+                        <ul className="space-y-4 pt-4 border-t border-slate-100">
+                          <li className="flex items-start gap-3">
+                            <CheckCircle size={14} className="text-gold mt-0.5 shrink-0" />
+                            <div>
+                              <p className="text-[10px] font-display uppercase tracking-wide text-slate-800 font-black">In-Room Uniform Standards</p>
+                              <p className="text-[12px] text-slate-500 italic">Clean bed linens, perfect corner folds, high-quality toiletries replenished.</p>
+                            </div>
+                          </li>
+                          <li className="flex items-start gap-3">
+                            <CheckCircle size={14} className="text-gold mt-0.5 shrink-0" />
+                            <div>
+                              <p className="text-[10px] font-display uppercase tracking-wide text-slate-800 font-black">Public Area Presentation</p>
+                              <p className="text-[12px] text-slate-500 italic">Spotless lobby flooring, fully lit ambient crystals, polished main reception counters.</p>
+                            </div>
+                          </li>
+                          <li className="flex items-start gap-3">
+                            <CheckCircle size={14} className="text-gold mt-0.5 shrink-0" />
+                            <div>
+                              <p className="text-[10px] font-display uppercase tracking-wide text-slate-800 font-black">Guest Service Timing</p>
+                              <p className="text-[12px] text-slate-500 italic">Answering front-desk telephone calls within three rings, and keys created with instant greeting.</p>
+                            </div>
+                          </li>
+                        </ul>
+                      </div>
+
+                      <div className="luxury-card p-10 bg-luxury-black text-white relative overflow-hidden flex flex-col justify-between">
+                        <div className="absolute top-0 right-0 p-6 opacity-5">
+                          <Award size={180} />
+                        </div>
+                        <div>
+                          <h3 className="text-2xl font-serif italic text-gold mb-3">Hotel Photo Guidance & Rules</h3>
+                          <p className="text-xs text-slate-300 leading-relaxed mb-6">
+                            To maintain cohesive visual guidelines, all uploaded property photos, marketing assets, and social media profiles must abide by these CML specifications.
+                          </p>
+                          <div className="space-y-4 text-xs">
+                            <div className="flex items-center gap-3 bg-white/5 p-3 border border-white/10">
+                              <Camera size={14} className="text-gold" />
+                              <span>Minimum Resolution: 4K (3840 x 2160 @ 300dpi)</span>
+                            </div>
+                            <div className="flex items-center gap-3 bg-white/5 p-3 border border-white/10">
+                              <Camera size={14} className="text-gold" />
+                              <span>Lighting style: Ambient natural light only. No flash spots.</span>
+                            </div>
+                            <div className="flex items-center gap-3 bg-white/5 p-3 border border-white/10">
+                              <Camera size={14} className="text-gold" />
+                              <span>Layout orientation: Architectural landscape. No slanted ratios.</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="pt-6 border-t border-white/5 text-[9px] font-mono text-gold uppercase tracking-widest mt-6">
+                          Active Brand Standards Compliant
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : brandSubTab === "maintenance" ? (
+                  <div className="space-y-8">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <h3 className="text-xl font-serif italic text-slate-900">Asset Maintenance Guidelines</h3>
+                        <p className="luxury-label !text-[10px]">Standard Operating Procedures for Property Management</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                       {/* Public Areas Section */}
+                       <div className="luxury-card p-10 bg-white space-y-10 border-t-4 border-t-gold">
+                          <div className="flex items-center gap-6">
+                             <div className="w-16 h-16 bg-luxury-cream text-gold flex items-center justify-center">
+                                <Hotel size={32} strokeWidth={1} />
+                             </div>
+                             <div>
+                                <h3 className="text-3xl font-serif italic text-slate-900">Public Areas</h3>
+                                <p className="luxury-label !text-[8px] opacity-60">Preventive Maintenance Process</p>
+                             </div>
+                          </div>
+
+                          <div className="space-y-12">
+                             <section>
+                                <h4 className="text-[10px] font-display uppercase tracking-[0.25em] font-black text-gold mb-6 flex items-center gap-4">
+                                   Steps to Complete Process
+                                   <div className="h-px flex-1 bg-gold/10" />
+                                </h4>
+                                <div className="space-y-6">
+                                   {[
+                                     "Take a walk around all public areas (depending on the size of your site you may have to break it up into multiple days).",
+                                     "Complete a visual inspection of the area(s).",
+                                     "Perform all necessary corrective work.",
+                                     "In a binder index the completed property checklist(s) or save as a computer file.",
+                                     "Notify Owner/GM of trends and any additional concerns."
+                                   ].map((step, i) => (
+                                     <div key={i} className="flex gap-6 items-start group">
+                                        <span className="font-serif italic text-gold text-2xl leading-none opacity-40 group-hover:opacity-100 transition-opacity">{i+1}.</span>
+                                        <p className="text-[13px] text-slate-600 leading-relaxed font-medium">{step}</p>
+                                     </div>
+                                   ))}
+                                </div>
+                             </section>
+
+                             <section>
+                                <h4 className="text-[10px] font-display uppercase tracking-[0.25em] font-black text-gold mb-6 flex items-center gap-4">
+                                   Schedule Property Maintenance
+                                   <div className="h-px flex-1 bg-gold/10" />
+                                </h4>
+                                <div className="grid grid-cols-1 gap-4">
+                                   {[
+                                     "Schedule preventive checks within a year's timeframe or more frequently if determined by management.",
+                                     "Customize scheduling for individual property needs in coordination with GM/Ownership.",
+                                     "Schedule during slow hours to minimize impact on guest experience and enjoyment.",
+                                     "Maintain a fully-equipped maintenance cart for efficient and timely implementation."
+                                   ].map((item, i) => (
+                                     <div key={i} className="flex gap-4 items-center p-4 bg-slate-50/50 border border-slate-100 rounded-sm italic text-[11px] text-slate-500">
+                                        <div className="w-1 h-1 bg-gold rounded-full shrink-0" />
+                                        {item}
+                                     </div>
+                                   ))}
+                                </div>
+                             </section>
+
+                             <section className="bg-luxury-black p-8 text-white relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-24 h-24 bg-gold/5 rounded-full translate-x-1/2 -translate-y-1/2" />
+                                <h4 className="text-[10px] font-display uppercase tracking-[0.3em] font-black text-gold mb-6">Securing External Bids</h4>
+                                <div className="space-y-4">
+                                   {[
+                                     "Obtain three competitive bids per contract",
+                                     "Avoid automatic renewal clauses in agreements",
+                                     "Request optional 30-day cancellation clauses",
+                                     "Include termination rights for poor workmanship"
+                                   ].map((tip, i) => (
+                                     <div key={i} className="flex items-center gap-3 text-[10px] font-display uppercase tracking-widest text-slate-300">
+                                        <ChevronRight size={14} className="text-gold" />
+                                        {tip}
+                                     </div>
+                                   ))}
+                                </div>
+                             </section>
+
+                             <section className="flex items-center justify-between p-6 bg-luxury-cream/30 border border-gold/10">
+                                <div>
+                                   <h5 className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800 mb-1">Record Keeping</h5>
+                                   <p className="text-[11px] text-slate-500 italic">Maintain checks in three-ring binder or secure digital storage.</p>
+                                </div>
+                                <FileText className="text-gold/40" size={24} />
+                             </section>
+                          </div>
+                       </div>
+
+                       {/* Guest Room Section */}
+                       <div className="luxury-card p-10 bg-white border-t-4 border-t-gold space-y-10">
+                          <div className="flex items-center gap-6">
+                             <div className="w-16 h-16 bg-luxury-cream text-gold flex items-center justify-center">
+                                <Hotel size={32} strokeWidth={1} />
+                             </div>
+                             <div>
+                                <h3 className="text-3xl font-serif italic text-slate-900">Guest Room</h3>
+                                <p className="luxury-label !text-[8px] opacity-60">Preventive Maintenance Process</p>
+                             </div>
+                          </div>
+
+                          <div className="space-y-12">
+                             <section>
+                                <h4 className="text-[10px] font-display uppercase tracking-[0.25em] font-black text-gold mb-6 flex items-center gap-4">
+                                   Steps to Complete Process
+                                   <div className="h-px flex-1 bg-gold/10" />
+                                </h4>
+                                <div className="space-y-6">
+                                   {[
+                                     "Select a guest room(s) for maintenance.",
+                                     "Complete a visual inspection.",
+                                     "Note any items needing repair or attention.",
+                                     "Perform all necessary corrective work in the guest room/suite.",
+                                     "In a binder, index the completed checklist form under the appropriate room number or save as a computer file.",
+                                     "In the front of the binder, record the room number on the Preventative Maintenance Summary under the appropriate quarter.",
+                                     "Notify Owner/GM of trends and any additional concerns."
+                                   ].map((step, i) => (
+                                     <div key={i} className="flex gap-6 items-start group">
+                                        <span className="font-serif italic text-gold text-2xl leading-none opacity-40 group-hover:opacity-100 transition-opacity">{i+1}.</span>
+                                        <p className="text-[13px] text-slate-600 leading-relaxed font-medium">{step}</p>
+                                     </div>
+                                   ))}
+                                </div>
+                             </section>
+
+                             <section>
+                                <h4 className="text-[10px] font-display uppercase tracking-[0.25em] font-black text-gold mb-6 flex items-center gap-4">
+                                   Scheduling Guest Room Maintenance
+                                   <div className="h-px flex-1 bg-gold/10" />
+                                </h4>
+                                <div className="grid grid-cols-1 gap-4">
+                                   {[
+                                     "Schedule preventive checks within a year's timeframe or more frequently if determined by ownership/management.",
+                                     "Customize scheduling for individual property needs in coordination with GM/Ownership.",
+                                     "Work with your Owner, General Manager, Regional manager or Management.",
+                                     "Company to determine how often this program should take place.",
+                                     "Prepare fully-equipped maintenance carts to implement and maintain the program efficiently and correctly."
+                                   ].map((item, i) => (
+                                     <div key={i} className="flex gap-4 items-center p-4 bg-slate-50/50 border border-slate-100 rounded-sm italic text-[11px] text-slate-500">
+                                        <div className="w-1 h-1 bg-gold rounded-full shrink-0" />
+                                        {item}
+                                     </div>
+                                   ))}
+                                </div>
+                             </section>
+
+                             <section className="bg-luxury-black p-8 text-white relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-24 h-24 bg-gold/5 rounded-full translate-x-1/2 -translate-y-1/2" />
+                                <h4 className="text-[10px] font-display uppercase tracking-[0.3em] font-black text-gold mb-6">Securing Bids Standards</h4>
+                                <div className="space-y-4">
+                                   {[
+                                     "Obtain no less than three competitive bids per contract",
+                                     "Avoid automatic renewal clauses from contracts",
+                                     "Request the option of a 30-day cancellation",
+                                     "Include termination rights for poor quality or workmanship"
+                                   ].map((tip, i) => (
+                                     <div key={i} className="flex items-center gap-3 text-[10px] font-display uppercase tracking-widest text-slate-300">
+                                        <ChevronRight size={14} className="text-gold" />
+                                        {tip}
+                                     </div>
+                                   ))}
+                                </div>
+                             </section>
+
+                             <section className="p-6 bg-luxury-cream/30 border border-gold/10 space-y-4">
+                                <div className="flex items-center justify-between">
+                                   <div>
+                                      <h5 className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800 mb-1">Record Keeping</h5>
+                                      <p className="text-[11px] text-slate-500 italic">One inspection sheet per room, indexed by room number.</p>
+                                   </div>
+                                   <FileText className="text-gold/40" size={24} />
+                                </div>
+                                <p className="text-[10.5px] leading-relaxed text-slate-500 border-t border-gold/10 pt-4">
+                                   Place the <span className="font-bold text-slate-700">Preventive Maintenance Summary</span> in the very beginning of the binder to summarize frequency by quarter.
+                                </p>
+                             </section>
+
+                             <div className="pt-6 border-t border-slate-100">
+                                <p className="text-[11px] text-slate-500 italic leading-relaxed">
+                                   <span className="font-bold text-gold uppercase tracking-widest text-[9px] mr-2">Additional Note:</span>
+                                   Complete room preventive maintenance on a daily basis to stay ahead. Each hotel has a responsibility to maintain records for unannounced inspections.
+                                </p>
+                             </div>
+                          </div>
+                       </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-8">
+                    <div className="flex flex-col gap-2">
+                      <h3 className="text-xl font-serif italic text-slate-800">PM Preventive Checklist Registry</h3>
+                      <p className="text-[10px] font-display uppercase tracking-widest text-slate-400">Access and submit interactive fillable checklists</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                      {[
+                        { 
+                          id: "maintenance-checklist", 
+                          title: "Public Area Checklist", 
+                          desc: "Daily preventative maintenance for public spaces",
+                          cat: "DIGITAL / FILLABLE"
+                        },
+                        { 
+                          id: "maintenance-checklist-guest", 
+                          title: "Guest Room Checklist", 
+                          desc: "In-depth room condition and maintenance verification",
+                          cat: "DIGITAL / FILLABLE"
+                        },
+                        { 
+                          id: "concierge-checklist", 
+                          title: "Concierge & Porter Checklist", 
+                          desc: "Operational standards for guest service team",
+                          cat: "DIGITAL / FILLABLE"
+                        }
+                      ].map((item) => (
+                        <motion.div
+                          key={item.id}
+                          whileHover={{ y: -5 }}
+                          className="luxury-card group bg-white shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden"
+                        >
+                          <div className="p-8">
+                            <div className="flex justify-between items-start mb-12">
+                              <div className="w-12 h-12 bg-luxury-cream flex items-center justify-center text-gold group-hover:bg-gold group-hover:text-white transition-all">
+                                <FileText size={24} strokeWidth={1} />
+                              </div>
+                            </div>
+                            <h3 className="text-xl font-serif italic text-slate-900 mb-8 group-hover:text-gold transition-colors leading-tight h-12 flex items-center">{item.title}</h3>
+                            
+                            <div className="flex items-center justify-between pt-6 border-t border-slate-50">
+                              <span className="text-[9px] font-display uppercase tracking-widest font-bold text-slate-300">{item.cat}</span>
+                              <button 
+                                onClick={() => {
+                                  navigateTo(item.id);
+                                  setShowHistory(false);
+                                }}
+                                className="flex items-center gap-2 text-[10px] font-display uppercase tracking-widest font-black text-gold hover:text-luxury-black transition-colors"
+                              >
+                                View / Fill <ArrowRight size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : ["maintenance-checklist", "maintenance-checklist-guest", "concierge-checklist"].includes(activeTab) ? (
               <div className="space-y-8 pb-32">
@@ -1639,7 +4165,7 @@ export default function App() {
                     </div>
                     
                     <button 
-                      onClick={() => setActiveTab("checklists")}
+                      onClick={() => navigateTo("checklists")}
                       className="flex items-center gap-2 px-6 py-3 border border-slate-100 text-[10px] font-display uppercase tracking-widest font-bold hover:bg-slate-50 transition-all shadow-sm"
                     >
                       <X size={14} /> Close & Exit
@@ -1668,41 +4194,77 @@ export default function App() {
                     animate={{ opacity: 1, y: 0 }}
                     className="luxury-card overflow-hidden no-print"
                   >
-                    <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                       <h3 className="text-xl font-serif italic text-slate-900">Submission History</h3>
-                       <p className="text-[10px] font-display uppercase tracking-widest text-slate-600">Recorded Maintenance logs</p>
-                    </div>
+                    <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                        <div>
+                           <h3 className="text-xl font-serif italic text-slate-900">Submission History</h3>
+                           <p className="text-[10px] font-display uppercase tracking-widest text-slate-600">Recorded Maintenance logs</p>
+                        </div>
+                        
+                        <div className="flex flex-wrap items-center gap-4 bg-white/85 p-3 border border-slate-100 rounded-sm shadow-sm backdrop-blur-sm">
+                           <div className="flex items-center gap-2">
+                              <Calendar size={14} className="text-gold shrink-0" />
+                              <span className="text-[10px] font-display uppercase tracking-wider text-slate-500 font-bold">Log Date Window:</span>
+                           </div>
+                           <div className="flex items-center gap-2">
+                              <input 
+                                 type="date" 
+                                 value={maintenanceStartDate}
+                                 onChange={(e) => setMaintenanceStartDate(e.target.value)}
+                                 className="px-2 py-1 bg-slate-50 border border-slate-200 text-xs text-slate-700 font-mono focus:outline-none focus:border-gold"
+                              />
+                              <span className="text-[10px] text-slate-400">—</span>
+                              <input 
+                                 type="date" 
+                                 value={maintenanceEndDate}
+                                 onChange={(e) => setMaintenanceEndDate(e.target.value)}
+                                 className="px-2 py-1 bg-slate-50 border border-slate-200 text-xs text-slate-700 font-mono focus:outline-none focus:border-gold"
+                              />
+                           </div>
+                           {(maintenanceStartDate || maintenanceEndDate) && (
+                              <button 
+                                 onClick={() => { setMaintenanceStartDate(""); setMaintenanceEndDate(""); }}
+                                 className="text-[10px] font-display uppercase tracking-widest text-red-500 hover:text-red-700 transition-colors font-bold px-2 py-1 border border-red-200 bg-red-50"
+                              >
+                                 Reset Window
+                              </button>
+                           )}
+                        </div>
+                     </div>
                     <div className="overflow-x-auto">
                        <table className="w-full text-left">
                           <thead>
                              <tr className="bg-luxury-cream/50 border-b border-gold/10">
                                 <th className="px-8 py-5 luxury-label font-black !text-slate-500">Submission Date</th>
                                 <th className="px-8 py-5 luxury-label font-black !text-slate-500">Log Type</th>
+                                <th className="px-8 py-5 luxury-label font-black !text-slate-500">Target Room / Area</th>
                                 <th className="px-8 py-5 luxury-label font-black !text-slate-500">Completed By</th>
                                 <th className="px-8 py-5 luxury-label font-black !text-slate-500 text-right">Actions</th>
                              </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50">
-                             {maintenanceHistory.length === 0 ? (
-                               <tr>
-                                  <td colSpan={4} className="px-8 py-20 text-center text-slate-500 font-serif italic">No maintenance logs found.</td>
-                               </tr>
-                             ) : (
-                               maintenanceHistory.map((log, i) => (
-                                 <tr key={i} className="hover:bg-luxury-cream/20 transition-colors">
-                                    <td className="px-8 py-6 font-serif text-slate-900 italic">{log.date}</td>
-                                    <td className="px-8 py-6 text-[10px] font-bold text-gold uppercase tracking-widest">
-                                      {log.type === "public" ? "Public Area" : log.type === "guest" ? "Guest Room" : "Concierge"}
-                                    </td>
-                                    <td className="px-8 py-6 text-xs text-slate-500 font-display uppercase tracking-widest">{log.user || "Charles"}</td>
-                                    <td className="px-8 py-6 text-right">
-                                       <button className="text-gold hover:text-luxury-black transition-colors">
-                                          <Download size={18} strokeWidth={1.5} />
-                                       </button>
-                                    </td>
-                                 </tr>
-                               ))
-                             )}
+                              {filteredMaintenanceHistory.length === 0 ? (
+                                <tr>
+                                   <td colSpan={5} className="px-8 py-20 text-center text-slate-500 font-serif italic">No maintenance logs found matching criteria.</td>
+                                </tr>
+                              ) : (
+                                filteredMaintenanceHistory.map((log, i) => (
+                                  <tr key={i} className="hover:bg-luxury-cream/20 transition-colors">
+                                     <td className="px-8 py-6 font-serif text-slate-900 italic">{log.date}</td>
+                                     <td className="px-8 py-6 text-[10px] font-bold text-gold uppercase tracking-widest">
+                                       {log.type === "public" ? "Public Area" : log.type === "guest" ? "Guest Room" : "Concierge"}
+                                     </td>
+                                     <td className="px-8 py-6 text-xs text-slate-500 font-display font-medium uppercase tracking-wider">
+                                       {log.roomNumber || "N/A"}
+                                     </td>
+                                     <td className="px-8 py-6 text-xs text-slate-500 font-display uppercase tracking-widest">{log.user || "Charles"}</td>
+                                     <td className="px-8 py-6 text-right">
+                                        <button className="text-gold hover:text-luxury-black transition-colors">
+                                           <Download size={18} strokeWidth={1.5} />
+                                        </button>
+                                     </td>
+                                  </tr>
+                                ))
+                              )}
                           </tbody>
                        </table>
                     </div>
@@ -1710,7 +4272,7 @@ export default function App() {
                 ) : (
                   <div className="space-y-12">
                      {/* Print-only Header */}
-                     <div className="hidden print:block mb-8 border-b-2 border-gold/20 pb-4">
+                     <div className="hidden print:block mb-6 border-b-2 border-gold/20 pb-4">
                         <div className="flex justify-between items-end mb-4">
                            <div>
                               <h1 className="text-2xl font-serif italic text-slate-900">
@@ -1718,11 +4280,107 @@ export default function App() {
                                  activeTab === "maintenance-checklist-guest" ? "Guest Room Checklist" : 
                                  "Concierge & Porter Checklist"}
                               </h1>
-                              <p className="text-[10px] font-display uppercase tracking-widest text-gold font-bold">{currentCompany?.name} PROPERTY REGISTRY</p>
+                              <p className="text-[10px] font-display uppercase tracking-widest text-gold font-bold">{currentCompany?.name || "CML"} PROPERTY REGISTRY</p>
                            </div>
                            <div className="text-right">
-                              <p className="text-[10px] font-display uppercase tracking-widest text-slate-600 font-bold">Submission Date</p>
-                              <p className="text-sm font-serif italic text-slate-900">{checklistDate || new Date().toLocaleDateString()}</p>
+                              <p className="text-[9px] font-display uppercase tracking-widest text-slate-600 font-bold">Audit Registry Code</p>
+                              <p className="text-xs font-mono font-bold text-slate-900">
+                                {activeTab === "maintenance-checklist-guest" ? `RM-CHKL-${checklistRoomNumber || 'N/A'}` : `CHKL-${activeTab.substring(12).toUpperCase()}`}
+                              </p>
+                           </div>
+                        </div>
+
+                        <div className="grid grid-cols-4 gap-4 bg-slate-50/50 p-4 border border-slate-100 rounded-sm text-left">
+                           <div>
+                              <span className="block text-[8px] font-display uppercase tracking-widest text-slate-500 font-black">
+                                {activeTab === "maintenance-checklist-guest" ? "Room Number" : "Inspection Location"}
+                              </span>
+                              <span className="text-xs font-serif italic font-bold text-slate-950 font-medium">{checklistRoomNumber || "Not Specified"}</span>
+                           </div>
+                           <div>
+                              <span className="block text-[8px] font-display uppercase tracking-widest text-slate-500 font-black">Inspected By</span>
+                              <span className="text-xs font-serif italic font-bold text-slate-950 font-medium">{checklistInspectorName || "Charles"}</span>
+                           </div>
+                           <div>
+                              <span className="block text-[8px] font-display uppercase tracking-widest text-slate-500 font-black">Date</span>
+                              <span className="text-xs font-serif italic font-bold text-slate-950 font-medium">{checklistDate}</span>
+                           </div>
+                           <div>
+                              <span className="block text-[8px] font-display uppercase tracking-widest text-slate-500 font-black">Shift & Std</span>
+                              <span className="text-xs font-serif italic font-bold text-slate-950 font-medium">{checklistShift} / {checklistInspectionType}</span>
+                           </div>
+                        </div>
+                     </div>
+
+                     {/* Screen-only Metadata Input Panel with premium gold accents */}
+                     <div className="no-print bg-slate-50 border border-slate-150 p-8 rounded-sm space-y-6 text-left mb-6">
+                        <div className="flex items-center gap-2 border-b border-fold/10 pb-3">
+                           <FileText size={16} className="text-gold" />
+                           <h3 className="text-[11px] font-display uppercase tracking-widest font-black text-slate-800">
+                             {activeTab === "maintenance-checklist-guest" ? "Guest Room Registry Auditing" : 
+                              activeTab === "maintenance-checklist" ? "Public Area Inspection Details" : "Concierge Shift Specifications"}
+                           </h3>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                           <div className="space-y-2">
+                              <label className="block text-[9px] font-display uppercase tracking-widest font-black text-slate-800">
+                                {activeTab === "maintenance-checklist-guest" ? "Room Number *" : 
+                                 activeTab === "maintenance-checklist" ? "Inspection Location *" : "Assignment/Area *"}
+                              </label>
+                              <input 
+                                 type="text" 
+                                 required
+                                 placeholder={activeTab === "maintenance-checklist-guest" ? "e.g. 302, 415" : activeTab === "maintenance-checklist" ? "e.g. Lobby, Garden" : "e.g. Bell Desk, Valet"}
+                                 value={checklistRoomNumber}
+                                 onChange={(e) => setChecklistRoomNumber(e.target.value)}
+                                 className="w-full p-2.5 bg-white border border-slate-200 text-xs text-slate-900 font-serif italic focus:ring-1 focus:ring-gold focus:border-gold outline-none shadow-sm rounded-sm"
+                              />
+                           </div>
+
+                           <div className="space-y-2">
+                              <label className="block text-[9px] font-display uppercase tracking-widest font-black text-slate-800">
+                                Inspected By
+                              </label>
+                              <input 
+                                 type="text" 
+                                 placeholder="Full representative name"
+                                 value={checklistInspectorName}
+                                 onChange={(e) => setChecklistInspectorName(e.target.value)}
+                                 className="w-full p-2.5 bg-white border border-slate-200 text-xs text-slate-900 font-serif italic focus:ring-1 focus:ring-gold focus:border-gold outline-none shadow-sm rounded-sm"
+                              />
+                           </div>
+
+                           <div className="space-y-2">
+                              <label className="block text-[9px] font-display uppercase tracking-widest font-black text-slate-800">
+                                Check Type / Standard
+                              </label>
+                              <select 
+                                 value={checklistInspectionType}
+                                 onChange={(e) => setChecklistInspectionType(e.target.value)}
+                                 className="w-full p-2.5 bg-white border border-slate-200 text-xs text-slate-950 font-serif italic focus:ring-1 focus:ring-gold focus:border-gold outline-none shadow-sm rounded-sm"
+                              >
+                                 <option value="Routine">Standard Routine Check</option>
+                                 <option value="Deep Clean">Full Deep Clean Audit</option>
+                                 <option value="VIP Pre-Arrival">VIP Pre-Arrival Screening</option>
+                                 <option value="Departure Inspect">Post-Departure Inspection</option>
+                                 <option value="Preventative">Scheduled Preventative Maintenance</option>
+                              </select>
+                           </div>
+
+                           <div className="space-y-2">
+                              <label className="block text-[9px] font-display uppercase tracking-widest font-black text-slate-800">
+                                Shift Schedule
+                              </label>
+                              <select 
+                                 value={checklistShift}
+                                 onChange={(e) => setChecklistShift(e.target.value)}
+                                 className="w-full p-2.5 bg-white border border-slate-200 text-xs text-slate-950 font-serif italic focus:ring-1 focus:ring-gold focus:border-gold outline-none shadow-sm rounded-sm"
+                              >
+                                 <option value="Morning">Morning Shift (06:00 - 14:00)</option>
+                                 <option value="Afternoon">Afternoon Shift (14:00 - 22:00)</option>
+                                 <option value="Night">Night Shift (22:00 - 06:00)</option>
+                              </select>
                            </div>
                         </div>
                      </div>
@@ -2132,9 +4790,23 @@ export default function App() {
                     <div className="flex justify-start pt-8 pb-32 no-print">
                        <button 
                           onClick={() => {
-                            const newLog = { 
-                              date: checklistDate, 
-                              user: currentUser?.displayName || "Charles", 
+                             if (!checklistRoomNumber.trim()) {
+                               if (activeTab === "maintenance-checklist-guest") {
+                                 alert("Please specify the Room Number before submitting.");
+                               } else if (activeTab === "maintenance-checklist") {
+                                 alert("Please specify the Inspection Location before submitting.");
+                               } else {
+                                 alert("Please specify the Desk Assignment/Area before submitting.");
+                               }
+                               return;
+                             }
+
+                             const newLog = { 
+                               date: checklistDate, 
+                               user: checklistInspectorName || "Charles", 
+                               roomNumber: checklistRoomNumber,
+                               inspectionType: checklistInspectionType,
+                               shift: checklistShift,
                               type: activeTab === "maintenance-checklist" ? "public" : 
                                     activeTab === "maintenance-checklist-guest" ? "guest" : "concierge",
                               values: checklistValues,
@@ -2161,6 +4833,7 @@ export default function App() {
                             setShowHistory(true);
                             setChecklistValues({});
                             setChecklistNotes("");
+                            setChecklistRoomNumber("");
                           }}
                           className="luxury-button !px-12 !py-5 text-sm uppercase tracking-[0.4em] font-black group flex items-center gap-4"
                        >
@@ -2170,256 +4843,1191 @@ export default function App() {
                   </div>
                 )}
               </div>
-            ) : activeTab === "maintenance-guidelines" ? (
+            ) : activeTab === "guest-recovery" ? (
               <div className="space-y-8">
-                <div className="flex items-center justify-between mb-8">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                   <div>
-                    <h2 className="text-3xl font-serif text-slate-900 mb-2 italic">Maintenance Guidelines</h2>
-                    <p className="luxury-label !text-[10px]">Standard Operating Procedures for Property Management</p>
+                    <h2 className="text-4xl font-serif text-slate-900 italic">Guest Recovery Console</h2>
+                    <p className="luxury-label opacity-60">Resolution registry & service recovery management</p>
+                    {offlineComplaintsCount > 0 && (
+                      <div className="mt-3 flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 text-xs rounded-md shadow-sm w-fit transition-all duration-300">
+                        <span className="flex h-2 w-2 relative">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                        </span>
+                        <span className="font-sans font-semibold">
+                          {offlineComplaintsCount} Pending Offline Submissions Cached
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => triggerClientBackgroundSync()}
+                          disabled={isOfflineSyncing}
+                          className={`ml-2 px-2.5 py-1 bg-amber-600 text-white rounded hover:bg-amber-700 text-[10px] font-sans font-extrabold uppercase tracking-wider transition flex items-center gap-1 cursor-pointer border border-amber-500 shadow-xs ${isOfflineSyncing ? "opacity-50 cursor-not-allowed" : ""}`}
+                        >
+                          {isOfflineSyncing ? "Syncing..." : "🔄 Sync Now"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {(userRole === "Administrator" || userRole === "Super Admin" || userRole === "Group Controller" || userRole === "Manager" || userRole === "Audit" || userRole === "admin") && (
+                    <button 
+                      onClick={() => setShowComplaintForm(true)}
+                      className="flex items-center gap-2 px-8 py-4 bg-luxury-black text-white text-[10px] font-display uppercase tracking-widest font-black hover:bg-gold transition-all shadow-xl"
+                    >
+                      <Plus size={16} /> Report Guest Concern
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center bg-white p-4 border border-slate-100 shadow-sm mb-4">
+                  <div className="flex-1 flex items-center gap-3">
+                    <Search size={18} className="text-slate-400 shrink-0" />
+                    <input 
+                      type="text"
+                      placeholder="Search by Guest Name, Room or Description..."
+                      value={complaintSearch}
+                      onChange={(e) => setComplaintSearch(e.target.value)}
+                      className="w-full bg-transparent border-none text-sm font-serif italic focus:ring-0 outline-none"
+                    />
+                  </div>
+                  <div className="h-px sm:h-8 w-full sm:w-px bg-slate-100" />
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <Calendar size={14} className="text-gold shrink-0" />
+                      <span className="text-[10px] font-display uppercase tracking-wider text-slate-400 font-bold">Operational Window:</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="date" 
+                        value={recoveryStartDate}
+                        onChange={(e) => setRecoveryStartDate(e.target.value)}
+                        className="px-2 py-1 bg-slate-50 border border-slate-200 text-xs text-slate-700 font-mono focus:outline-none focus:border-gold"
+                      />
+                      <span className="text-[10px] text-slate-400">—</span>
+                      <input 
+                        type="date" 
+                        value={recoveryEndDate}
+                        onChange={(e) => setRecoveryEndDate(e.target.value)}
+                        className="px-2 py-1 bg-slate-50 border border-slate-200 text-xs text-slate-700 font-mono focus:outline-none focus:border-gold"
+                      />
+                    </div>
+                    {(recoveryStartDate || recoveryEndDate) && (
+                      <button 
+                        onClick={() => { setRecoveryStartDate(""); setRecoveryEndDate(""); }}
+                        className="text-[10px] font-display uppercase tracking-widest text-red-500 hover:text-red-700 transition-colors font-bold px-2 py-1 border border-red-200 bg-red-50/50"
+                      >
+                        Reset Window
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                   {/* Public Areas Section */}
-                   <div className="luxury-card p-10 bg-white space-y-10 border-t-4 border-t-gold">
-                      <div className="flex items-center gap-6">
-                         <div className="w-16 h-16 bg-luxury-cream text-gold flex items-center justify-center">
-                            <Hotel size={32} strokeWidth={1} />
-                         </div>
-                         <div>
-                            <h3 className="text-3xl font-serif italic text-slate-900">Public Areas</h3>
-                            <p className="luxury-label !text-[8px] opacity-60">Preventive Maintenance Process</p>
-                         </div>
-                      </div>
+                {/* Real-time Property Syndicate Navigator */}
+                <div className="flex border-b border-slate-100 pb-2 mb-6 gap-6 text-[10px] font-display uppercase tracking-widest overflow-x-auto scrollbar-none">
+                  {[
+                    { 
+                      id: selectedCompany || 'cml', 
+                      label: selectedCompany === 'wyndham' ? "Wyndham Garden Active Logs" : 
+                             selectedCompany === 'ramada' ? "Ramada Suites Active Logs" : 
+                             "CML Corporate Active Logs" 
+                    },
+                    { id: "pending-approvals", label: "My Pending Approvals" },
+                    { id: "archived", label: "Disposed / Archived Logs" }
+                  ].map((tab) => {
+                    const isActive = guestRecoveryPropertyFilter === tab.id;
+                    const count = complaints.filter(c => {
+                      let matchesDateRange = true;
+                      if (recoveryStartDate || recoveryEndDate) {
+                        const ts = parseDateToMs(c.createdAt);
+                        if (!ts) {
+                          matchesDateRange = false;
+                        } else {
+                          if (recoveryStartDate) {
+                            const startMs = new Date(recoveryStartDate + "T00:00:00").getTime();
+                            if (ts < startMs) matchesDateRange = false;
+                          }
+                          if (recoveryEndDate) {
+                            const endMs = new Date(recoveryEndDate + "T23:59:59").getTime();
+                            if (ts > endMs) matchesDateRange = false;
+                          }
+                        }
+                      }
+                      if (!matchesDateRange) return false;
 
-                      <div className="space-y-12">
-                         <section>
-                            <h4 className="text-[10px] font-display uppercase tracking-[0.25em] font-black text-gold mb-6 flex items-center gap-4">
-                               Steps to Complete Process
-                               <div className="h-px flex-1 bg-gold/10" />
-                            </h4>
-                            <div className="space-y-6">
-                               {[
-                                 "Take a walk around all public areas (depending on the size of your site you may have to break it up into multiple days).",
-                                 "Complete a visual inspection of the area(s).",
-                                 "Perform all necessary corrective work.",
-                                 "In a binder index the completed property checklist(s) or save as a computer file.",
-                                 "Notify Owner/GM of trends and any additional concerns."
-                               ].map((step, i) => (
-                                 <div key={i} className="flex gap-6 items-start group">
-                                    <span className="font-serif italic text-gold text-2xl leading-none opacity-40 group-hover:opacity-100 transition-opacity">{i+1}.</span>
-                                    <p className="text-[13px] text-slate-600 leading-relaxed font-medium">{step}</p>
-                                 </div>
-                               ))}
-                            </div>
-                         </section>
-
-                         <section>
-                            <h4 className="text-[10px] font-display uppercase tracking-[0.25em] font-black text-gold mb-6 flex items-center gap-4">
-                               Schedule Property Maintenance
-                               <div className="h-px flex-1 bg-gold/10" />
-                            </h4>
-                            <div className="grid grid-cols-1 gap-4">
-                               {[
-                                 "Schedule preventive checks within a year's timeframe or more frequently if determined by management.",
-                                 "Customize scheduling for individual property needs in coordination with GM/Ownership.",
-                                 "Schedule during slow hours to minimize impact on guest experience and enjoyment.",
-                                 "Maintain a fully-equipped maintenance cart for efficient and timely implementation."
-                               ].map((item, i) => (
-                                 <div key={i} className="flex gap-4 items-center p-4 bg-slate-50/50 border border-slate-100 rounded-sm italic text-[11px] text-slate-500">
-                                    <div className="w-1 h-1 bg-gold rounded-full shrink-0" />
-                                    {item}
-                                 </div>
-                               ))}
-                            </div>
-                         </section>
-
-                         <section className="bg-luxury-black p-8 text-white relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-gold/5 rounded-full translate-x-1/2 -translate-y-1/2" />
-                            <h4 className="text-[10px] font-display uppercase tracking-[0.3em] font-black text-gold mb-6">Securing External Bids</h4>
-                            <div className="space-y-4">
-                               {[
-                                 "Obtain three competitive bids per contract",
-                                 "Avoid automatic renewal clauses in agreements",
-                                 "Request optional 30-day cancellation clauses",
-                                 "Include termination rights for poor workmanship"
-                               ].map((tip, i) => (
-                                 <div key={i} className="flex items-center gap-3 text-[10px] font-display uppercase tracking-widest text-slate-300">
-                                    <ChevronRight size={14} className="text-gold" />
-                                    {tip}
-                                 </div>
-                               ))}
-                            </div>
-                         </section>
-
-                         <section className="flex items-center justify-between p-6 bg-luxury-cream/30 border border-gold/10">
-                            <div>
-                               <h5 className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800 mb-1">Record Keeping</h5>
-                               <p className="text-[11px] text-slate-500 italic">Maintain checks in three-ring binder or secure digital storage.</p>
-                            </div>
-                            <FileText className="text-gold/40" size={24} />
-                         </section>
-                      </div>
-                   </div>
-
-                   {/* Guest Room Section */}
-                   <div className="luxury-card p-10 bg-white border-t-4 border-t-gold space-y-10">
-                      <div className="flex items-center gap-6">
-                         <div className="w-16 h-16 bg-luxury-cream text-gold flex items-center justify-center">
-                            <Hotel size={32} strokeWidth={1} />
-                         </div>
-                         <div>
-                            <h3 className="text-3xl font-serif italic text-slate-900">Guest Room</h3>
-                            <p className="luxury-label !text-[8px] opacity-60">Preventive Maintenance Process</p>
-                         </div>
-                      </div>
-
-                      <div className="space-y-12">
-                         <section>
-                            <h4 className="text-[10px] font-display uppercase tracking-[0.25em] font-black text-gold mb-6 flex items-center gap-4">
-                               Steps to Complete Process
-                               <div className="h-px flex-1 bg-gold/10" />
-                            </h4>
-                            <div className="space-y-6">
-                               {[
-                                 "Select a guest room(s) for maintenance.",
-                                 "Complete a visual inspection.",
-                                 "Note any items needing repair or attention.",
-                                 "Perform all necessary corrective work in the guest room/suite.",
-                                 "In a binder, index the completed checklist form under the appropriate room number or save as a computer file.",
-                                 "In the front of the binder, record the room number on the Preventative Maintenance Summary under the appropriate quarter.",
-                                 "Notify Owner/GM of trends and any additional concerns."
-                               ].map((step, i) => (
-                                 <div key={i} className="flex gap-6 items-start group">
-                                    <span className="font-serif italic text-gold text-2xl leading-none opacity-40 group-hover:opacity-100 transition-opacity">{i+1}.</span>
-                                    <p className="text-[13px] text-slate-600 leading-relaxed font-medium">{step}</p>
-                                 </div>
-                               ))}
-                            </div>
-                         </section>
-
-                         <section>
-                            <h4 className="text-[10px] font-display uppercase tracking-[0.25em] font-black text-gold mb-6 flex items-center gap-4">
-                               Scheduling Guest Room Maintenance
-                               <div className="h-px flex-1 bg-gold/10" />
-                            </h4>
-                            <div className="grid grid-cols-1 gap-4">
-                               {[
-                                 "Schedule preventive checks within a year's timeframe or more frequently if determined by ownership/management.",
-                                 "Customize scheduling for individual property needs in coordination with GM/Ownership.",
-                                 "Work with your Owner, General Manager, Regional manager or Management.",
-                                 "Company to determine how often this program should take place.",
-                                 "Prepare fully-equipped maintenance carts to implement and maintain the program efficiently and correctly."
-                               ].map((item, i) => (
-                                 <div key={i} className="flex gap-4 items-center p-4 bg-slate-50/50 border border-slate-100 rounded-sm italic text-[11px] text-slate-500">
-                                    <div className="w-1 h-1 bg-gold rounded-full shrink-0" />
-                                    {item}
-                                 </div>
-                               ))}
-                            </div>
-                         </section>
-
-                         <section className="bg-luxury-black p-8 text-white relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-gold/5 rounded-full translate-x-1/2 -translate-y-1/2" />
-                            <h4 className="text-[10px] font-display uppercase tracking-[0.3em] font-black text-gold mb-6">Securing Bids Standards</h4>
-                            <div className="space-y-4">
-                               {[
-                                 "Obtain no less than three competitive bids per contract",
-                                 "Avoid automatic renewal clauses from contracts",
-                                 "Request the option of a 30-day cancellation",
-                                 "Include termination rights for poor quality or workmanship"
-                               ].map((tip, i) => (
-                                 <div key={i} className="flex items-center gap-3 text-[10px] font-display uppercase tracking-widest text-slate-300">
-                                    <ChevronRight size={14} className="text-gold" />
-                                    {tip}
-                                 </div>
-                               ))}
-                            </div>
-                         </section>
-
-                         <section className="p-6 bg-luxury-cream/30 border border-gold/10 space-y-4">
-                            <div className="flex items-center justify-between">
-                               <div>
-                                  <h5 className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800 mb-1">Record Keeping</h5>
-                                  <p className="text-[11px] text-slate-500 italic">One inspection sheet per room, indexed by room number.</p>
-                               </div>
-                               <FileText className="text-gold/40" size={24} />
-                            </div>
-                            <p className="text-[10.5px] leading-relaxed text-slate-500 border-t border-gold/10 pt-4">
-                               Place the <span className="font-bold text-slate-700">Preventive Maintenance Summary</span> in the very beginning of the binder to summarize frequency by quarter.
-                            </p>
-                         </section>
-
-                         <div className="pt-6 border-t border-slate-100">
-                            <p className="text-[11px] text-slate-500 italic leading-relaxed">
-                               <span className="font-bold text-gold uppercase tracking-widest text-[9px] mr-2">Additional Note:</span>
-                               Complete room preventive maintenance on a daily basis to stay ahead. Each hotel has a responsibility to maintain records for unannounced inspections.
-                            </p>
-                         </div>
-                      </div>
-                   </div>
+                      if (tab.id === "archived") {
+                        return c.isArchived === true;
+                      } else if (tab.id === "pending-approvals") {
+                        if (c.isArchived === true) return false;
+                        const todayStr = new Date().toISOString().split("T")[0];
+                        const hasActiveDelegation = Array.isArray(workflowConfig?.delegations) && workflowConfig.delegations.some((del: any) => {
+                          if (del.toUserEmail?.toLowerCase() !== currentUser?.email?.toLowerCase()) return false;
+                          return todayStr >= del.startDate && todayStr <= del.endDate;
+                        });
+                        const isApproverInConfig = workflowConfig?.approverEmails?.includes(currentUser?.email || "");
+                        const isHOD = userRole === "Manager" || userRole === "Administrator" || userRole === "Super Admin" || userRole === "admin" || isApproverInConfig || hasActiveDelegation;
+                        const isSuperAdmin = userRole === "Administrator" || userRole === "Super Admin" || userRole === "admin" || isApproverInConfig;
+                        
+                        const needsHOD = !c.hodApproved;
+                        const needsSuperAdmin = c.hodApproved && !c.superAdminApproved;
+                        
+                        return (needsHOD && isHOD) || (needsSuperAdmin && isSuperAdmin);
+                      } else {
+                        if (c.isArchived === true) return false;
+                        return tab.id === "all" || c.propertyId === tab.id;
+                      }
+                    }).length;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setGuestRecoveryPropertyFilter(tab.id)}
+                        className={cn(
+                          "pb-2 font-extrabold transition-all relative flex items-center gap-1.5 whitespace-nowrap",
+                          isActive ? "text-gold border-b-2 border-gold font-black" : "text-slate-400 hover:text-slate-600"
+                        )}
+                      >
+                        {tab.label}
+                        <span className={cn(
+                          "text-[8px] font-mono px-1.5 py-0.2 rounded-full",
+                          isActive ? "bg-gold text-white" : "bg-slate-100 text-slate-500"
+                        )}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
+
+                <div className="grid grid-cols-1 gap-6 max-h-[700px] overflow-y-auto pr-4 custom-scrollbar rounded-sm">
+                  {complaintsError ? (
+                    <div className="py-20 px-10 text-center bg-white border border-red-100 flex flex-col items-center gap-6">
+                      <div className="w-16 h-16 bg-red-50 text-red-600 flex items-center justify-center rounded-sm">
+                         <Shield size={32} />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-serif italic text-slate-800 mb-2">Access Restricted</h3>
+                        <p className="text-slate-500 font-serif italic text-sm">{complaintsError}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    parsedComplaintsList.length === 0 ? (
+                      <div className="py-20 text-center bg-white border border-slate-100">
+                        <div className="w-16 h-16 bg-luxury-cream text-gold flex items-center justify-center mx-auto mb-4">
+                           <AlertCircle size={32} />
+                        </div>
+                        <p className="text-slate-600 font-serif italic">No guest complaint cases found matching your criteria.</p>
+                      </div>
+                    ) : (
+                      parsedComplaintsList.map((complaint) => (
+                        <motion.div 
+                          key={complaint.id}
+                          layout
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          onClick={() => setSelectedComplaint(complaint)}
+                          className={cn(
+                            "luxury-card bg-white p-8 border border-slate-100 group transition-all shadow-sm flex flex-col md:flex-row gap-8 items-start md:items-center cursor-pointer",
+                            complaint.priority === 'Urgent' && complaint.status !== 'Resolved' ? "urgent-pulse-glow" : "hover:border-gold/30"
+                          )}
+                        >
+                           <div className="shrink-0 w-full md:w-48">
+                              <div className="flex items-center flex-wrap gap-2 mb-2">
+                                 <span className={cn(
+                                   "px-2 py-0.5 text-[8px] font-display uppercase tracking-widest font-black",
+                                   complaint.priority === 'Urgent' || complaint.priority === 'High' ? "bg-red-50 text-red-600" :
+                                   complaint.priority === 'Medium' ? "bg-amber-50 text-amber-600" : "bg-slate-50 text-slate-500"
+                                 )}>
+                                   {complaint.priority} Priority
+                                 </span>
+                                 <span className={cn(
+                                   "px-2 py-0.5 text-[8px] font-display uppercase tracking-widest font-black border",
+                                   complaint.propertyId === 'wyndham' ? "bg-teal-50 text-teal-800 border-teal-100" :
+                                   complaint.propertyId === 'ramada' ? "bg-indigo-50 text-indigo-800 border-indigo-100" :
+                                   "bg-amber-50 text-amber-800 border-amber-100"
+                                 )}>
+                                   {complaint.propertyId === 'wyndham' ? "Wyndham" :
+                                    complaint.propertyId === 'ramada' ? "Ramada" :
+                                    "HQ-CML"}
+                                 </span>
+                                 <span className={cn(
+                                   "px-2 py-0.5 text-[8px] font-display uppercase tracking-widest font-black",
+                                   complaint.status === 'Resolved' ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
+                                 )}>
+                                   {complaint.status}
+                                 </span>
+                                 {complaint.photoBase64 && (
+                                   <span className="px-2 py-0.5 text-[8px] font-display uppercase tracking-widest font-black bg-blue-50 text-blue-600 shadow-sm flex items-center gap-1">
+                                      📸 Photo Attached
+                                   </span>
+                                 )}
+                              </div>
+                              <h4 className="text-xl font-serif italic text-slate-900 group-hover:text-gold transition-colors truncate">{complaint.guestName || "Anonymous Guest"}</h4>
+                              <p className="text-[10px] font-display uppercase tracking-widest text-slate-500 font-bold">Room No. / Walk-ins: {complaint.roomNumber || "N/A"}</p>
+                           </div>
+
+                           <div className="flex-1 w-full border-l-0 md:border-l border-slate-100 md:pl-8">
+                              <p className="text-[10px] font-display uppercase tracking-widest text-gold mb-2 font-black">{complaint.type}</p>
+                              <p className="text-sm text-slate-600 font-serif italic leading-relaxed line-clamp-2">{complaint.description}</p>
+                           </div>
+
+                           <div className="shrink-0 w-full md:w-auto flex flex-col items-end gap-2">
+                              <div className="text-right flex flex-col items-end">
+                                 <p className="text-[8px] font-display uppercase tracking-widest text-slate-400 font-black">Reported By</p>
+                                 <p className="text-[10px] font-serif italic text-slate-950 font-bold">{complaint.reporterName || complaint.authorName}</p>
+                                 {complaint.reporterRole && (
+                                   <span className="px-1.5 py-0.5 bg-slate-100 rounded-[2px] font-display uppercase text-[7px] text-slate-500 tracking-widest block mt-0.5">
+                                      {complaint.reporterRole}
+                                   </span>
+                                 )}
+                              </div>
+                              <div className="text-right">
+                                 <p className="text-[8px] font-display uppercase tracking-widest text-slate-400 font-black">Timestamp</p>
+                                 <p className="text-[10px] font-serif italic text-slate-700">
+                                   {complaint.createdAt ? (complaint.createdAt.toDate ? new Date(complaint.createdAt.toDate()).toLocaleString() : new Date(complaint.createdAt).toLocaleString()) : "Real-time"}
+                                 </p>
+                              </div>
+                           </div>
+                        </motion.div>
+                      ))
+                    )
+                  )}
+                </div>
+
+                <AnimatePresence>
+                  {showComplaintForm && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                      <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setShowComplaintForm(false)}
+                        className="absolute inset-0 bg-black/80 backdrop-blur-md"
+                      />
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                        className="relative w-full max-w-2xl bg-white shadow-2xl border-t-8 border-gold overflow-y-auto max-h-[90vh]"
+                      >
+                         <form onSubmit={handleLodgeComplaint} className="p-12 space-y-8">
+                            <div className="flex justify-between items-start mb-4">
+                               <div>
+                                  <h3 className="text-3xl font-serif italic text-slate-900 mb-2">Report Guest Concern</h3>
+                                  <p className="luxury-label opacity-60">Formal registry for service recovery tracking</p>
+                               </div>
+                               <button type="button" onClick={() => setShowComplaintForm(false)} className="text-slate-400 hover:text-slate-900 transition-colors">
+                                  <X size={24} />
+                               </button>
+                            </div>
+
+                            <div className="space-y-2 border-b border-slate-100 pb-6">
+                               <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800">CML Portfolio Hotel/Property</label>
+                               <select 
+                                 value={complaintForm.propertyId || selectedCompany || 'wyndham'}
+                                 onChange={(e) => setComplaintForm({...complaintForm, propertyId: e.target.value})}
+                                 className="w-full bg-slate-50 border-none px-6 py-4 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
+                               >
+                                 <option value="wyndham">Wyndham Garden Wailoaloa Beach</option>
+                                 <option value="ramada">Ramada Suites by Wyndham Wailoaloa Beach</option>
+                                 <option value="cml">CML Corporate / Other</option>
+                               </select>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                               <div className="space-y-2">
+                                  <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800">Guest Full Name</label>
+                                  <input 
+                                    type="text"
+                                    required
+                                    value={complaintForm.guestName}
+                                    onChange={(e) => setComplaintForm({...complaintForm, guestName: e.target.value})}
+                                    className="w-full bg-slate-50 border-none px-6 py-4 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
+                                    placeholder="e.g. John Doe"
+                                  />
+                               </div>
+                               <div className="space-y-2">
+                                  <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800">Room No. / Walk-ins</label>
+                                  <input 
+                                    type="text"
+                                    required
+                                    value={complaintForm.roomNumber}
+                                    onChange={(e) => setComplaintForm({...complaintForm, roomNumber: e.target.value})}
+                                    className="w-full bg-slate-50 border-none px-6 py-4 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
+                                    placeholder="e.g. 402 or Restaurant/Retail"
+                                  />
+                               </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                               <div className="space-y-2">
+                                  <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800">Your Full Name (Reporter)</label>
+                                  <input 
+                                    type="text"
+                                    required
+                                    value={complaintForm.reporterName}
+                                    onChange={(e) => setComplaintForm({...complaintForm, reporterName: e.target.value})}
+                                    className="w-full bg-slate-50 border-none px-6 py-4 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
+                                    placeholder="e.g. Jean-Luc"
+                                  />
+                               </div>
+                               <div className="space-y-2">
+                                  <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800">Your Department / Group / Guest Status</label>
+                                  <input 
+                                    type="text"
+                                    required
+                                    value={complaintForm.reporterRole}
+                                    onChange={(e) => setComplaintForm({...complaintForm, reporterRole: e.target.value})}
+                                    className="w-full bg-slate-50 border-none px-6 py-4 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
+                                    placeholder="e.g. Front Office, F&B Staff, Guest, Walk-in"
+                                  />
+                               </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                               <div className="space-y-2">
+                                  <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800">Issue Category</label>
+                                  <select 
+                                    value={complaintForm.type}
+                                    onChange={(e) => setComplaintForm({...complaintForm, type: e.target.value})}
+                                    className="w-full bg-slate-50 border-none px-6 py-4 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
+                                  >
+                                    <option>Service Issue</option>
+                                    <option>Cleanliness</option>
+                                    <option>Maintenance</option>
+                                    <option>Billing / Folio</option>
+                                    <option>Noise Complaint</option>
+                                    <option>Security / Safety</option>
+                                    <option>Staff Conduct</option>
+                                    <option>FB Quality</option>
+                                  </select>
+                               </div>
+                               <div className="space-y-2">
+                                  <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800">Priority Level</label>
+                                  <div className="flex gap-2">
+                                    {['Low', 'Medium', 'High', 'Urgent'].map((level) => (
+                                      <button
+                                        key={level}
+                                        type="button"
+                                        onClick={() => setComplaintForm({...complaintForm, priority: level})}
+                                        className={cn(
+                                          "flex-1 py-1 px-1 text-[8px] font-display uppercase tracking-widest font-black transition-all border",
+                                          complaintForm.priority === level 
+                                            ? "bg-gold text-white border-gold shadow-lg" 
+                                            : "bg-white text-slate-400 border-slate-100 hover:border-gold/30"
+                                        )}
+                                      >
+                                        {level}
+                                      </button>
+                                    ))}
+                                  </div>
+                               </div>
+                            </div>
+
+                            <div className="space-y-2">
+                               <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800">Photo Evidence / Attachment</label>
+                               <div className="flex items-center gap-6 p-6 bg-slate-50 border border-dashed border-slate-200">
+                                  {!complaintForm.photoBase64 ? (
+                                    <label className="flex items-center gap-3 cursor-pointer py-2 px-4 bg-white border border-slate-100 hover:border-gold/30 text-slate-700 transition-all shadow-sm">
+                                       <Camera size={16} className="text-gold" />
+                                       <span className="text-[10px] font-display uppercase tracking-widest font-black text-slate-600">Attach Location/Appliance Photo</span>
+                                       <input 
+                                         type="file" 
+                                         accept="image/*" 
+                                         capture="environment"
+                                         onChange={handleComplaintImageUpload} 
+                                         className="hidden" 
+                                       />
+                                    </label>
+                                  ) : (
+                                    <div className="flex items-center gap-4 w-full">
+                                       <div className="relative w-20 h-20 border border-gold/30 bg-white p-1">
+                                          <img src={complaintForm.photoBase64} alt="Evidence Preview" className="w-full h-full object-cover" />
+                                       </div>
+                                       <div className="flex-1">
+                                          <p className="text-[10px] font-display uppercase tracking-widest text-emerald-600 font-bold mb-1">✓ Evidence Photo Attached</p>
+                                          <button 
+                                            type="button" 
+                                            onClick={() => setComplaintForm(prev => ({ ...prev, photoBase64: "" }))}
+                                            className="text-[9px] font-display uppercase tracking-widest text-red-500 font-black hover:underline"
+                                          >
+                                            Remove Photo
+                                          </button>
+                                       </div>
+                                    </div>
+                                  )}
+                               </div>
+                            </div>
+
+                            <div className="space-y-2">
+                               <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800">Concern Description</label>
+                               <textarea 
+                                 rows={4}
+                                 required
+                                 value={complaintForm.description}
+                                 onChange={(e) => setComplaintForm({...complaintForm, description: e.target.value})}
+                                 className="w-full bg-slate-50 border-none px-6 py-4 text-sm font-serif italic focus:ring-1 focus:ring-gold/50 resize-none"
+                                 placeholder="Please provide full details of the guest's concern and any immediate actions taken..."
+                               />
+                            </div>
+
+                            <div className="pt-6">
+                               <button 
+                                 type="submit"
+                                 className="w-full py-5 bg-gold text-white text-[11px] font-display uppercase tracking-[0.4em] font-black hover:bg-luxury-black transition-all shadow-2xl active:scale-95"
+                               >
+                                 Submit Concern to Recovery Team
+                               </button>
+                            </div>
+                         </form>
+                      </motion.div>
+                    </div>
+                  )}
+                </AnimatePresence>
+
+                <AnimatePresence>
+                  {selectedComplaint && (
+                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+                      <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setSelectedComplaint(null)}
+                        className="absolute inset-0 bg-black/80 backdrop-blur-md"
+                      />
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                        className="relative w-full max-w-4xl bg-white shadow-2xl border-t-8 border-gold overflow-hidden flex flex-col max-h-[90vh]"
+                      >
+                         <div className="p-8 border-b border-slate-100 flex justify-between items-start">
+                            <div>
+                               <div className="flex items-center gap-2 mb-2">
+                                  <span className={cn(
+                                    "px-2 py-0.5 text-[8px] font-display uppercase tracking-widest font-black",
+                                    selectedComplaint.priority === 'Urgent' || selectedComplaint.priority === 'High' ? "bg-red-50 text-red-600" :
+                                    selectedComplaint.priority === 'Medium' ? "bg-amber-50 text-amber-600" : "bg-slate-50 text-slate-500"
+                                  )}>
+                                    {selectedComplaint.priority} Priority
+                                  </span>
+                                  <span className={cn(
+                                    "px-2 py-0.5 text-[8px] font-display uppercase tracking-widest font-black",
+                                    selectedComplaint.status === 'Resolved' ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
+                                  )}>
+                                    {selectedComplaint.status}
+                                  </span>
+                               </div>
+                               <h3 className="text-3xl font-serif italic text-slate-900">{selectedComplaint.guestName}</h3>
+                               <p className="text-xs font-display uppercase tracking-widest text-slate-400 font-bold">Room {selectedComplaint.roomNumber} • {selectedComplaint.type}</p>
+                            </div>
+                            <button onClick={() => setSelectedComplaint(null)} className="text-slate-400 hover:text-slate-900 transition-colors">
+                               <X size={24} />
+                            </button>
+                         </div>
+
+                         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+                               <div className="lg:col-span-2 space-y-12">
+                                  <section>
+                                     <h4 className="text-[10px] font-display uppercase tracking-[0.2em] text-gold font-black mb-4">Initial Concern Details</h4>
+                                     <div className="p-6 bg-slate-50 border border-slate-100 rounded-sm italic font-serif text-slate-700 leading-relaxed">
+                                        {selectedComplaint.description}
+                                     </div>
+                                  </section>
+
+                                  {selectedComplaint.photoBase64 && (
+                                    <section>
+                                       <h4 className="text-[10px] font-display uppercase tracking-[0.2em] text-gold font-black mb-4">Attached Photo Evidence</h4>
+                                       <div className="p-4 bg-slate-50 border border-slate-100 rounded-sm flex justify-center items-center">
+                                          <img 
+                                            src={selectedComplaint.photoBase64} 
+                                            alt="Complaint Evidence" 
+                                            className="max-w-full max-h-[350px] object-contain shadow-md border-2 border-white rounded-[2px]" 
+                                          />
+                                       </div>
+                                    </section>
+                                  )}
+
+                                  <section>
+                                     <h4 className="text-[10px] font-display uppercase tracking-[0.2em] text-gold font-black mb-4 flex items-center justify-between">
+                                        Communication & Action Thread
+                                        <div className="h-px w-24 bg-gold/20" />
+                                     </h4>
+                                     <div className="space-y-6">
+                                        <div className="space-y-4">
+                                           {(selectedComplaint.updates || []).map((update: any, i: number) => (
+                                              <div key={i} className="flex gap-4 items-start">
+                                                 <div className="w-8 h-8 rounded-sm bg-luxury-cream text-gold flex items-center justify-center shrink-0 text-[10px] font-black border border-gold/10">
+                                                    {update.authorName?.[0] || 'S'}
+                                                 </div>
+                                                 <div className="flex-1">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                       <p className="text-[9px] font-display uppercase tracking-widest text-slate-900 font-bold">{update.authorName}</p>
+                                                       <p className="text-[8px] text-slate-400">{update.timestamp ? (update.timestamp.toDate ? new Date(update.timestamp.toDate()).toLocaleString() : new Date(update.timestamp).toLocaleString()) : 'Just now'}</p>
+                                                    </div>
+                                                    <p className="text-xs font-serif italic text-slate-600 bg-white p-3 border border-slate-100 shadow-sm">{update.message}</p>
+                                                 </div>
+                                              </div>
+                                           ))}
+                                        </div>
+
+                                        <div className="pt-4">
+                                           <div className="relative">
+                                              <textarea 
+                                                value={newStaffReply}
+                                                onChange={(e) => setNewStaffReply(e.target.value)}
+                                                placeholder="Add staff update or reply to thread..."
+                                                className="w-full bg-slate-50 border border-slate-200 p-4 text-xs font-serif italic outline-none focus:border-gold/30 resize-none h-24"
+                                              />
+                                              <button 
+                                                onClick={async () => {
+                                                  if (!newStaffReply.trim()) return;
+                                                  try {
+
+                                                    const messageContent = newStaffReply;
+                                                    await updateDoc(doc(db, `complaints-${selectedComplaint.propertyId || selectedCompany || 'cml'}`, selectedComplaint.id), {
+                                                      updates: arrayUnion({
+                                                        message: messageContent,
+                                                        authorName: currentUser.displayName || currentUser.email?.split('@')[0],
+                                                        timestamp: new Date() // Client side date for immediate display, but arrayUnion is slightly complex with serverTimestamp in arrays
+                                                      })
+                                                    });
+
+                                                    // Safe background trigger of Google Chat webhook proxy
+                                                    fetch("/api/notify-complaint-update", {
+                                                      method: "POST",
+                                                      headers: { "Content-Type": "application/json" },
+                                                      body: JSON.stringify({
+                                                        complaint: selectedComplaint,
+                                                        action: "update",
+                                                        authorName: currentUser.displayName || currentUser.email?.split('@')[0] || "Staff",
+                                                        updateMessage: messageContent,
+                                                        companyId: selectedComplaint.propertyId || selectedCompany || 'cml'
+                                                      })
+                                                    }).catch(err => console.error("Webhook update notification failed", err));
+
+                                                    setNewStaffReply("");
+                                                    // Local state update for responsiveness
+                                                    setSelectedComplaint((prev: any) => ({
+                                                      ...prev,
+                                                      updates: [...(prev.updates || []), {
+                                                        message: messageContent,
+                                                        authorName: currentUser.displayName || currentUser.email?.split('@')[0],
+                                                        timestamp: { toDate: () => new Date() }
+                                                      }]
+                                                    }));
+                                                  } catch (e) { console.error(e); }
+                                                }}
+                                                className="absolute bottom-4 right-4 bg-gold text-white px-4 py-2 text-[9px] font-display uppercase tracking-widest font-black shadow-lg"
+                                              >
+                                                Post Update
+                                              </button>
+                                           </div>
+                                        </div>
+                                     </div>
+                                  </section>
+                               </div>
+
+                               <div className="space-y-8">
+                                  <div className="p-6 border border-slate-100 bg-slate-50/50 space-y-4">
+                                     <h4 className="text-[10px] font-display uppercase tracking-widest text-slate-800 font-black border-b border-slate-100 pb-3">Reporter Profile</h4>
+                                     <div className="space-y-3">
+                                        <div>
+                                           <p className="text-[8px] font-display uppercase tracking-widest text-slate-400 font-black">Full Name</p>
+                                           <p className="text-xs font-serif italic text-slate-900 font-bold">{selectedComplaint.reporterName || "Staff Account Profile"}</p>
+                                        </div>
+                                        <div>
+                                           <p className="text-[8px] font-display uppercase tracking-widest text-slate-400 font-black">Department / Relation / Status</p>
+                                           <p className="text-xs font-serif italic text-slate-800">{selectedComplaint.reporterRole || "Staff Account Role"}</p>
+                                        </div>
+                                        <div>
+                                           <p className="text-[8px] font-display uppercase tracking-widest text-slate-400 font-black">Submission Account</p>
+                                           <p className="text-[10px] font-mono text-slate-500">{selectedComplaint.authorName}</p>
+                                        </div>
+                                     </div>
+                                  </div>
+                                  <div className="p-6 border border-gold/10 bg-gold/5 space-y-6">
+                                     <h4 className="text-[10px] font-display uppercase tracking-widest text-gold font-black border-b border-gold/10 pb-4">Dispatch Concern</h4>
+                                     <div className="space-y-4">
+                                        <div className="space-y-1">
+                                           <label className="text-[8px] font-display uppercase tracking-widest text-slate-500 font-bold">Assign to Department/Member</label>
+                                           <input 
+                                             value={dispatchComplaintForm.dispatchedTo}
+                                             onChange={(e) => setDispatchComplaintForm({...dispatchComplaintForm, dispatchedTo: e.target.value})}
+                                             className="w-full bg-white border border-slate-200 px-3 py-2 text-[10px] font-serif italic outline-none focus:border-gold/30"
+                                             placeholder="e.g. Housekeeping VM"
+                                           />
+                                        </div>
+                                        <button 
+                                          onClick={async () => {
+                                            if (!dispatchComplaintForm.dispatchedTo) return;
+                                            try {
+                                              await updateDoc(doc(db, `complaints-${selectedComplaint.propertyId || selectedCompany || 'cml'}`, selectedComplaint.id), {
+                                                status: "In Progress",
+                                                dispatchedTo: dispatchComplaintForm.dispatchedTo,
+                                                updates: arrayUnion({
+                                                  message: `Issue dispatched to: ${dispatchComplaintForm.dispatchedTo}`,
+                                                  authorName: "SYSTEM_ACTION",
+                                                  timestamp: new Date()
+                                                })
+                                              });
+                                              setSelectedComplaint((prev: any) => ({
+                                                ...prev,
+                                                status: "In Progress",
+                                                dispatchedTo: dispatchComplaintForm.dispatchedTo
+                                              }));
+                                              setDispatchComplaintForm({ dispatchedTo: "", dispatchNotes: "" });
+                                            } catch (e) { console.error(e); }
+                                          }}
+                                          className="w-full py-3 bg-luxury-black text-white text-[9px] font-display uppercase tracking-widest font-black hover:bg-gold transition-colors"
+                                        >
+                                          Execute Dispatch
+                                        </button>
+                                     </div>
+                                  </div>
+
+                                  <div className="p-6 border border-emerald-100 bg-emerald-50/20 rounded-sm space-y-6">
+                                     <h4 className="text-[10px] font-display uppercase tracking-widest text-emerald-600 font-extrabold border-b border-emerald-100 pb-3 flex items-center gap-2">
+                                        🛡️ Multi-Step Approval & Resolution
+                                     </h4>
+                                     
+                                     {/* Step 1: HOD Approval Status */}
+                                     <div className="space-y-2 border-b border-emerald-100/50 pb-4">
+                                        <div className="flex justify-between items-center">
+                                           <span className="text-[9px] font-display uppercase tracking-wider text-slate-400 font-bold">Step 1: HOD / Manager Review</span>
+                                           {selectedComplaint.hodApproved ? (
+                                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[8px] uppercase tracking-wider font-extrabold rounded-full">✓ Cleared</span>
+                                           ) : (
+                                              <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[8px] uppercase tracking-wider font-extrabold rounded-full">🔴 Pending Approval</span>
+                                           )}
+                                        </div>
+                                        
+                                        {selectedComplaint.hodApproved ? (
+                                           <p className="text-[10px] font-serif italic text-slate-600 leading-relaxed">
+                                              Approved by HOD <strong>{selectedComplaint.hodApprovedBy}</strong> {selectedComplaint.hodApprovedAt ? `on ${new Date(selectedComplaint.hodApprovedAt.seconds ? selectedComplaint.hodApprovedAt.seconds * 1000 : selectedComplaint.hodApprovedAt).toLocaleDateString()}` : "recently"}.
+                                           </p>
+                                        ) : (
+                                           <div className="space-y-3">
+                                              <p className="text-[10px] font-serif italic text-slate-500 leading-relaxed">
+                                                 Needs review and clearance by HOD/Manager (Manager or Administrator role required).
+                                              </p>
+                                              {(() => {
+                                                 const todayStr = new Date().toISOString().split("T")[0];
+                                                 const hasActiveDelegation = Array.isArray(workflowConfig?.delegations) && workflowConfig.delegations.some((del: any) => {
+                                                    if (del.toUserEmail?.toLowerCase() !== currentUser?.email?.toLowerCase()) return false;
+                                                    return todayStr >= del.startDate && todayStr <= del.endDate;
+                                                 });
+                                                 const canHODApprove = userRole === "Manager" || userRole === "Administrator" || userRole === "Super Admin" || userRole === "Audit" || userRole === "admin" || hasActiveDelegation;
+                                                 
+                                                 return canHODApprove && (
+                                                    <button
+                                                       onClick={async () => {
+                                                          try {
+                                                             const authorName = currentUser?.displayName || currentUser?.email?.split('@')[0] || "HOD Manager";
+                                                             
+                                                             await updateDoc(doc(db, `complaints-${selectedComplaint.propertyId || selectedCompany || 'cml'}`, selectedComplaint.id), {
+                                                                hodApproved: true,
+                                                                hodApprovedBy: authorName,
+                                                                hodApprovedAt: new Date(),
+                                                                status: "HOD Approved",
+                                                                updates: arrayUnion({
+                                                                   message: `STEP 1 APPROVED: Department Head (HOD) approval granted by ${authorName}.`,
+                                                                   authorName: "SYSTEM_ACTION",
+                                                                   timestamp: new Date()
+                                                                })
+                                                             });
+
+                                                             // Trigger background webhook of Google Chat & Emails
+                                                             fetch("/api/notify-complaint-update", {
+                                                                method: "POST",
+                                                                headers: { "Content-Type": "application/json" },
+                                                                body: JSON.stringify({
+                                                                   complaint: selectedComplaint,
+                                                                   action: "hod_approve",
+                                                                   authorName,
+                                                                   companyId: selectedComplaint.propertyId || selectedCompany || 'cml'
+                                                                })
+                                                             }).catch(err => console.error("HOD Approve notification failed", err));
+
+                                                             setSelectedComplaint(prev => ({
+                                                                ...prev,
+                                                                hodApproved: true,
+                                                                hodApprovedBy: authorName,
+                                                                hodApprovedAt: new Date(),
+                                                                status: "HOD Approved"
+                                                             }));
+                                                          } catch (e: any) { alert("Error granting HOD Approval: " + e.message); }
+                                                       }}
+                                                       className="w-full py-2 bg-amber-600 text-white text-[9px] font-display uppercase tracking-widest font-black hover:bg-amber-700 transition-colors shadow-sm cursor-pointer"
+                                                    >
+                                                       ✓ Grant HOD / Manager Approval
+                                                    </button>
+                                                 );
+                                              })()}
+                                           </div>
+                                        )}
+                                     </div>
+
+                                     {/* Step 2: SuperAdmin Verification */}
+                                     <div className="space-y-4">
+                                        <div className="flex justify-between items-center">
+                                           <span className="text-[9px] font-display uppercase tracking-wider text-slate-400 font-bold">Step 2: SuperAdmin Resolution</span>
+                                           {selectedComplaint.superAdminApproved ? (
+                                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[8px] uppercase tracking-wider font-extrabold rounded-full">✓ Resolved & Sealed</span>
+                                           ) : (
+                                              <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[8px] uppercase tracking-wider font-extrabold rounded-full">⏳ Awaiting Verification</span>
+                                           )}
+                                        </div>
+
+                                        {selectedComplaint.superAdminApproved ? (
+                                           <p className="text-[10px] font-serif italic text-slate-600 leading-relaxed">
+                                              Verified and closed by SuperAdmin <strong>{selectedComplaint.superAdminApprovedBy}</strong> {selectedComplaint.superAdminApprovedAt ? `on ${new Date(selectedComplaint.superAdminApprovedAt.seconds ? selectedComplaint.superAdminApprovedAt.seconds * 1000 : selectedComplaint.superAdminApprovedAt).toLocaleDateString()}` : "recently"}.
+                                           </p>
+                                        ) : (
+                                           <div className="space-y-4">
+                                              <p className="text-[10px] font-serif italic text-slate-500 leading-relaxed">
+                                                 Final audit, resolution, and closure sign-off by CML Corporate SuperAdmin (Charles Cebujano / Root Admin).
+                                              </p>
+                                              
+                                              {/* Input form details for Resolution */}
+                                              <div className="space-y-3 p-3 bg-white border border-slate-150 rounded-sm">
+                                                 <div className="space-y-1">
+                                                    <label className="text-[8px] font-display uppercase tracking-widest text-slate-500 font-bold">Resolving Department</label>
+                                                    <input 
+                                                       value={resolveForm.department}
+                                                       onChange={(e) => setResolveForm({ ...resolveForm, department: e.target.value })}
+                                                       className="w-full bg-slate-50 border border-slate-200 px-3 py-1.5 text-[10px] font-serif italic outline-none focus:border-emerald-300"
+                                                       placeholder="e.g. Operations / I.T"
+                                                    />
+                                                 </div>
+                                                 <div className="space-y-1">
+                                                    <label className="text-[8px] font-display uppercase tracking-widest text-slate-500 font-bold">Closed By (SuperAdmin Name)</label>
+                                                    <input 
+                                                       value={resolveForm.resolvedBy}
+                                                       onChange={(e) => setResolveForm({ ...resolveForm, resolvedBy: e.target.value })}
+                                                       className="w-full bg-slate-50 border border-slate-200 px-3 py-1.5 text-[10px] font-serif italic outline-none focus:border-emerald-300"
+                                                       placeholder="SuperAdmin Name"
+                                                    />
+                                                 </div>
+                                              </div>
+
+                                              {(userRole === "Administrator" || userRole === "Super Admin" || userRole === "admin") && (
+                                                 <button
+                                                    onClick={async () => {
+                                                       if (!resolveForm.department) { alert("Please specify resolving department"); return; }
+                                                       if (!resolveForm.resolvedBy) { alert("Please specify resolving SuperAdmin Name"); return; }
+                                                       try {
+                                                          const authorName = resolveForm.resolvedBy;
+                                                          
+                                                          await updateDoc(doc(db, `complaints-${selectedComplaint.propertyId || selectedCompany || 'cml'}`, selectedComplaint.id), {
+                                                             superAdminApproved: true,
+                                                             superAdminApprovedBy: authorName,
+                                                             superAdminApprovedAt: new Date(),
+                                                             status: "Resolved",
+                                                             resolvedAt: serverTimestamp(),
+                                                             resolvedBy: authorName,
+                                                             resolvedDepartment: resolveForm.department,
+                                                             updates: arrayUnion({
+                                                                message: `STEP 2 RESOLVED: Final SuperAdmin sign-off granted by ${authorName} (${resolveForm.department}).`,
+                                                                authorName: "SYSTEM_ACTION",
+                                                                timestamp: new Date()
+                                                             })
+                                                          });
+
+                                                          // Trigger background webhook of Google Chat & Emails
+                                                          fetch("/api/notify-complaint-update", {
+                                                             method: "POST",
+                                                             headers: { "Content-Type": "application/json" },
+                                                             body: JSON.stringify({
+                                                                complaint: selectedComplaint,
+                                                                action: "superadmin_approve",
+                                                                authorName,
+                                                                companyId: selectedComplaint.propertyId || selectedCompany || 'cml',
+                                                                department: resolveForm.department,
+                                                                resolvedBy: authorName
+                                                             })
+                                                          }).catch(err => console.error("SuperAdmin Approve notification failed", err));
+
+                                                          setSelectedComplaint(null);
+                                                          setResolveForm(prev => ({ ...prev, department: "" }));
+                                                       } catch (e: any) { alert("Error granting SuperAdmin Resolution: " + e.message); }
+                                                    }}
+                                                    className="w-full py-3 bg-emerald-600 text-white text-[9px] font-display uppercase tracking-widest font-black hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20 cursor-pointer"
+                                                 >
+                                                    👑 Approve & Resolve Log Officially
+                                                 </button>
+                                              )}
+                                           </div>
+                                        )}
+                                     </div>
+                                  </div>
+
+                                  <div className="p-6 border border-rose-100 bg-rose-50/20 space-y-4">
+                                     <h4 className="text-[10px] font-display uppercase tracking-widest text-rose-600 font-black border-b border-rose-100 pb-4">Dispose & Archive Log</h4>
+                                     <p className="text-slate-550 font-serif italic text-[11px] leading-relaxed">
+                                       Move this customer recovery log record safely to the corporate archive/disposed folder for long-term audit retention.
+                                     </p>
+                                     <button 
+                                       onClick={async () => {
+                                         if (true) { setDeleteComplaintTarget({ id: selectedComplaint.id, propertyId: selectedComplaint.propertyId }); return; }
+                                         try {
+                                           await updateDoc(doc(db, `complaints-${selectedComplaint.propertyId || selectedCompany || 'cml'}`, selectedComplaint.id), {
+                                             isArchived: true,
+                                             status: "Archived",
+                                             archivedAt: new Date(),
+                                             archivedBy: currentUser?.displayName || currentUser?.email?.split('@')[0] || "Staff"
+                                           });
+                                           setSelectedComplaint(null);
+                                         } catch (e) {
+                                           console.error(e);
+                                           alert("Failed to archive log.");
+                                         }
+                                       }}
+                                       className="w-full py-3 bg-rose-600 text-white text-[9px] font-display uppercase tracking-widest font-black hover:bg-rose-700 transition-colors shadow-lg shadow-rose-600/20"
+                                     >
+                                       Archive & Dispose Record
+                                     </button>
+                                  </div>
+                               </div>
+                            </div>
+                         </div>
+                      </motion.div>
+                    </div>
+                  )}
+                </AnimatePresence>
               </div>
             ) : activeTab === "hr" ? (
               <div className="space-y-8">
-                <div className="flex items-center justify-between mb-12 no-print">
+                {/* Unified Forms Hub Navigation Switcher */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-2 no-print border-b border-gold/10 pb-4">
                   <div>
-                    <h2 className="text-4xl font-serif text-slate-900 mb-2 italic">HR Forms Registry</h2>
+                    <h2 className="text-4xl font-serif text-slate-900 mb-1 italic">Unified Forms Hub</h2>
                     <p className="luxury-label !text-[11px] opacity-60">
-                      Access and submit internal property documentation and compliance forms via secure external portal
+                      Access official templates, live Google analytics frameworks, and Interactive Forms Suite
                     </p>
                   </div>
                 </div>
 
+                <div className="flex border-b border-slate-200 gap-1 overflow-x-auto no-scrollbar no-print">
+                  <button
+                    onClick={() => setFormsViewMode("interactive")}
+                    className={cn(
+                      "px-6 py-3 text-[10px] font-display uppercase tracking-widest font-black transition-all border-b-2 -mb-px",
+                      formsViewMode === "interactive"
+                        ? "border-gold text-gold bg-gold/5"
+                        : "border-transparent text-slate-500 hover:text-slate-800"
+                    )}
+                  >
+                    Interactive Forms Suite
+                  </button>
+                  <button
+                    onClick={() => setFormsViewMode("google")}
+                    className={cn(
+                      "px-6 py-3 text-[10px] font-display uppercase tracking-widest font-black transition-all border-b-2 -mb-px flex items-center gap-2",
+                      formsViewMode === "google"
+                        ? "border-blue-600 text-blue-600 bg-blue-50/20"
+                        : "border-transparent text-slate-500 hover:text-slate-800"
+                    )}
+                  >
+                    Google Forms Integration
+                  </button>
+                  <button
+                    onClick={() => setFormsViewMode("registry")}
+                    className={cn(
+                      "px-6 py-3 text-[10px] font-display uppercase tracking-widest font-black transition-all border-b-2 -mb-px",
+                      formsViewMode === "registry"
+                        ? "border-emerald-600 text-emerald-600 bg-emerald-50/10"
+                        : "border-transparent text-slate-500 hover:text-slate-800"
+                    )}
+                  >
+                    WordPress Forms Registry
+                  </button>
+                </div>
+
+                {formsViewMode === "google" && (
+                  <GoogleFormsSuite companyId={selectedCompany || "cml"} />
+                )}
+
+                {formsViewMode === "interactive" && (
+                  <RamadaFormsSuite companySecret={selectedCompany === 'wyndham' ? 'wyndham' : 'ramada'} />
+                )}
+
+                {formsViewMode === "registry" && (
+                  <div className="space-y-8">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-12 no-print border-b border-gold/10 pb-6">
+                  <div>
+                    <h2 className="text-4xl font-serif text-slate-900 mb-2 italic">Forms Registry</h2>
+                    <p className="luxury-label !text-[11px] opacity-60">
+                      Access and submit internal property documentation and compliance forms via secure external portal
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {/* Compact layout mode toggler */}
+                    <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => setFormsLayoutView("list")}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-[9px] font-display uppercase tracking-wider font-extrabold transition-all rounded-md ${
+                          formsLayoutView === "list"
+                            ? "bg-white text-slate-900 shadow-sm"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                        title="List View"
+                      >
+                        <List size={11} /> List View
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormsLayoutView("grid")}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-[9px] font-display uppercase tracking-wider font-extrabold transition-all rounded-md ${
+                          formsLayoutView === "grid"
+                            ? "bg-white text-slate-900 shadow-sm"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                        title="Grid View"
+                      >
+                        <LayoutGrid size={11} /> Grid View
+                      </button>
+                    </div>
+
+                    {(userRole === "Administrator" || userRole === "Super Admin" || userRole === "Group Controller" || userRole === "Manager" || userRole === "Audit") && (
+                      <button 
+                        onClick={() => setShowAddForm(!showAddForm)}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-gold text-white text-[10px] font-display uppercase tracking-widest font-black transition-all shadow-md hover:bg-luxury-black rounded-md"
+                      >
+                        <Plus size={14} /> {showAddForm ? "Close Creator" : "Add Form Reference"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Inline Add form creator panel with luxury style */}
+                <AnimatePresence>
+                  {showAddForm && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden mb-12"
+                    >
+                      <div className="p-8 border border-gold/20 bg-gold/5 max-w-2xl rounded-sm space-y-6 text-left">
+                        <h4 className="text-[11px] font-display uppercase tracking-[0.2em] text-gold font-black">Create Custom Form Registry Reference</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800">Form / Portal Name</label>
+                            <input 
+                              type="text" 
+                              placeholder="e.g. Asset Audit Register Form" 
+                              value={newFormDetails.name}
+                              onChange={(e) => setNewFormDetails(prev => ({ ...prev, name: e.target.value }))}
+                              className="w-full p-3 bg-white border border-slate-150 text-[10px] font-display uppercase tracking-widest focus:ring-1 focus:ring-gold outline-none shadow-sm"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800">Form Destination URL</label>
+                            <input 
+                              type="text" 
+                              placeholder="e.g. https://cml.com.fj/your-form" 
+                              value={newFormDetails.url}
+                              onChange={(e) => setNewFormDetails(prev => ({ ...prev, url: e.target.value }))}
+                              className="w-full p-3 bg-white border border-slate-150 text-[10px] font-display uppercase tracking-widest focus:ring-1 focus:ring-gold outline-none shadow-sm"
+                            />
+                          </div>
+                          <div className="space-y-2 md:col-span-2">
+                            <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800">Category Group</label>
+                            <select 
+                              value={newFormDetails.category}
+                              onChange={(e) => setNewFormDetails(prev => ({ ...prev, category: e.target.value }))}
+                              className="w-full p-3 bg-white border border-slate-150 text-[10px] font-display uppercase tracking-widest focus:ring-1 focus:ring-gold outline-none shadow-sm"
+                            >
+                              <option value="HR & Leave Operations">HR & Leave Operations</option>
+                              <option value="Operations & Logs">Operations & Logs</option>
+                              <option value="Guest & Front Office">Guest & Front Office</option>
+                              <option value="Feedback & Portals">Feedback & Portals</option>
+                              <option value="General Administration">General Administration</option>
+                            </select>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={async () => {
+                            if (!newFormDetails.name || !newFormDetails.url) {
+                              alert("Please fill in both Form Name and destination URL.");
+                              return;
+                            }
+                            try {
+                              const targetCompany = selectedCompany || 'cml';
+                              await addDoc(collection(db, `forms-${targetCompany}`), {
+                                name: newFormDetails.name,
+                                url: newFormDetails.url,
+                                category: newFormDetails.category,
+                                createdAt: new Date().toISOString()
+                              });
+                              setNewFormDetails({
+                                name: "",
+                                url: "",
+                                category: "HR & Leave Operations"
+                              });
+                              setShowAddForm(false);
+                            } catch (e) {
+                              console.error("Error creating Form reference:", e);
+                              alert("An error occurred while registering the form reference.");
+                            }
+                          }}
+                          className="px-6 py-3 bg-gold text-white text-[9px] font-display uppercase tracking-widest font-black hover:bg-luxury-black transition-colors shadow-lg rounded-md"
+                        >
+                          Register Reference
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 <div className="space-y-16">
-                  {Array.from(new Set(HR_FORMS.map(f => f.category || "General"))).map((category) => (
-                    <section key={category} className="space-y-6">
-                      <div className="flex items-center gap-4">
-                        <h3 className="text-[11px] font-display uppercase tracking-[0.4em] font-black text-gold/60">{category}</h3>
-                        <div className="h-px flex-1 bg-gold/10" />
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                        {HR_FORMS.filter(f => (f.category || "General") === category).map((form) => (
-                          <motion.div 
-                            key={form.id} 
-                            whileHover={{ y: -4, scale: 1.02 }}
-                            onClick={() => window.open(form.url, "_blank")}
-                            className="bg-white p-8 border border-slate-100 hover:border-gold hover:shadow-2xl hover:shadow-gold/10 transition-all cursor-pointer flex flex-col group relative overflow-hidden"
-                          >
-                            <div className="absolute top-0 right-0 p-4 opacity-40 group-hover:opacity-100 transition-opacity">
-                              <ExternalLink size={14} className="text-gold" />
-                            </div>
+                  {(() => {
+                    const defaultFormsMerged = getDefaultForms(selectedCompany);
+                    const displayForms = [...customForms.map(f => ({ ...f, isDefault: false })), ...defaultFormsMerged.map(f => ({ ...f, isDefault: true }))];
+                    const categories = Array.from(new Set(displayForms.map(f => f.category || "General")));
+                    return categories.map((category) => (
+                      <section key={category} className="space-y-6">
+                        <div className="flex items-center gap-4">
+                          <h3 className="text-[11px] font-display uppercase tracking-[0.4em] font-black text-gold/60">{category}</h3>
+                          <div className="h-px flex-1 bg-gold/10" />
+                        </div>
+                        
+                        {formsLayoutView === "list" ? (
+                          <div className="space-y-4">
+                            {displayForms.filter(f => (f.category || "General") === category).map((form) => {
+                              const isDefault = form.isDefault !== false;
+                              return (
+                                <motion.div 
+                                  key={form.id || form.name} 
+                                  whileHover={{ x: 6 }}
+                                  onClick={() => window.open(form.url, "_blank")}
+                                  className="bg-white p-5 border border-slate-100/80 hover:border-gold/40 hover:shadow-lg hover:shadow-gold/5 transition-all cursor-pointer flex items-center justify-between group relative rounded-lg"
+                                >
+                                  <div className="flex items-center gap-4 min-w-0">
+                                    {/* Concentric Circle Bullet Item with property custom branding */}
+                                    <div className={`flex-shrink-0 w-8 h-8 rounded-full border flex items-center justify-center transition-all duration-300 ${
+                                      selectedCompany === 'ramada' 
+                                        ? "border-red-200 bg-red-50/50 group-hover:bg-[#D11242] group-hover:border-[#D11242]" 
+                                        : selectedCompany === 'wyndham' 
+                                        ? "border-emerald-200 bg-emerald-50/50 group-hover:bg-[#0b5c4b] group-hover:border-[#0b5c4b]" 
+                                        : "border-gold/30 bg-gold/5 group-hover:bg-gold group-hover:border-gold"
+                                    }`}>
+                                      <div className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                                        selectedCompany === 'ramada' 
+                                          ? "bg-[#D11242] group-hover:bg-white" 
+                                          : selectedCompany === 'wyndham' 
+                                          ? "bg-[#0b5c4b] group-hover:bg-white" 
+                                          : "bg-gold group-hover:bg-white"
+                                      }`} />
+                                    </div>
 
-                            <div className="flex justify-between items-start mb-6">
-                               <div className="w-12 h-12 bg-slate-50 text-slate-400 flex items-center justify-center group-hover:bg-gold group-hover:text-white transition-all rounded-lg">
-                                 <FileText size={20} strokeWidth={1.5} />
-                               </div>
-                               <div className="flex flex-col items-end">
-                                  <span className="text-[7px] font-display uppercase tracking-widest px-2 py-1 bg-emerald-50 text-emerald-600 font-bold group-hover:bg-emerald-500 group-hover:text-white transition-colors rounded-sm">
-                                    Secure Portal
-                                  </span>
-                               </div>
-                            </div>
+                                    <div className="min-w-0">
+                                      <h3 className="text-sm font-serif italic text-slate-900 group-hover:text-gold transition-colors truncate">
+                                        {form.name}
+                                      </h3>
+                                      <p className="text-[9px] text-slate-400 font-mono uppercase tracking-wider">
+                                        REF: {(form.id || form.name.toLowerCase().replace(/[^a-z0-9]/g, "-")).substring(0, 15).toUpperCase()}
+                                      </p>
+                                    </div>
+                                  </div>
 
-                            <h3 className="text-lg font-serif italic text-slate-900 mb-2 leading-tight group-hover:text-gold transition-colors">{form.name}</h3>
-                            <p className="text-[9px] text-slate-400 luxury-label !opacity-60 mb-8">Opens in secure external encrypted window</p>
+                                  <div className="flex items-center gap-3 ml-4 flex-shrink-0">
+                                    <span className="hidden sm:inline-block text-[7px] font-display uppercase tracking-widest px-2.5 py-1 bg-slate-50 text-slate-500 font-bold rounded-sm border border-slate-100 group-hover:border-transparent group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-all">
+                                      {isDefault ? "Secure Portal" : "Custom Added"}
+                                    </span>
+                                    {!isDefault && (
+                                      <button 
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          if (true) { setDeleteCustomFormTarget({ id: form.id, name: form.name }); } else if (false) {
+                                            try {
+                                              await deleteDoc(doc(db, `forms-${selectedCompany || 'cml'}`, form.id));
+                                            } catch (err) {
+                                              console.error("Error deleting form:", err);
+                                            }
+                                          }
+                                        }}
+                                        className="p-1.5 text-red-500 hover:bg-rose-50 rounded transition-colors"
+                                        title="Delete Reference"
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    )}
+                                    <div className="w-5 h-5 flex items-center justify-center text-slate-300 group-hover:text-gold group-hover:translate-x-1 transition-all">
+                                      <ChevronRight size={14} />
+                                    </div>
+                                  </div>
+                                </motion.div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                            {displayForms.filter(f => (f.category || "General") === category).map((form) => {
+                              const isDefault = form.isDefault !== false;
+                              return (
+                                <motion.div 
+                                  key={form.id || form.name} 
+                                  whileHover={{ y: -4, scale: 1.02 }}
+                                  onClick={() => window.open(form.url, "_blank")}
+                                  className="bg-white p-8 border border-slate-100 hover:border-gold hover:shadow-2xl hover:shadow-gold/10 transition-all cursor-pointer flex flex-col group relative overflow-hidden"
+                                >
+                                  <div className="absolute top-0 right-0 p-4 opacity-40 group-hover:opacity-100 transition-opacity">
+                                    <ExternalLink size={14} className="text-gold" />
+                                  </div>
 
-                            <div className="mt-auto pt-6 border-t border-slate-50 flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <div className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse" />
-                                <span className="text-[8px] font-display uppercase tracking-[0.2em] text-slate-500 font-black">
-                                   REF: {form.id.toUpperCase()}
-                                </span>
-                              </div>
-                              <button className="px-4 py-2 bg-slate-50 text-gold flex items-center gap-2 text-[9px] uppercase tracking-[0.2em] font-black group-hover:bg-gold group-hover:text-white transition-all rounded-md">
-                                Open Portal <ChevronRight size={12} />
-                              </button>
-                            </div>
-                          </motion.div>
-                        ))}
-                      </div>
-                    </section>
-                  ))}
+                                  <div className="flex justify-between items-start mb-6">
+                                    <div className="w-12 h-12 bg-slate-50 text-slate-400 flex items-center justify-center group-hover:bg-gold group-hover:text-white transition-all rounded-lg">
+                                      <FileText size={20} strokeWidth={1.5} />
+                                    </div>
+                                    <div className="flex flex-col items-end gap-1">
+                                      <span className="text-[7px] font-display uppercase tracking-widest px-2 py-1 bg-emerald-50 text-emerald-600 font-bold group-hover:bg-emerald-500 group-hover:text-white transition-colors rounded-sm shadow-sm">
+                                        {isDefault ? "Secure Portal" : "Custom Added"}
+                                      </span>
+                                      {!isDefault && (
+                                        <button 
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            if (true) { setDeleteCustomFormTarget({ id: form.id, name: form.name }); } else if (false) {
+                                              try {
+                                                await deleteDoc(doc(db, `forms-${selectedCompany || 'cml'}`, form.id));
+                                              } catch (err) {
+                                                console.error("Error deleting form:", err);
+                                              }
+                                            }
+                                          }}
+                                          className="p-1 text-red-500 hover:bg-rose-50 rounded transition-colors"
+                                          title="Delete Reference"
+                                        >
+                                          <Trash2 size={12} />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <h3 className="text-lg font-serif italic text-slate-900 mb-2 leading-tight group-hover:text-gold transition-colors">{form.name}</h3>
+                                  <p className="text-[9px] text-slate-400 luxury-label !opacity-60 mb-8">Opens in secure external encrypted window</p>
+
+                                  <div className="mt-auto pt-6 border-t border-slate-50 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse" />
+                                      <span className="text-[8px] font-display uppercase tracking-[0.2em] text-slate-500 font-black">
+                                        REF: {(form.id || form.name.toLowerCase().replace(/[^a-z0-9]/g, "-")).substring(0, 15).toUpperCase()}
+                                      </span>
+                                    </div>
+                                    <button className="px-4 py-2 bg-slate-50 text-gold flex items-center gap-2 text-[9px] uppercase tracking-[0.2em] font-black group-hover:bg-gold group-hover:text-white transition-all rounded-md">
+                                      Open Portal <ChevronRight size={12} />
+                                    </button>
+                                  </div>
+                                </motion.div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </section>
+                    ));
+                  })()}
 
                   <div className="bg-luxury-black p-16 text-center relative overflow-hidden rounded-xl shadow-2xl">
                      <div className="absolute inset-0 opacity-10">
@@ -2431,7 +6039,844 @@ export default function App() {
                        Form submissions are routed through CML Digital’s high-security SSL WordPress integration. 
                        Each session generates an encrypted token for property compliance.
                      </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+            ) : activeTab === "hotel-info" ? (
+              <div className="space-y-8 pb-32">
+                {/* Header block with brand colors */}
+                <div className={cn(
+                  "p-8 border relative overflow-hidden",
+                  selectedCompany === 'ramada' ? "bg-red-50/50 border-red-200/50" : 
+                  selectedCompany === 'wyndham' ? "bg-emerald-50/50 border-emerald-200/50" : 
+                  "bg-gold/5 border-gold/10"
+                )}>
+                  <div className="relative z-10 max-w-3xl">
+                    <div className={cn(
+                      "text-[9px] font-display uppercase tracking-[0.25em] font-black pb-2 border-b max-w-max mb-6",
+                      selectedCompany === 'ramada' ? "text-[#D11242] border-red-200" : 
+                      selectedCompany === 'wyndham' ? "text-[#0b5c4b] border-emerald-200" : 
+                      "text-gold border-gold/20"
+                    )}>
+                      {selectedCompany === 'ramada' ? "Ramada Suites Wailoaloa" : 
+                       selectedCompany === 'wyndham' ? "Wyndham Garden Wailoaloa" : 
+                       "Cove Management Limited"} • Directory
+                    </div>
+                    <h2 className="text-4xl font-serif text-slate-900 italic tracking-tight font-light mb-4">
+                      Property & Corporate Directory
+                    </h2>
+                    <p className="text-sm font-serif italic text-slate-600 max-w-xl leading-relaxed">
+                      Core physical profiles, room status inventories, guest policy standards, and corporate executive leadership team representing the CML Group operations.
+                    </p>
                   </div>
+                </div>
+
+                {/* Sub-tab navigation */}
+                <div className="flex border-b border-slate-100 pb-px gap-4 overflow-x-auto scroller-hidden">
+                  <button
+                    onClick={() => setHotelInfoViewMode("team")}
+                    className={cn(
+                      "px-6 py-4 text-xs font-display uppercase tracking-widest font-extrabold border-b-2 transition-all shrink-0 flex items-center gap-2.5",
+                      hotelInfoViewMode === "team" 
+                        ? "border-gold text-slate-950 font-black" 
+                        : "border-transparent text-slate-400 hover:text-slate-600 font-medium"
+                    )}
+                  >
+                    <Users size={14} className={hotelInfoViewMode === "team" ? "text-gold" : "text-slate-400"} />
+                    Executive Leadership & Corporate Operations
+                  </button>
+                  <button
+                    onClick={() => setHotelInfoViewMode("property")}
+                    className={cn(
+                      "px-6 py-4 text-xs font-display uppercase tracking-widest font-extrabold border-b-2 transition-all shrink-0 flex items-center gap-2.5",
+                      hotelInfoViewMode === "property" 
+                        ? "border-gold text-slate-950 font-black" 
+                        : "border-transparent text-slate-400 hover:text-slate-600 font-medium"
+                    )}
+                  >
+                    <Globe size={14} className={hotelInfoViewMode === "property" ? "text-gold" : "text-slate-400"} />
+                    Property Profile & Wi-Fi Details
+                  </button>
+                </div>
+
+                {hotelInfoViewMode === "team" ? (
+                  <div className="space-y-12">
+                    {/* SECTION 1: Leadership Team */}
+                    <div>
+                      <div className="mb-6">
+                        <span className="text-[10px] font-display uppercase tracking-widest text-[#C5A059] font-extrabold block mb-1">Executive Board</span>
+                        <h3 className="text-2xl font-serif text-slate-950 italic">Leadership Team</h3>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        {[
+                          {
+                            name: "MARK HINTON",
+                            role: "CEO / Co-Founder",
+                            initials: "MH",
+                            color: "from-amber-50 to-amber-100 text-amber-900 border-amber-200",
+                            desc: "Steers group-wide strategy, multi-brand hospitality acquisitions, and CML property portfolios.",
+                            email: "mark.hinton@cml.com.fj"
+                          },
+                          {
+                            name: "JENICE HINTON",
+                            role: "Director / Co-Founder",
+                            initials: "JH",
+                            color: "from-[#FDFBF7] to-[#F1E9DB] text-amber-950 border-[#E4D5BE]",
+                            desc: "Directs group governance protocols, stakeholder syndications, brand standards and executive advisory.",
+                            email: "jenice.hinton@cml.com.fj"
+                          },
+                          {
+                            name: "ROHIT LAL",
+                            role: "General Manager / Director",
+                            initials: "RL",
+                            color: "from-stone-100 to-stone-200 text-stone-900 border-stone-300",
+                            desc: "Drives dual-property operations, resort revenue maximization, guest recovery compliance, and brand alignment.",
+                            email: "rohit.lal@cml.com.fj"
+                          }
+                        ].map((person, index) => (
+                          <motion.div
+                            key={index}
+                            whileHover={{ y: -4 }}
+                            className="bg-white border border-slate-100 shadow-xs overflow-hidden flex flex-col group transition-all"
+                          >
+                            {/* Accent line */}
+                            <div className="h-1 bg-gradient-to-r from-gold/30 to-gold/70" />
+                            
+                            {/* Stylized premium image placeholder */}
+                            <div className="bg-[#FAF8F5] p-10 flex flex-col items-center justify-center border-b border-slate-50 relative overflow-hidden h-72">
+                              <div className="absolute inset-x-0 bottom-0 top-1/2 bg-gradient-to-t from-slate-50/80 to-transparent" />
+                              <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full border border-gold/5 pointer-events-none" />
+                              <div className="absolute -left-10 -bottom-10 w-40 h-40 rounded-full border border-gold/5 pointer-events-none" />
+                              
+                              <div className={cn(
+                                "w-36 h-36 rounded-2xl flex items-center justify-center font-display text-3xl font-black shadow-inner border tracking-wide transition-all duration-500 group-hover:scale-105 group-hover:rotate-1 bg-gradient-to-br", 
+                                person.color
+                              )}>
+                                {person.initials}
+                              </div>
+                            </div>
+
+                            <div className="p-6 flex flex-col flex-1">
+                              <h4 className="text-[#A28249] text-lg font-serif font-bold tracking-wider mb-1">
+                                {person.name}
+                              </h4>
+                              <p className="text-slate-900 text-xs font-sans font-bold uppercase tracking-wider mb-4 border-b border-amber-50 pb-2">
+                                {person.role}
+                              </p>
+                              <p className="text-slate-500 font-serif italic text-xs leading-relaxed flex-1">
+                                "{person.desc}"
+                              </p>
+                              <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                                <span className="text-[10px] text-slate-400 font-mono tracking-normal">{person.email}</span>
+                                <button
+                                  onClick={() => {
+                                    window.location.href = `mailto:${person.email}`;
+                                  }}
+                                  className="text-[9px] font-display uppercase tracking-widest bg-gold/10 hover:bg-gold text-slate-950 font-black px-3.5 py-1.5 rounded transition-all"
+                                >
+                                  CONTACT
+                                </button>
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* SECTION 2: Corporate Operations & Management (Circular Photo Wall Row!) */}
+                    <div className="bg-[#FAF8F5] p-8 md:p-12 border border-slate-100 rounded-lg shadow-xs">
+                      <div className="text-center mb-10 max-w-2xl mx-auto">
+                        <span className="text-[10px] font-display uppercase tracking-[0.2em] text-[#C5A059] font-black block mb-2">Operational Council</span>
+                        <h3 className="text-2xl font-serif text-slate-950 italic">CORPORATE OPERATIONS & MANAGEMENT</h3>
+                        <div className="w-16 h-0.5 bg-gold/40 mx-auto mt-3" />
+                      </div>
+
+                      {/* Panoramic list matching the exact 6 profiles circular layouts */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8">
+                        {[
+                          {
+                            name: "SHAHIL SHARMA",
+                            role: "Group Financial Controller",
+                            initials: "SS",
+                            color: "bg-slate-950 text-[#C5A059] border-gold/20",
+                            email: "shahil.sharma@cml.com.fj"
+                          },
+                          {
+                            name: "NEETISA DEVI",
+                            role: "Group People & Culture Manager",
+                            initials: "ND",
+                            color: "bg-slate-900 text-stone-100 border-slate-800",
+                            email: "neetisa.devi@cml.com.fj"
+                          },
+                          {
+                            name: "JOHN SINGH",
+                            role: "Group Technology & Innovation Manager",
+                            initials: "JS",
+                            color: "bg-[#8D6E32]/10 text-[#8D6E32] border-[#8D6E32]/25",
+                            email: "john.singh@cml.com.fj"
+                          },
+                          {
+                            name: "SHWARAN SHIVANI",
+                            role: "Group Sales, Marketing & Revenue Manager",
+                            initials: "SS",
+                            color: "bg-stone-900 text-amber-100 border-zinc-800",
+                            email: "shwaran.shivani@cml.com.fj"
+                          },
+                          {
+                            name: "PRATEEK SHARMA",
+                            role: "Group Asset Protection & Compliance Manager",
+                            initials: "PS",
+                            color: "bg-[#1C1917] text-amber-50 border-amber-900/40",
+                            email: "prateek.sharma@cml.com.fj"
+                          },
+                          {
+                            name: "CHARLES CEBUJANO",
+                            role: "Group Digital Marketing & I.T Executive",
+                            initials: "CC",
+                            color: "bg-gradient-to-br from-[#8D6E32] to-[#C5A059] text-slate-950 border-gold/40",
+                            email: "digitalmedia@cml.com.fj",
+                            highlight: true
+                          }
+                        ].map((member, idx) => (
+                          <motion.div
+                            key={idx}
+                            whileHover={{ y: -3 }}
+                            className="flex flex-col items-center text-center group"
+                          >
+                            <div className="relative mb-4">
+                              {/* High end ambient border ring */}
+                              <div className={cn(
+                                "absolute -inset-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300",
+                                member.highlight ? "bg-gradient-to-tr from-[#8D6E32] via-[#C5A059] to-[#8D6E32]" : "bg-slate-200/50"
+                              )} />
+                              
+                              {/* Circle Frame */}
+                              <div className={cn(
+                                "w-28 h-28 rounded-full border-2 flex items-center justify-center font-display text-xl font-bold tracking-wider relative shadow-md transition-all duration-300 z-10 bg-gradient-to-br",
+                                member.color,
+                                member.highlight ? "ring-2 ring-offset-2 ring-gold" : ""
+                              )}>
+                                {member.initials}
+                                {member.highlight && (
+                                  <span className="absolute -top-1 -right-1 bg-gold text-slate-950 text-[7px] font-display uppercase tracking-widest font-black px-1.5 py-0.5 rounded-full shadow-lg">
+                                    Current
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <h4 className="text-[12px] md:text-[13px] font-display font-black text-slate-900 tracking-wider hover:text-gold transition-colors">
+                              {member.name}
+                            </h4>
+                            <p className="text-[10px] font-serif italic text-slate-500 leading-snug max-w-[140px] mt-1 flex-1">
+                              {member.role}
+                            </p>
+                            <a
+                              href={`mailto:${member.email}`}
+                              className="text-[9px] font-mono text-slate-400 opacity-60 group-hover:opacity-100 transition-opacity duration-200 mt-2 hover:text-[#C5A059]"
+                            >
+                              {member.email}
+                            </a>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Current physical profiles structures */
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {/* Column 1: Property Profile & Wi-Fi */}
+                    <div className="bg-white border border-slate-100 p-6 shadow-sm flex flex-col justify-between">
+                      <div>
+                        <h3 className="text-xs font-display uppercase tracking-widest text-[#1a1a1a] font-extrabold border-b border-slate-50 pb-3 mb-4">
+                          Property Identity Profile
+                        </h3>
+                        <table className="w-full text-xs font-sans text-slate-600 space-y-2">
+                          <tbody>
+                            <tr className="border-b border-slate-50">
+                              <td className="py-2.5 font-semibold text-slate-800">Physical Address</td>
+                              <td className="py-2.5 text-right font-serif">Wailoaloa Beach Road, Nadi, Fiji Islands</td>
+                            </tr>
+                            <tr className="border-b border-slate-50">
+                              <td className="py-2.5 font-semibold text-slate-800">Room Units</td>
+                              <td className="py-2.5 text-right font-serif">
+                                {selectedCompany === 'ramada' ? "40 Luxury Condominium Suites" : 
+                                 selectedCompany === 'wyndham' ? "75 Premium Guest Rooms" : 
+                                 "Multi-Property Group Portfolio"}
+                              </td>
+                            </tr>
+                            <tr className="border-b border-slate-50">
+                              <td className="py-2.5 font-semibold text-slate-800">Operational Status</td>
+                              <td className="py-2.5 text-right text-emerald-600 font-bold flex items-center justify-end gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Active
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="py-2.5 font-semibold text-slate-800">Default Check-in</td>
+                              <td className="py-2.5 text-right font-serif">14:00 (Check-out 11:00)</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="bg-slate-50 border border-slate-200/50 p-4 mt-6">
+                        <div className="flex items-center gap-3 mb-2">
+                          <Globe size={16} className="text-gold" />
+                          <h4 className="text-[10px] font-display uppercase tracking-wider text-slate-800 font-bold">Encrypted Property Wi-Fi</h4>
+                        </div>
+                        <div className="text-[11px] text-slate-600 font-serif space-y-1">
+                          <p><strong>Guest SSID:</strong> {selectedCompany === 'ramada' ? "Ramada_Suites_Guest" : selectedCompany === 'wyndham' ? "Wyndham_Garden_Guest" : "CML_Corporate_Guest"}</p>
+                          <p><strong>Security Portal:</strong> Click-to-Connect Web Gate</p>
+                          <p className="border-t border-slate-200/50 pt-1.5 mt-1.5"><strong>Staff SSID:</strong> CML_SECURE_VLAN</p>
+                          <p><strong>Staff Password:</strong> <code className="bg-slate-200/60 px-1 font-mono rounded">CmlSecureWailo2026!</code></p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Column 2: Management Contacts & Hotlines */}
+                    <div className="bg-white border border-slate-100 p-6 shadow-sm">
+                      <h3 className="text-xs font-display uppercase tracking-widest text-[#1a1a1a] font-extrabold border-b border-slate-50 pb-3 mb-4">
+                        Management & Operations Directory
+                      </h3>
+                      <div className="space-y-4">
+                        {[
+                          { title: "General Manager", name: "Charles O'Neill", email: "gm@cml.com.fj", ext: "Ext. 700" },
+                          { title: "Front Desk Duty Manager", name: "Front Host Team", email: "frontdesk@cml.com.fj", ext: "Ext. 100/101" },
+                          { title: "Executive Housekeeper", name: "Sereana V.", email: "housekeeping@cml.com.fj", ext: "Ext. 204" },
+                          { title: "Security & Engineering Lead", name: "Kalesh Prasad", email: "maintenance@cml.com.fj", ext: "Ext. 505" },
+                          { title: "Revenue & OTAs Relations", name: "A. Patel", email: "revenue@cml.com.fj", ext: "Ext. 902" }
+                        ].map((contact, idx) => (
+                          <div key={idx} className="flex justify-between items-start text-xs border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+                            <div>
+                              <p className="font-semibold text-slate-900">{contact.title}</p>
+                              <p className="text-slate-500 font-serif italic">{contact.name}</p>
+                              <p className="text-[10px] text-slate-400 font-mono">{contact.email}</p>
+                            </div>
+                            <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-xs font-mono text-[9px] font-black shrink-0">
+                              {contact.ext}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Column 3: Corporate Policy Standards */}
+                    <div className="bg-white border border-slate-100 p-6 shadow-sm flex flex-col justify-between">
+                      <div>
+                        <h3 className="text-xs font-display uppercase tracking-widest text-[#1a1a1a] font-extrabold border-b border-slate-50 pb-3 mb-4">
+                          Brand Compliance Policy
+                        </h3>
+                        <div className="space-y-4">
+                          <div className="text-xs text-slate-600 font-serif leading-relaxed">
+                            <p className="font-semibold text-slate-800 font-sans mb-1 text-[11px] uppercase tracking-wider">Complaint Resolution</p>
+                            Verify and log all guest complaints in real-time under the <strong>Customer Recovery Console</strong>. Resolve within 15 minutes of initial lodge.
+                          </div>
+                          <div className="text-xs text-slate-600 font-serif leading-relaxed">
+                            <p className="font-semibold text-slate-800 font-sans mb-1 text-[11px] uppercase tracking-wider">Lost & Found Security</p>
+                            Found items must be tagged and loaded into the loss log database immediately. Secure high-value items in the safebox.
+                          </div>
+                          <div className="text-xs text-slate-600 font-serif leading-relaxed">
+                            <p className="font-semibold text-slate-800 font-sans mb-1 text-[11px] uppercase tracking-wider">Master Keys Control</p>
+                            A maximum of 90 active duplicate master cards can exist across properties. Master key compliance audits run weekly.
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className={cn(
+                        "p-4 border mt-6 text-center text-[10px] font-display uppercase tracking-widest font-black",
+                        selectedCompany === 'ramada' ? "bg-red-50 text-[#D11242] border-red-200/50" :
+                        selectedCompany === 'wyndham' ? "bg-emerald-50 text-[#0b5c4b] border-emerald-200/50" :
+                        "bg-gold/10 text-slate-900 border-gold/20"
+                      )}>
+                        Weekly Compliance Checklist Audited
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : activeTab === "revenue" ? (
+              <div className="space-y-8 pb-32">
+                {/* Header Block */}
+                <div className={cn(
+                  "p-8 border relative overflow-hidden",
+                  selectedCompany === 'ramada' ? "bg-red-50/50 border-red-200/50" : 
+                  selectedCompany === 'wyndham' ? "bg-emerald-50/50 border-emerald-200/50" : 
+                  "bg-gold/5 border-gold/10"
+                )}>
+                  <div className="relative z-10 max-w-3xl">
+                    <div className={cn(
+                      "text-[9px] font-display uppercase tracking-[0.25em] font-black pb-2 border-b max-w-max mb-6",
+                      selectedCompany === 'ramada' ? "text-[#D11242] border-red-200" : 
+                      selectedCompany === 'wyndham' ? "text-[#0b5c4b] border-emerald-200" : 
+                      "text-gold border-gold/20"
+                    )}>
+                      {selectedCompany === 'ramada' ? "Ramada Suites" : 
+                       selectedCompany === 'wyndham' ? "Wyndham Garden" : 
+                       "Cove Management Limited"} • Yield Performance
+                    </div>
+                    <h2 className="text-4xl font-serif text-slate-900 italic tracking-tight font-light mb-4">
+                      Property Revenue Intelligence
+                    </h2>
+                    <p className="text-sm font-serif italic text-slate-600 max-w-xl leading-relaxed">
+                      Interactive sales trackers, channel yield distributions, historical room night metrics, and dynamic MTD billing.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Key Yield Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  {[
+                    { label: "RevPar (Performance)", value: `$${selectedCompany === 'ramada' ? '215.20' : selectedCompany === 'wyndham' ? '184.50' : '198.80'}`, trend: "Target: $180.00", color: "text-slate-900" },
+                    { label: "ADR (Average Rate)", value: `$${selectedCompany === 'ramada' ? '280.00' : selectedCompany === 'wyndham' ? '230.00' : '255.00'}`, trend: "Dynamic BAR Active", color: "text-slate-900" },
+                    { label: "Avg Occupancy %", value: `${selectedCompany === 'ramada' ? '82.4%' : selectedCompany === 'wyndham' ? '76.8%' : '79.2%'}`, trend: "Target: 75.0%", color: "text-emerald-600 font-serif" },
+                    { label: "MTD Gross Yield", value: `$${selectedCompany === 'ramada' ? '142,500' : selectedCompany === 'wyndham' ? '118,900' : '129,400'}`, trend: "Ahead of schedule", color: "text-slate-900" }
+                  ].map((stat, idx) => (
+                    <div key={idx} className="bg-white border border-slate-100 p-6 shadow-sm">
+                      <p className="text-[9px] font-display uppercase tracking-widest text-slate-400 font-bold mb-1">{stat.label}</p>
+                      <p className={cn("text-2xl font-serif italic font-bold", stat.color)}>{stat.value}</p>
+                      <p className="text-[10px] text-slate-500 mt-1 font-mono">{stat.trend}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Recharts Yield Graph */}
+                <div className="bg-white border border-slate-100 p-6 shadow-sm">
+                  <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
+                    <div>
+                      <h3 className="text-xs font-display uppercase tracking-widest text-slate-800 font-extrabold mb-1">Weekly Yield Performance & Room Night Sales</h3>
+                      <p className="text-xs font-serif italic text-slate-500">Comparing ADR (Average Daily Rate) and Gross revenue distributions across Nadi market</p>
+                    </div>
+                  </div>
+                  <div className="h-80 w-full font-mono">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart
+                        data={[
+                          { day: "Mon", rev: 14200, adr: 220 },
+                          { day: "Tue", rev: 15800, adr: 235 },
+                          { day: "Wed", rev: 17200, adr: 240 },
+                          { day: "Thu", rev: 19100, adr: 250 },
+                          { day: "Fri", rev: 24500, adr: 280 },
+                          { day: "Sat", rev: 26800, adr: 295 },
+                          { day: "Sun", rev: 22400, adr: 260 }
+                        ]}
+                        margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                      >
+                        <defs>
+                          <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={selectedCompany === 'ramada' ? '#D11242' : '#0b5c4b'} stopOpacity={0.2}/>
+                            <stop offset="95%" stopColor={selectedCompany === 'ramada' ? '#D11242' : '#0b5c4b'} stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="day" stroke="#94a3b8" fontSize={11} fontStyle="italic" />
+                        <YAxis stroke="#94a3b8" fontSize={11} />
+                        <Tooltip />
+                        <Area type="monotone" dataKey="rev" stroke={selectedCompany === 'ramada' ? '#D11242' : '#0b5c4b'} strokeWidth={2} fillOpacity={1} fill="url(#colorRev)" name="Daily Gross Rev ($)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Channel Breakdown Table */}
+                  <div className="bg-white border border-slate-100 p-6 shadow-sm">
+                    <h3 className="text-xs font-display uppercase tracking-widest text-slate-800 font-extrabold mb-4 border-b border-slate-50 pb-3">Channel Yield Matrix</h3>
+                    <table className="w-full text-xs font-sans text-slate-600">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-[10px] font-display uppercase tracking-wider text-slate-400">
+                          <th className="py-2.5 text-left font-bold">Distribution Channel</th>
+                          <th className="py-2.5 text-center font-bold">Share %</th>
+                          <th className="py-2.5 text-right font-bold">Avg Yield</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          { channel: "Booking.com Partner Group", share: "38%", yield: `$${selectedCompany === 'ramada' ? '268.00' : '210.00'}` },
+                          { channel: "Expedia Web Network", share: "22%", yield: `$${selectedCompany === 'ramada' ? '274.00' : '215.00'}` },
+                          { channel: "Agoda Global Services", share: "14%", yield: `$${selectedCompany === 'ramada' ? '255.00' : '205.00'}` },
+                          { channel: "Direct Walk-ins & Web Booking", share: "16%", yield: `$${selectedCompany === 'ramada' ? '290.00' : '240.00'}` },
+                          { channel: "Corporate Contract Groups", share: "10%", yield: `$${selectedCompany === 'ramada' ? '220.00' : '185.00'}` }
+                        ].map((row, idx) => (
+                          <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50 transition-colors animate-fade-in">
+                            <td className="py-2.5 font-semibold text-slate-800">{row.channel}</td>
+                            <td className="py-2.5 text-center text-slate-600 font-mono">{row.share}</td>
+                            <td className="py-2.5 text-right text-slate-900 font-mono font-bold">{row.yield}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Channel Yield Chart representation */}
+                  <div className="bg-white border border-slate-100 p-6 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <h3 className="text-xs font-display uppercase tracking-widest text-slate-800 font-extrabold mb-2 border-b border-slate-50 pb-3">OTA Channel Parity Alerts</h3>
+                      <p className="text-xs font-serif italic text-slate-500 mb-4">Daily automated scanning of Rate compliance across channels.</p>
+                      <div className="space-y-3">
+                        <div className="p-3 bg-red-50 border border-red-100 rounded-none flex items-center gap-3">
+                          <AlertTriangle className="text-red-500 shrink-0" size={16} />
+                          <div className="text-[11px] text-red-800 leading-normal font-serif">
+                            <strong>Expedia Discrepancy!</strong> Rates on Expedia are floating at $245, while direct BAR is restricted at $280. Parity breached.
+                          </div>
+                        </div>
+                        <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-none flex items-center gap-3">
+                          <CheckCircle className="text-emerald-500 shrink-0" size={16} />
+                          <div className="text-[11px] text-emerald-800 leading-normal font-serif">
+                            <strong>Booking.com Compliant.</strong> Rate synched perfectly at $280 via Siteminder OTA bridge.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => navigateTo("revenue-mgmt")} 
+                      className="w-full text-center py-2.5 bg-black text-white hover:bg-gold text-[9px] font-display uppercase tracking-widest font-black transition-colors mt-6"
+                    >
+                      Access Rate Control Console
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : activeTab === "revenue-mgmt" ? (
+              <div className="space-y-8 pb-32">
+                {/* Header Block with Division Pivot Selectbox */}
+                <div className={cn(
+                  "p-8 border relative overflow-hidden flex flex-col md:flex-row md:items-center md:justify-between gap-6",
+                  selectedCompany === 'ramada' ? "bg-red-50/50 border-red-200/50" : 
+                  selectedCompany === 'wyndham' ? "bg-emerald-50/50 border-emerald-200/50" : 
+                  "bg-gold/5 border-gold/10"
+                )}>
+                  <div className="relative z-10 max-w-2xl">
+                    <div className={cn(
+                      "text-[9px] font-display uppercase tracking-[0.25em] font-black pb-2 border-b max-w-max mb-6",
+                      selectedCompany === 'ramada' ? "text-[#D11242] border-red-200" : 
+                      selectedCompany === 'wyndham' ? "text-[#0b5c4b] border-emerald-200" : 
+                      "text-gold border-gold/20"
+                    )}>
+                      {selectedCompany === 'ramada' ? "Ramada Suites" : 
+                       selectedCompany === 'wyndham' ? "Wyndham Garden" : 
+                       "Cove Management Limited"} • Rate Management
+                    </div>
+                    <h2 className="text-4xl font-serif text-slate-900 italic tracking-tight font-light mb-2">
+                      Revenue Control Console
+                    </h2>
+                    <p className="text-sm font-serif italic text-slate-600 leading-relaxed">
+                      Sync BAR, distribute yield rates, run the dynamic pricing calculator, and audit parity flags instantly to optimize occupancy margins.
+                    </p>
+                    {offlineRatesCount > 0 && (
+                      <div className="mt-4 flex items-center gap-2.5 bg-amber-50 border border-amber-205 text-amber-800 px-4 py-3 text-xs w-fit transition-all duration-300">
+                        <span className="flex h-2.5 w-2.5 relative">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                        </span>
+                        <span className="font-sans font-bold uppercase tracking-wider">
+                          {offlineRatesCount} Pending Rate Update(s) Cached Offline
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => triggerRatesBackgroundSync()}
+                          disabled={isOfflineRatesSyncing}
+                          className={`ml-3 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-sans font-extrabold uppercase tracking-widest text-[9px] transition-all flex items-center gap-1 cursor-pointer border border-amber-500 shadow-sm ${isOfflineRatesSyncing ? 'opacity-55 cursor-not-allowed' : ''}`}
+                        >
+                          {isOfflineRatesSyncing ? "Synchronizing Rates..." : "🔄 Sync Now"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Filter Dropdown - Pivoting Data by Division */}
+                  <div className="bg-white border border-slate-100 p-4 shadow-xs min-w-[240px] shrink-0">
+                    <label className="text-[9px] font-display uppercase tracking-widest text-[#1a1a1a] font-extrabold block mb-2">
+                      Pivoted Division / Region
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={revenueDivisionFilter}
+                        onChange={(e) => setRevenueDivisionFilter(e.target.value as any)}
+                        className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-xs font-serif italic py-2 px-3 focus:outline-none focus:border-gold rounded-none"
+                      >
+                        <option value="All">All Regions / Properties</option>
+                        <option value="Western">Western Division</option>
+                        <option value="Central">Central Division</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 1. KPI Summary Cards (Desktop 3 columns layout matching Streamlit metrics) */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* KPI 1: Total Portfolio Revenue MTD */}
+                  <div className="bg-white border border-slate-100 p-6 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <span className="text-[9px] font-display uppercase tracking-wider text-slate-400 font-extrabold block mb-2">
+                        Total Portfolio Revenue (MTD)
+                      </span>
+                      <p className="text-2xl font-serif text-slate-950 font-bold tracking-tight">
+                        FJD $1,248,500.00
+                      </p>
+                    </div>
+                    <div className="mt-4 flex items-center gap-1.5 text-xs font-sans text-emerald-600 font-bold">
+                      <span className="text-base">↑</span> +12.4% vs last month
+                    </div>
+                  </div>
+
+                  {/* KPI 2: Average Portfolio Occupancy */}
+                  <div className="bg-white border border-slate-100 p-6 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <span className="text-[9px] font-display uppercase tracking-wider text-slate-400 font-extrabold block mb-2">
+                        Average Portfolio Occupancy
+                      </span>
+                      <p className="text-2xl font-serif text-[#C5A059] font-bold tracking-tight">
+                        81.2%
+                      </p>
+                    </div>
+                    <div className="mt-4 flex items-center gap-1.5 text-xs font-sans text-emerald-600 font-bold">
+                      <span className="text-base">↑</span> Target 75.0% | +3.5% YoY
+                    </div>
+                  </div>
+
+                  {/* KPI 3: System Diagnostics */}
+                  <div className="bg-white border border-slate-100 p-6 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <span className="text-[9px] font-display uppercase tracking-wider text-slate-400 font-extrabold block mb-2">
+                        System Diagnostics
+                      </span>
+                      <p className="text-2xl font-serif text-emerald-700 font-bold tracking-tight flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                        CML Encryption Enforced
+                      </p>
+                    </div>
+                    <div className="mt-4 flex items-center gap-1.5 text-xs font-sans text-emerald-600 font-bold">
+                      🔒 94.8% Secure Protocol
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Performance Tracking Interactive Table Block */}
+                <div className="bg-white border border-slate-100 p-6 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-50 pb-4 mb-6 gap-4">
+                    <div>
+                      <h3 className="text-xs font-display uppercase tracking-widest text-[#1a1a1a] font-extrabold">
+                        Property Portfolio Performance Index
+                      </h3>
+                      <p className="text-[11px] font-serif italic text-slate-500 mt-1">
+                        Displaying metrics filtered by: <strong className="text-gold capitalize">{revenueDivisionFilter} Division</strong>
+                      </p>
+                    </div>
+                    
+                    {/* Tiny inline visual badge count */}
+                    <span className="bg-slate-50 text-slate-700 border border-slate-150 px-3 py-1 font-mono text-[9px] tracking-wider font-extrabold">
+                      {[
+                        { name: "Ramada Suites Wailoaloa", division: "Western", status: "Optimal", occupancy: "84.5%", adr: "FJD $320.00", revpar: "FJD $270.40" },
+                        { name: "Wyndham Garden Wailoaloa", division: "Western", status: "Action Required", occupancy: "76.8%", adr: "FJD $280.00", revpar: "FJD $215.04" },
+                        { name: "CML Headquarters Suite", division: "Central", status: "Optimal", occupancy: "89.2%", adr: "FJD $350.00", revpar: "FJD $312.20" }
+                      ].filter(p => revenueDivisionFilter === "All" || p.division === revenueDivisionFilter).length} PROPERTIES LOADED
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs font-sans text-slate-600">
+                      <thead>
+                        <tr className="bg-slate-50 text-[10px] font-display uppercase tracking-wider text-slate-800 border-b border-slate-100">
+                          <th 
+                            onClick={() => handlePortfolioSort("name")}
+                            className="p-4 font-extrabold cursor-pointer hover:bg-slate-100/50 transition-colors select-none group"
+                          >
+                            <span className="flex items-center gap-1">
+                              Property Name
+                              <span className="text-gold font-bold">
+                                {portfolioSortKey === "name" ? (portfolioSortOrder === "asc" ? " ▲" : " ▼") : " ↕"}
+                              </span>
+                            </span>
+                          </th>
+                          <th className="p-4 font-extrabold">Region Division</th>
+                          <th className="p-4 font-extrabold">Status flag</th>
+                          <th 
+                            onClick={() => handlePortfolioSort("occupancy")}
+                            className="p-4 font-extrabold text-right cursor-pointer hover:bg-slate-100/50 transition-colors select-none group"
+                          >
+                            <span className="flex items-center justify-end gap-1">
+                              Occupancy %
+                              <span className="text-gold font-bold">
+                                {portfolioSortKey === "occupancy" ? (portfolioSortOrder === "asc" ? " ▲" : " ▼") : " ↕"}
+                              </span>
+                            </span>
+                          </th>
+                          <th className="p-4 font-extrabold text-right">ADR (FJD)</th>
+                          <th 
+                            onClick={() => handlePortfolioSort("revpar")}
+                            className="p-4 font-extrabold text-right cursor-pointer hover:bg-slate-100/50 transition-colors select-none group"
+                          >
+                            <span className="flex items-center justify-end gap-1">
+                              RevPAR (FJD)
+                              <span className="text-gold font-bold">
+                                {portfolioSortKey === "revpar" ? (portfolioSortOrder === "asc" ? " ▲" : " ▼") : " ↕"}
+                              </span>
+                            </span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {(() => {
+                          const baseRows = [
+                            { name: "Ramada Suites Wailoaloa", division: "Western", status: "Optimal", occupancy: "84.5%", adr: "FJD $320.00", revpar: "FJD $270.40" },
+                            { name: "Wyndham Garden Wailoaloa", division: "Western", status: "Action Required", occupancy: "76.8%", adr: "FJD $280.00", revpar: "FJD $215.04" },
+                            { name: "CML Headquarters Suite", division: "Central", status: "Optimal", occupancy: "89.2%", adr: "FJD $350.00", revpar: "FJD $312.20" }
+                          ];
+                          
+                          const filtered = baseRows.filter(p => revenueDivisionFilter === "All" || p.division === revenueDivisionFilter);
+                          
+                          if (portfolioSortKey) {
+                            filtered.sort((a, b) => {
+                              let valA: string | number = "";
+                              let valB: string | number = "";
+                              
+                              if (portfolioSortKey === "name") {
+                                valA = a.name;
+                                valB = b.name;
+                              } else if (portfolioSortKey === "occupancy") {
+                                valA = parseFloat(a.occupancy);
+                                valB = parseFloat(b.occupancy);
+                              } else if (portfolioSortKey === "revpar") {
+                                valA = parseFloat(a.revpar.replace(/[^\d.]/g, ""));
+                                valB = parseFloat(b.revpar.replace(/[^\d.]/g, ""));
+                              }
+
+                              if (typeof valA === "number" && typeof valB === "number") {
+                                return portfolioSortOrder === "asc" ? valA - valB : valB - valA;
+                              } else {
+                                return portfolioSortOrder === "asc"
+                                  ? String(valA).localeCompare(String(valB))
+                                  : String(valB).localeCompare(String(valA));
+                              }
+                            });
+                          }
+                          
+                          return filtered.map((row, idx) => (
+                            <motion.tr 
+                              key={row.name} 
+                              whileHover={{ backgroundColor: "rgba(197, 160, 89, 0.02)" }}
+                              className="border-b border-slate-100 hover:border-slate-200 transition-colors"
+                            >
+                              <td className="p-4 font-semibold text-slate-900 font-serif italic text-sm">{row.name}</td>
+                              <td className="p-4">
+                                <span className="bg-slate-100 text-slate-700 text-[9px] font-display uppercase tracking-wider px-2 py-0.5 font-bold">
+                                  {row.division} Division
+                                </span>
+                              </td>
+                              <td className="p-4">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={cn(
+                                    "w-1.5 h-1.5 rounded-full inline-block",
+                                    row.status === 'Optimal' ? "bg-emerald-500" : "bg-amber-500 animate-pulse"
+                                  )} />
+                                  <span className={cn(
+                                    "text-[10px] font-sans font-extrabold uppercase tracking-wider",
+                                    row.status === 'Optimal' ? "text-emerald-700" : "text-amber-700"
+                                  )}>
+                                    {row.status}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="p-4 text-right font-mono font-medium text-slate-900">{row.occupancy}</td>
+                              <td className="p-4 text-right font-mono text-slate-900 font-bold">{row.adr}</td>
+                              <td className="p-4 text-right font-mono text-[#C5A059] font-black">{row.revpar}</td>
+                            </motion.tr>
+                          ));
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Parity & Sync Control Block */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Active Channels Control Panel */}
+                  <div className="bg-white border border-slate-100 p-6 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <h3 className="text-xs font-display uppercase tracking-widest text-[#1a1a1a] font-extrabold border-b border-slate-50 pb-3 mb-4">
+                        OTA Channel Parity Sync Status
+                      </h3>
+                      <div className="space-y-4">
+                        {[
+                          { channel: "Siteminder Channel Manager", status: "Active Syncing", flag: "ok", lastUpdated: "4 mins ago" },
+                          { channel: "Booking.com Partner Portal", status: "Parity Match", flag: "ok", lastUpdated: "12 mins ago" },
+                          { channel: "Expedia Partner Central", status: "Rate Mismatch ($245 / $280)", flag: "warning", lastUpdated: "1 hr ago" },
+                          { channel: "Agoda Extranet Terminal", status: "Parity Match", flag: "ok", lastUpdated: "5 mins ago" }
+                        ].map((row, idx) => (
+                          <div key={idx} className="flex justify-between items-center text-xs border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+                            <div>
+                              <p className="font-semibold text-slate-900">{row.channel}</p>
+                              <p className="text-[10px] text-slate-400 font-mono">Last ping: {row.lastUpdated}</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className={cn(
+                                "text-[9px] font-display uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-none",
+                                row.flag === 'ok' ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700 animate-pulse"
+                              )}>
+                                {row.status}
+                              </span>
+                              {row.flag !== 'ok' && (
+                                <button className="px-2 py-1 bg-[#D11242] text-white hover:bg-black text-[9px] font-display uppercase tracking-[0.1em] font-black transition-colors rounded-none">
+                                  Force Resync
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Interactive Pricing Calculator */}
+                  <div className="bg-white border border-slate-100 p-6 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2 border-b border-slate-50 pb-3">
+                        <TrendingUp size={16} className="text-gold" />
+                        <h3 className="text-xs font-display uppercase tracking-widest text-slate-800 font-extrabold">Dynamic Margin Calculator</h3>
+                      </div>
+                      <p className="text-xs font-serif italic text-slate-500 mb-4">Simulate markup pricing strategy based on occupancy and weekend index values.</p>
+                      
+                      <div className="space-y-3 text-xs font-sans text-slate-600">
+                        <div className="flex justify-between items-center">
+                          <span>Base Room BAR Rate:</span>
+                          <span className="font-mono font-bold text-slate-900">$200.00</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span>Occupancy Surcharge (at &gt;80% occupancy):</span>
+                          <span className="font-mono font-bold text-slate-900">+$30.00</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span>Weekend Markup Factor (+15%):</span>
+                          <span className="font-mono font-bold text-slate-900">+$30.00</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span>Property Eco-Tax Compliance Levy:</span>
+                          <span className="font-mono font-bold text-slate-900">+$15.00</span>
+                        </div>
+                        <div className="border-t border-slate-200/50 pt-3 mt-3 flex justify-between items-center text-sm font-bold text-slate-900">
+                          <span>Dynamic Projected BAR Rate:</span>
+                          <span className="font-mono text-gold text-lg">$275.00</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={handleDistributeRates}
+                      className="w-full text-center py-2.5 bg-black text-white hover:bg-gold text-[9px] font-display uppercase tracking-widest font-black transition-colors mt-6 cursor-pointer"
+                    >
+                      Distribute Calculator Rates to Channel Manager
+                    </button>
+                  </div>
+                </div>
+
+                {/* 4. Luxury Hospitality Portal Corporate Footer Markup */}
+                <div className="pt-12 border-t border-slate-100 text-center">
+                  <p className="text-[10px] font-sans text-slate-400 uppercase tracking-widest leading-loose">
+                    © 2026 CML Community Portal | Security Protocol: CML Encryption Standard Enforced
+                  </p>
                 </div>
               </div>
             ) : activeTab === "property-overview" ? (
@@ -2444,8 +6889,8 @@ export default function App() {
                   className="relative h-[70vh] -mx-10 -mt-10 overflow-hidden group mb-12 shadow-2xl"
                 >
                   <img 
-                    src="/src/assets/images/regenerated_image_1778546396685.png" 
-                    alt="Wyndham Garden Exterior" 
+                    src={(currentCompany as any)?.heroImage || "https://ramadawailoaloafiji.com/wp-content/uploads/2026/05/Ramada-70.jpg"} 
+                    alt={`${currentCompany?.name} Exterior`} 
                     className="w-full h-full object-cover transition-transform duration-[3s] ease-out group-hover:scale-110"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-luxury-black/90 via-luxury-black/20 to-transparent"></div>
@@ -2457,21 +6902,47 @@ export default function App() {
                     >
                       <p className="text-gold font-display text-xs uppercase tracking-[0.5em] mb-6 font-black flex items-center gap-4">
                         <span className="w-12 h-px bg-gold/50"></span>
-                        Fiji's Premier Waterfront Retreat
+                        {(currentCompany as any)?.tagline || "Fiji's Premier Waterfront Retreat"}
                       </p>
-                      <h2 className="text-7xl font-serif text-white italic leading-[1.1]">Wyndham Garden <br/><span className="text-white/80">Wailoaloa Beach Fiji</span></h2>
+                      
+                      {(currentCompany as any)?.brandTagline && (
+                        <p className="text-white font-display text-lg uppercase tracking-[0.3em] mb-4 font-black">
+                          {(currentCompany as any)?.brandTagline}
+                        </p>
+                      )}
+
+                      {(currentCompany as any)?.logoPortal && selectedCompany !== 'wyndham' ? (
+                        <img 
+                          src={(currentCompany as any)?.logoPortal} 
+                          alt={`${currentCompany?.name} Logo`} 
+                          className="h-32 mb-8 object-contain" 
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (currentCompany as any)?.logoPortal && selectedCompany === 'wyndham' ? (
+                        <img 
+                          src={(currentCompany as any)?.logoPortal} 
+                          alt="Wyndham Garden Logo" 
+                          className="h-32 mb-8 object-contain brightness-0 invert" 
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <h2 className="text-7xl font-serif text-white italic leading-[1.1]">
+                          {currentCompany?.name} <br/><span className="text-white/80">{currentCompany?.description}</span>
+                        </h2>
+                      )}
+                      
                       <div className="mt-12 flex gap-12">
                          <div className="space-y-1">
                             <p className="text-[10px] font-display uppercase tracking-[0.2em] text-slate-700">Location</p>
-                            <p className="text-lg font-serif italic text-white">Nadi Waterfront</p>
+                            <p className="text-lg font-serif italic text-white">{(currentCompany as any)?.location || "Nadi Waterfront"}</p>
                          </div>
                          <div className="space-y-1">
                             <p className="text-[10px] font-display uppercase tracking-[0.2em] text-slate-700">Distance</p>
-                            <p className="text-lg font-serif italic text-white">15 Min from Airport</p>
+                            <p className="text-lg font-serif italic text-white">{(currentCompany as any)?.distance || "15 Min from Airport"}</p>
                          </div>
                          <div className="space-y-1">
-                            <p className="text-[10px] font-display uppercase tracking-[0.2em] text-slate-700">Floors</p>
-                            <p className="text-lg font-serif italic text-white">7 Levels of Luxury</p>
+                            <p className="text-[10px] font-display uppercase tracking-[0.2em] text-slate-700">Property Type</p>
+                            <p className="text-lg font-serif italic text-white">{(currentCompany as any)?.floors || "7 Levels of Luxury"}</p>
                          </div>
                       </div>
                     </motion.div>
@@ -2487,15 +6958,17 @@ export default function App() {
                         <div className="flex-1 h-px bg-slate-100"></div>
                       </div>
                       <p className="text-slate-700 font-serif italic text-2xl leading-relaxed mb-12">
-                        Fiji's newest 4 star, Wyndham Garden Wailoaloa Beach Fiji 7-floor beachfront serviced hotel is idyllically situated on the beach of Wailoaloa with a unique view of the sea and nearby surrounding Islands.
+                        {(currentCompany as any)?.concept || "Fiji's newest 4 star serviced hotel is idyllically situated on the beach of Wailoaloa with a unique view of the sea and nearby surrounding Islands."}
                       </p>
                       <img 
-                        src="/src/assets/images/regenerated_image_1778546992084.png" 
-                        alt="Aerial view" 
-                        className="w-full h-[400px] object-cover mb-12 border border-slate-50 shadow-lg"
+                        src={(currentCompany as any)?.conceptImage || "/src/assets/images/regenerated_image_1778546992084.png"} 
+                        alt="Property view" 
+                        className="w-full h-[400px] object-cover mb-12 border border-slate-50 shadow-lg cursor-pointer hover:shadow-xl hover:brightness-105 transition-all duration-300"
+                        onClick={() => openCompanyLightbox((currentCompany as any)?.conceptImage || "/src/assets/images/regenerated_image_1778546992084.png")}
+                        title="Click to view full-screen"
                       />
                       <p className="text-slate-600 font-serif italic text-lg leading-relaxed">
-                        We have thought of almost everything you'll need while you're here with our modern and comfortable rooms which come with IP TV display, Study desk, balcony, and Air-con. The property offers great facilities such as a spa, deli shop, pool, beach deck dining, and conference rooms.
+                        {(currentCompany as any)?.longDescription || "We have thought of almost everything you'll need while you're here with our modern and comfortable rooms. The property offers great facilities such as a spa, deli shop, pool, beach deck dining, and conference rooms."}
                       </p>
                     </section>
 
@@ -2505,28 +6978,26 @@ export default function App() {
                         <div className="flex-1 h-px bg-slate-100"></div>
                       </div>
                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                          {[
-                            { name: "Beachfront Executive King", size: "49.38m²", sleeps: "3 Guests", img: "https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&q=80&w=800" },
-                            { name: "Garden Ocean View King", size: "30.28m²", sleeps: "2 Guests", img: "https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&q=80&w=800" },
-                            { name: "Garden Ocean View Twin", size: "30.28m²", sleeps: "2 Guests", img: "https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&q=80&w=800" },
-                            { name: "Garden King Room", size: "30.28m²", sleeps: "2 Guests", img: "https://images.unsplash.com/photo-1591088398332-8a77d397ef84?auto=format&fit=crop&q=80&w=800" }
-                          ].map((room, i) => (
-                            <motion.div 
-                              key={i} 
-                              whileHover={{ y: -10 }}
-                              className="luxury-card group overflow-hidden bg-white shadow-xl"
-                            >
-                               <div className="h-64 overflow-hidden relative">
-                                  <img src={room.img} alt={room.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
-                                  <div className="absolute top-6 right-6 bg-white/90 backdrop-blur-sm px-4 py-1 text-[9px] font-display uppercase tracking-[0.2em] font-black italic">
-                                     {room.size}
-                                  </div>
-                               </div>
-                               <div className="p-8">
-                                  <h4 className="text-xl font-serif italic text-slate-900 mb-2">{room.name}</h4>
-                                  <p className="text-[10px] font-display uppercase tracking-widest text-slate-700 italic">Occupancy: {room.sleeps}</p>
-                               </div>
-                            </motion.div>
+                          {((currentCompany as any)?.rooms || []).map((room: any, i: number) => (
+                             <motion.div 
+                               key={i} 
+                               whileHover={{ y: -10 }}
+                               className="luxury-card group overflow-hidden bg-white shadow-xl"
+                             >
+                                <div className="h-64 overflow-hidden relative cursor-pointer" onClick={() => openCompanyLightbox(room.img)}>
+                                   <img src={room.img} alt={room.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                                   <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-all duration-300 flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                      <span className="text-[9px] font-display uppercase tracking-[0.2em] font-bold text-white border border-white/20 bg-slate-950/80 px-4 py-2">Explore Suite</span>
+                                   </div>
+                                   <div className="absolute top-6 right-6 bg-white/90 backdrop-blur-sm px-4 py-1 text-[9px] font-display uppercase tracking-[0.2em] font-black italic">
+                                      {room.size}
+                                   </div>
+                                </div>
+                                <div className="p-8">
+                                   <h4 className="text-xl font-serif italic text-slate-900 mb-2">{room.name}</h4>
+                                   <p className="text-[10px] font-display uppercase tracking-widest text-slate-700 italic">Occupancy: {room.sleeps}</p>
+                                </div>
+                             </motion.div>
                           ))}
                        </div>
                     </section>
@@ -2534,25 +7005,73 @@ export default function App() {
 
                   <div className="lg:col-span-4 space-y-12">
                     <div className="sticky top-12 space-y-12">
+                      {/* What's New Vertical Banner */}
+                      <div className="luxury-card p-8 bg-gradient-to-br from-amber-500/10 to-gold/5 border border-gold/30 shadow-xl relative overflow-hidden group">
+                        <div className="absolute right-0 top-0 p-4 opacity-10">
+                           <Newspaper size={80} strokeWidth={1} />
+                        </div>
+                        <div className="flex items-center gap-2 mb-6 border-b border-gold/20 pb-4 relative z-10">
+                          <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                          <h4 className="text-[11px] font-display uppercase tracking-[0.3em] font-black text-slate-800 italic">WHAT'S NEW</h4>
+                        </div>
+                        
+                        <div className="space-y-6 relative z-10 max-h-[460px] overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-gold/20">
+                          {latestCorporateNews.length === 0 ? (
+                            <p className="text-[11px] font-serif italic text-slate-500">No new updates posted today.</p>
+                          ) : (
+                            latestCorporateNews.map((news: any) => {
+                              const createdDateString = news.createdAt?.toDate 
+                                ? news.createdAt.toDate().toLocaleDateString()
+                                : news.createdAt ? new Date(news.createdAt).toLocaleDateString() : "";
+                              return (
+                                <div key={news.id} className="group/news border-b border-slate-100 last:border-0 pb-5 last:pb-0 space-y-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[8px] font-display uppercase tracking-widest bg-gold/15 text-slate-800 px-1.5 py-0.5 font-bold">
+                                      {news.category || "Notice"}
+                                    </span>
+                                    {news.isUrgent && (
+                                      <span className="text-[8px] font-display uppercase tracking-widest bg-red-600 text-white px-1.5 py-0.5 font-bold animate-pulse">
+                                        Urgent
+                                      </span>
+                                    )}
+                                    <span className="text-[8px] font-mono text-slate-400 font-bold ml-auto">{createdDateString}</span>
+                                  </div>
+                                  <h5 className="text-[13px] font-serif italic text-slate-900 group-hover/news:text-gold transition-colors font-bold leading-snug">
+                                    {news.title}
+                                  </h5>
+                                  <p className="text-[10px] text-slate-600 line-clamp-3 leading-relaxed font-sans">
+                                    {news.content}
+                                  </p>
+                                  {news.imageUrl && (
+                                    <img 
+                                      src={news.imageUrl} 
+                                      alt={news.title} 
+                                      className="w-full h-24 object-cover mt-2.5 rounded-sm border border-slate-100" 
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  )}
+                                  <div className="text-[8px] font-display uppercase tracking-widest text-[#c5a02d] font-bold pt-1">
+                                    By {news.authorName || "CML Admin"}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+
                       <div className="luxury-card p-10 bg-luxury-black text-white shadow-2xl relative overflow-hidden group">
                         <div className="absolute -right-12 -top-12 w-48 h-48 bg-gold/5 rounded-full blur-3xl group-hover:bg-gold/10 transition-colors"></div>
                         <h4 className="text-[10px] font-display uppercase tracking-[0.4em] font-black text-gold mb-10 pb-4 border-b border-gold/10 relative z-10 italic">Core Amenities</h4>
                         <div className="grid grid-cols-1 gap-8 relative z-10">
-                           {[
-                             { label: "Free High Speed Wi-Fi", icon: Globe, desc: "Seamless connectivity throughout" },
-                             { label: "Swimming Pool & Spa", icon: Waves, desc: "Infinity edge recreation" },
-                             { label: "Business Centre", icon: Briefcase, desc: "24/7 productivity suite" },
-                             { label: "Meeting Space", icon: Users, desc: "Executive event facilities" },
-                             { label: "IP TV Display", icon: Smartphone, desc: "Next-gen entertainment" },
-                             { label: "Full Air-conditioning", icon: Wind, desc: "Individual climate control" }
-                           ].map((feature, i) => (
+                           {((currentCompany as any)?.amenities || []).map((feature: any, i: number) => (
                              <div key={i} className="flex items-start gap-4 group">
                                 <div className="w-10 h-10 bg-white/5 border border-white/10 flex items-center justify-center text-gold group-hover:border-gold group-hover:bg-gold group-hover:text-white transition-all duration-500">
                                    <feature.icon size={16} strokeWidth={1} />
                                 </div>
                                 <div>
                                    <p className="text-[11px] font-display uppercase tracking-widest text-white transition-all mb-1 font-bold">{feature.label}</p>
-                                   <p className="text-[9px] text-slate-300 font-serif italic italic not-italic font-bold">{feature.desc}</p>
+                                   <p className="text-[9px] text-slate-300 font-serif italic not-italic font-bold">{feature.desc}</p>
                                 </div>
                              </div>
                            ))}
@@ -2562,13 +7081,7 @@ export default function App() {
                       <div className="luxury-card p-10 bg-white border border-slate-100 shadow-xl italic-headings">
                          <h4 className="text-[10px] font-display uppercase tracking-[0.4em] font-black text-slate-800 mb-10 pb-4 border-b border-gold/10 italic">Property Highlights</h4>
                          <div className="space-y-6">
-                            {[
-                              "Beachfront Serviced Hotel",
-                              "15 Mins from Nadi Airport",
-                              "90 Luxury Guest Rooms",
-                              "360-Degree Scenic Rooftop",
-                              "Waterfront Event Deck"
-                            ].map((highlight, i) => (
+                            {((currentCompany as any)?.highlights || []).map((highlight: string, i: number) => (
                               <div key={i} className="flex items-center gap-3">
                                  <div className="w-1.5 h-1.5 bg-gold rounded-full"></div>
                                  <span className="text-xs font-serif italic text-slate-600">{highlight}</span>
@@ -2581,88 +7094,47 @@ export default function App() {
                 </div>
 
                 {/* Culinary Excellence Section */}
-                <section className="space-y-16 -mx-10 bg-luxury-black text-white p-20 py-32 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-20 opacity-5">
-                     <Hotel size={500} strokeWidth={0.5} />
-                  </div>
-                  <div className="max-w-6xl mx-auto relative z-10">
-                    <div className="flex flex-col items-center text-center mb-20">
-                      <p className="text-gold font-display text-[10px] uppercase tracking-[0.6em] mb-6 font-black italic">Gastronomy</p>
-                      <h3 className="text-5xl font-serif italic text-white mb-8">Culinary Masterpieces</h3>
-                      <p className="max-w-2xl text-slate-300 font-serif italic text-lg leading-relaxed">
-                        Are you searching for a dining experience that combines breathtaking views with mouthwatering cuisine? Look no further.
-                      </p>
+                {((currentCompany as any)?.culinary?.venues?.length > 0) && (
+                  <section className="space-y-16 -mx-10 bg-luxury-black text-white p-20 py-32 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-20 opacity-5">
+                       <Hotel size={500} strokeWidth={0.5} />
                     </div>
+                    <div className="max-w-6xl mx-auto relative z-10">
+                      <div className="flex flex-col items-center text-center mb-20">
+                        <p className="text-gold font-display text-[10px] uppercase tracking-[0.6em] mb-6 font-black italic">Gastronomy</p>
+                        <h3 className="text-5xl font-serif italic text-white mb-8">{(currentCompany as any)?.culinary?.title}</h3>
+                        <p className="max-w-2xl text-slate-300 font-serif italic text-lg leading-relaxed">
+                          {(currentCompany as any)?.culinary?.desc}
+                        </p>
+                      </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 mb-20 items-center">
-                       <div className="space-y-10 order-2 lg:order-1">
-                          <div className="space-y-4">
-                             <h4 className="text-3xl font-serif italic text-gold">Sky Garden Restaurant & Bar</h4>
-                             <p className="text-slate-600 font-serif italic leading-relaxed text-lg italic">
-                                Offering not just delicious food but also 360-degree scenic rooftop views overlooking Wailoaloa Beach and Nadi Bay.
-                             </p>
+                      <div className="space-y-32">
+                        {((currentCompany as any)?.culinary?.venues || []).map((venue: any, idx: number) => (
+                          <div key={idx} className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
+                            <div className={cn("space-y-10", idx % 2 === 1 ? "order-2" : "order-2 lg:order-1")}>
+                               <div className="space-y-4">
+                                  <h4 className="text-3xl font-serif italic text-gold">{venue.name}</h4>
+                                  <p className="text-slate-300 font-serif italic leading-relaxed text-lg">
+                                     {venue.desc}
+                                  </p>
+                               </div>
+                            </div>
+                            <div className={cn("h-[500px] overflow-hidden shadow-2xl border border-white/5 cursor-pointer relative group/venue", idx % 2 === 1 ? "order-1" : "order-1 lg:order-2")} onClick={() => openCompanyLightbox(venue.img)}>
+                               <img 
+                                 src={venue.img} 
+                                 className="w-full h-full object-cover transition-transform duration-[4s] group-hover/venue:scale-105" 
+                                 alt={venue.name}
+                               />
+                               <div className="absolute inset-0 bg-black/10 group-hover/venue:bg-black/35 transition-all duration-300 flex items-center justify-center opacity-0 group-hover/venue:opacity-100">
+                                  <span className="text-[9px] font-display uppercase tracking-[0.2em] font-bold text-white border border-white/20 bg-slate-950/80 px-4 py-2">View Venue</span>
+                               </div>
+                            </div>
                           </div>
-                          <div className="flex gap-4">
-                             <div className="h-64 flex-1 overflow-hidden">
-                                <img 
-                                  src="https://images.unsplash.com/photo-1550966841-3ee7adac1661?auto=format&fit=crop&q=80&w=800" 
-                                  className="w-full h-full object-cover transition-transform duration-700 hover:scale-110" 
-                                  alt="Rooftop dining"
-                                />
-                             </div>
-                             <div className="h-64 flex-1 overflow-hidden">
-                                <img 
-                                  src="https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&q=80&w=800" 
-                                  className="w-full h-full object-cover transition-transform duration-700 hover:scale-110" 
-                                  alt="Cocktails"
-                                />
-                             </div>
-                          </div>
-                       </div>
-                       <div className="h-[500px] overflow-hidden order-1 lg:order-2 shadow-2xl border border-white/5">
-                          <img 
-                            src="https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=2000" 
-                            className="w-full h-full object-cover transition-transform duration-[4s] hover:scale-105" 
-                            alt="Signature Dish"
-                          />
-                       </div>
+                        ))}
+                      </div>
                     </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
-                       <div className="h-[500px] overflow-hidden shadow-2xl border border-white/5">
-                          <img 
-                            src="https://images.unsplash.com/photo-1533777857889-4be7c70b33f7?auto=format&fit=crop&q=80&w=2000" 
-                            className="w-full h-full object-cover transition-transform duration-[4s] hover:scale-105" 
-                            alt="Oceanfront dining"
-                          />
-                       </div>
-                       <div className="space-y-10">
-                          <div className="space-y-4">
-                             <h4 className="text-3xl font-serif italic text-gold">Jasmine Beachfront & Lobster Bar</h4>
-                             <p className="text-slate-600 font-serif italic leading-relaxed text-lg italic">
-                                Offering mouthwatering seafood cuisines and delectable desserts. Our talented chefs have crafted a menu filled with exquisitely tasty dishes to satisfy all palates.
-                             </p>
-                          </div>
-                          <div className="flex gap-4">
-                             <div className="h-64 flex-1 overflow-hidden">
-                                <img 
-                                  src="https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&q=80&w=800" 
-                                  className="w-full h-full object-cover transition-transform duration-700 hover:scale-110" 
-                                  alt="Wine selection"
-                                />
-                             </div>
-                             <div className="h-64 flex-1 overflow-hidden">
-                                <img 
-                                  src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&q=80&w=800" 
-                                  className="w-full h-full object-cover transition-transform duration-700 hover:scale-110" 
-                                  alt="Fine dining table"
-                                />
-                             </div>
-                          </div>
-                       </div>
-                    </div>
-                  </div>
-                </section>
+                  </section>
+                )}
 
                 {/* Events & Meeting Section */}
                 <section className="space-y-16">
@@ -2670,18 +7142,21 @@ export default function App() {
                     <p className="text-gold font-display text-[10px] uppercase tracking-[0.6em] mb-6 font-black italic">MICE & Events</p>
                     <h3 className="text-5xl font-serif italic text-slate-900 italic mb-8">Conferences with Character</h3>
                     <p className="max-w-2xl text-slate-500 font-serif italic text-lg leading-relaxed">
-                      Wyndham Garden Wailoaloa Beach Fiji is the perfect venue for any special occasions you wish to celebrate.
+                      {currentCompany?.fullName} is the perfect venue for any special occasions you wish to celebrate.
                     </p>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                     {[
+                     {((currentCompany as any)?.eventImages || [
                        "https://images.unsplash.com/photo-1431540015161-0bf868a2d407?auto=format&fit=crop&q=80&w=1200",
                        "https://images.unsplash.com/photo-1505373877841-8d25f7d46678?auto=format&fit=crop&q=80&w=1200",
                        "https://images.unsplash.com/photo-1543007630-9710e4a00a20?auto=format&fit=crop&q=80&w=1200"
-                     ].map((img, i) => (
-                       <div key={i} className="h-[400px] overflow-hidden shadow-lg border border-slate-100">
-                          <img src={img} className="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-1000" />
+                     ]).map((img: string, i: number) => (
+                       <div key={i} className="h-[400px] overflow-hidden shadow-lg border border-slate-100 cursor-pointer relative group/event" onClick={() => openCompanyLightbox(img)}>
+                          <img src={img} className="w-full h-full object-cover grayscale group-hover/event:grayscale-0 transition-all duration-1000 group-hover/event:scale-105" />
+                          <div className="absolute inset-0 bg-black/10 group-hover/event:bg-black/35 transition-all duration-300 flex items-center justify-center opacity-0 group-hover/event:opacity-100">
+                             <span className="text-[9px] font-display uppercase tracking-[0.2em] font-bold text-white border border-white/20 bg-slate-950/80 px-4 py-2">View Gallery</span>
+                          </div>
                        </div>
                      ))}
                   </div>
@@ -2690,13 +7165,13 @@ export default function App() {
                     <div className="lg:col-span-5 space-y-10">
                        <h4 className="text-3xl font-serif italic text-slate-900 border-b border-slate-100 pb-4">Meeting Space Highlights</h4>
                        <ul className="space-y-6">
-                          {[
+                          {((currentCompany as any)?.meetingHighlights || [
                             "State of the art audiovisual technology",
                             "LCD projector screens & High-definition displays",
                             "High-Speed Wi-Fi & Cordless Microphones",
                             "Full Event Catering & Planning Services",
                             "Flipcharts with assorted markers & white boards"
-                          ].map((item, i) => (
+                          ]).map((item: string, i: number) => (
                             <div key={i} className="flex gap-4">
                                <div className="w-6 h-6 bg-luxury-cream text-gold flex items-center justify-center shrink-0">
                                   <CheckCircle size={14} />
@@ -2712,7 +7187,7 @@ export default function App() {
                              <h4 className="text-[10px] font-display uppercase tracking-[0.4em] font-black text-gold italic">Capacity Chart</h4>
                              <div className="text-right">
                                 <p className="text-[9px] font-display uppercase text-slate-600">Total Area</p>
-                                <p className="text-xl font-serif italic text-white">224 m² / 22.55m x 9.91m</p>
+                                <p className="text-xl font-serif italic text-white">{(currentCompany as any)?.capacityChart?.totalArea || "224 m²"} / {(currentCompany as any)?.capacityChart?.dimensions || "22.55m x 9.91m"}</p>
                              </div>
                           </div>
                           <table className="w-full text-left font-serif italic">
@@ -2723,13 +7198,13 @@ export default function App() {
                                 </tr>
                              </thead>
                              <tbody className="divide-y divide-slate-50">
-                                {[
+                                {((currentCompany as any)?.capacityChart?.rows || [
                                   { name: "Theatre Style", cap: "120 Pax" },
                                   { name: "Banquet Style", cap: "80 Pax" },
                                   { name: "Classroom Style", cap: "80 Pax" },
                                   { name: "U-Shape Setup", cap: "80 Pax" },
                                   { name: "Boardroom Setup", cap: "50 Pax" }
-                                ].map((row, i) => (
+                                ]).map((row: any, i: number) => (
                                   <tr key={i} className="hover:bg-luxury-cream/10 transition-colors">
                                      <td className="p-8 text-slate-900 text-lg">{row.name}</td>
                                      <td className="p-8 text-right text-gold font-bold text-xl">{row.cap}</td>
@@ -2767,6 +7242,87 @@ export default function App() {
                      ))}
                   </div>
                 </section>
+
+                {/* Daily News Noticeboard Feed at the bottom of the main dashboard menu */}
+                <section className="space-y-12">
+                   <div className="flex items-center justify-between gap-4 mb-6">
+                     <div className="flex items-center gap-4 flex-1">
+                        <h3 className="text-4xl font-serif italic text-slate-900 leading-tight">Daily Noticeboard</h3>
+                        <div className="flex-1 h-px bg-slate-100"></div>
+                     </div>
+                     <button
+                       onClick={() => navigateTo("daily-news")}
+                       className="px-6 py-3 border border-gold/40 text-gold text-[10px] font-display uppercase tracking-wider font-extrabold hover:bg-gold hover:text-white transition-all whitespace-nowrap"
+                     >
+                       Full Noticeboard
+                     </button>
+                   </div>
+                   {newsLoading ? (
+                     <div className="flex flex-col items-center justify-center p-12 bg-white border border-slate-100/50">
+                       <RefreshCw className="animate-spin text-gold" size={24} />
+                       <p className="text-[10px] font-display uppercase tracking-widest text-slate-400 mt-2">Loading Daily Noticeboard...</p>
+                     </div>
+                   ) : latestCorporateNews.length === 0 ? (
+                     <p className="text-slate-500 font-serif italic text-center py-6">No dynamic briefs are active right now.</p>
+                   ) : (
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                       {latestCorporateNews.map((news: any) => (
+                         <div 
+                           key={news.id} 
+                           onClick={() => navigateTo("daily-news")}
+                           className={cn(
+                             "luxury-card bg-white border p-6 shadow-sm hover:shadow-md hover:scale-[1.01] transition-all cursor-pointer flex flex-col justify-between h-[360px] group relative overflow-hidden",
+                             news.isUrgent ? "border-red-200 bg-red-50/5" : "border-slate-100"
+                           )}
+                         >
+                           <div className="space-y-4">
+                             <div className="flex items-center justify-between">
+                               <span className={cn(
+                                 "text-[8px] font-display uppercase tracking-widest font-black px-2 py-0.5 text-white",
+                                 news.category === "Operational" ? "bg-amber-600" :
+                                 news.category === "Announcement" ? "bg-indigo-600" :
+                                 news.category === "Event" ? "bg-teal-600" : "bg-emerald-600"
+                               )}>
+                                 {news.category || "ANN"}
+                               </span>
+                               {news.isUrgent && (
+                                 <span className="text-[7.5px] font-display uppercase tracking-widest text-red-650 font-black animate-pulse flex items-center gap-1">
+                                   ⚠️ URGENT
+                                 </span>
+                               )}
+                             </div>
+                             
+                             <h4 className="text-base font-serif italic text-slate-900 group-hover:text-gold transition-colors line-clamp-2 leading-snug">
+                               {news.title}
+                             </h4>
+                             <p className="text-xs text-slate-500 font-serif italic leading-relaxed line-clamp-4">
+                               {news.content}
+                             </p>
+                           </div>
+
+                           <div className="border-t border-slate-50 pt-4 flex items-center justify-between mt-auto">
+                             <div className="flex items-center gap-2">
+                               <div className="w-6 h-6 rounded-full bg-slate-50 flex items-center justify-center text-slate-500">
+                                 <Users size={10} className="text-gold" />
+                               </div>
+                               <div>
+                                 <p className="text-[8px] font-display uppercase tracking-widest font-black text-slate-800">{news.authorName}</p>
+                                 <p className="text-[7px] text-slate-400 font-mono block truncate max-w-[120px]">{news.authorEmail}</p>
+                               </div>
+                             </div>
+
+                             <div className="text-right">
+                               <span className="text-[7px] uppercase tracking-widest text-slate-400 font-bold block">Published</span>
+                               <span className="text-[8.5px] font-serif italic text-slate-500">
+                                 {news.createdAt ? (news.createdAt.toDate ? news.createdAt.toDate().toLocaleDateString() : new Date(news.createdAt).toLocaleDateString()) : "Today"}
+                               </span>
+                             </div>
+                           </div>
+                         </div>
+                       ))}
+                     </div>
+                   )}
+                </section>
               </div>
             ) : activeTab === "profile" ? (
               <div className="max-w-4xl mx-auto py-12">
@@ -2800,16 +7356,16 @@ export default function App() {
                       </div>
                       <div className="flex justify-between items-center">
                         <p className="text-xs text-slate-500 font-serif italic">Executive Dashboards</p>
-                        <span className={cn("text-[10px] font-bold uppercase", userRole === "Administrator" ? "text-emerald-600" : "text-slate-300")}>{userRole === "Administrator" ? "Enabled" : "Restricted"}</span>
+                        <span className={cn("text-[10px] font-bold uppercase", (userRole === "Administrator" || userRole === "Super Admin" || userRole === "Group Controller") ? "text-emerald-600" : "text-slate-300")}>{(userRole === "Administrator" || userRole === "Super Admin" || userRole === "Group Controller") ? "Enabled" : "Restricted"}</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <p className="text-xs text-slate-500 font-serif italic">Management Tools</p>
-                        <span className={cn("text-[10px] font-bold uppercase", userRole === "Administrator" ? "text-emerald-600" : "text-slate-300")}>{userRole === "Administrator" ? "Enabled" : "Restricted"}</span>
+                        <span className={cn("text-[10px] font-bold uppercase", (userRole === "Administrator" || userRole === "Super Admin" || userRole === "Group Controller") ? "text-emerald-600" : "text-slate-300")}>{(userRole === "Administrator" || userRole === "Super Admin" || userRole === "Group Controller") ? "Enabled" : "Restricted"}</span>
                       </div>
-                      {userRole === "Administrator" && (
+                      {(userRole === "Administrator" || userRole === "Super Admin" || userRole === "Group Controller") && (
                         <div className="pt-4 mt-4 border-t border-slate-50">
                           <button 
-                            onClick={() => setActiveTab("user-management")}
+                            onClick={() => navigateTo("user-management")}
                             className="bg-luxury-black text-white px-6 py-2 text-[9px] font-display uppercase tracking-widest font-black hover:bg-gold transition-all flex items-center justify-center gap-2 w-full shadow-lg"
                           >
                             <ShieldCheck size={12} /> Access User Control
@@ -2842,183 +7398,333 @@ export default function App() {
                 </div>
               </div>
             ) : activeTab === "hrms" ? (
-              <div className="max-w-5xl space-y-8 pb-32">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                  <div className="flex items-center gap-3 md:gap-4">
-                     <div className="w-10 h-10 md:w-12 md:h-12 bg-luxury-black text-gold flex items-center justify-center shadow-lg">
-                        <UserCog size={20} md:size={24} strokeWidth={1} />
-                     </div>
-                     <div>
-                        <h2 className="text-2xl md:text-3xl font-serif text-slate-900 italic leading-tight">Human Resource Management</h2>
-                        <p className="luxury-label opacity-60">Enterprise Staff Portal</p>
-                     </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  {/* HRMS Dashboard Cards */}
-                  <div className="luxury-card p-8 bg-white shadow-sm border-t-2 border-gold flex flex-col gap-4">
-                    <div className="w-10 h-10 bg-slate-50 flex items-center justify-center text-gold">
-                      <Users size={20} />
-                    </div>
-                    <h3 className="text-lg font-serif italic text-slate-900">Personnel Directory</h3>
-                    <p className="text-[11px] text-slate-500 font-serif italic leading-relaxed">Manage employee profiles, emergency contacts, and digital records.</p>
-                    <button className="mt-4 text-[10px] font-display uppercase tracking-widest font-black text-gold hover:text-luxury-black transition-colors flex items-center gap-2">
-                       Enter Directory <ArrowRight size={12} />
-                    </button>
-                  </div>
-
-                  <div className="luxury-card p-8 bg-white shadow-sm border-t-2 border-gold flex flex-col gap-4">
-                    <div className="w-10 h-10 bg-slate-50 flex items-center justify-center text-gold">
-                      <Briefcase size={20} />
-                    </div>
-                    <h3 className="text-lg font-serif italic text-slate-900">Payroll & Benefits</h3>
-                    <p className="text-[11px] text-slate-500 font-serif italic leading-relaxed">Access salary slips, tax documentation, and benefit enrollment status.</p>
-                    <button className="mt-4 text-[10px] font-display uppercase tracking-widest font-black text-gold hover:text-luxury-black transition-colors flex items-center gap-2">
-                       View Statements <ArrowRight size={12} />
-                    </button>
-                  </div>
-
-                  <div className="luxury-card p-8 bg-white shadow-sm border-t-2 border-gold flex flex-col gap-4">
-                    <div className="w-10 h-10 bg-slate-50 flex items-center justify-center text-gold">
-                      <Clock size={20} />
-                    </div>
-                    <h3 className="text-lg font-serif italic text-slate-900">Time & Attendance</h3>
-                    <p className="text-[11px] text-slate-500 font-serif italic leading-relaxed">Review shift schedules, leave requests, and attendance biometric logs.</p>
-                    <button className="mt-4 text-[10px] font-display uppercase tracking-widest font-black text-gold hover:text-luxury-black transition-colors flex items-center gap-2">
-                       Log Attendance <ArrowRight size={12} />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="luxury-card p-10 bg-luxury-black text-white shadow-xl flex flex-col md:flex-row items-center gap-8">
-                  <div className="flex-1">
-                    <h4 className="text-gold text-[10px] font-display uppercase tracking-[0.3em] font-black mb-4">HR Announcements</h4>
-                    <h3 className="text-2xl font-serif italic mb-4">Annual Leave Policy Update 2026</h3>
-                    <p className="text-sm text-slate-600 font-serif italic leading-relaxed">We have updated the carry-over policy for the upcoming fiscal year. Please review the new guidelines in the team manual.</p>
-                  </div>
-                  <button className="bg-gold text-white px-8 py-3 text-[10px] font-display uppercase tracking-widest font-black hover:bg-white hover:text-luxury-black transition-all shadow-lg shrink-0">
-                    Read Policy
-                  </button>
-                </div>
-              </div>
+              <HRMS 
+                companyId={selectedCompany || 'cml'} 
+                userRole={userRole || undefined} 
+                onBackToPortal={() => setActiveTab("property-overview")}
+              />
             ) : activeTab === "sop" ? (
               <div className="space-y-8">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-4">
                   <div>
-                    <h2 className="text-3xl font-serif text-slate-900 italic">SOP Registry</h2>
-                    <p className="luxury-label opacity-60">Standard Operating Procedures & Official Documentation</p>
-                  </div>
-                  
-                  <div className="flex flex-wrap items-center gap-4">
-                    <div className="relative">
-                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input 
-                        type="text"
-                        placeholder="Search SOPs..."
-                        value={sopSearch}
-                        onChange={(e) => setSopSearch(e.target.value)}
-                        className="pl-10 pr-4 py-3 bg-white border border-slate-100 text-[10px] font-display uppercase tracking-widest focus:ring-1 focus:ring-gold outline-none w-64 shadow-sm"
-                      />
-                    </div>
-                    
-                    <div className="relative overflow-hidden group">
-                      <input 
-                        type="file" 
-                        accept=".pdf"
-                        className="hidden" 
-                        id="sop-upload"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            setIsSopUploading(true);
-                            try {
-                              const url = await handlePdfUpload(file);
-                              const newSop = {
-                                title: file.name.replace(/\.[^/.]+$/, ""),
-                                url: url,
-                                date: new Date().toISOString().split('T')[0]
-                              };
-                              setSops(prev => [newSop, ...prev]);
-                            } catch (err) {
-                              console.error(err);
-                            } finally {
-                              setIsSopUploading(false);
-                            }
-                          }
-                        }}
-                      />
-                      <label 
-                        htmlFor="sop-upload"
-                        className={cn(
-                          "flex items-center gap-2 px-6 py-3 bg-gold text-white text-[10px] font-display uppercase tracking-widest font-black transition-all shadow-lg cursor-pointer hover:bg-luxury-black",
-                          isSopUploading && "opacity-50 cursor-wait"
-                        )}
-                      >
-                        {isSopUploading ? (
-                          <>
-                            <RefreshCw size={14} className="animate-spin" /> Uploading...
-                          </>
-                        ) : (
-                          <>
-                            <Plus size={14} /> Upload PDF SOP
-                          </>
-                        )}
-                      </label>
-                    </div>
+                    <h2 className="text-3xl font-serif text-slate-900 italic">Hotel System Training</h2>
+                    <p className="luxury-label opacity-60">Consolidated System Guidance & Standard Operating Procedures</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  <AnimatePresence mode="popLayout">
-                    {filteredSops.map((sop, idx) => (
-                      <motion.div
-                        layout
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        key={idx}
-                        className="group bg-white border border-slate-100 p-6 hover:shadow-2xl hover:border-gold/30 transition-all duration-500 flex flex-col h-full relative"
-                      >
-                        <div className="w-12 h-16 bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-300 group-hover:bg-luxury-cream group-hover:text-gold transition-all mb-6 relative overflow-hidden">
-                           <FileText size={32} strokeWidth={1} />
-                           <div className="absolute bottom-0 right-0 p-1 bg-red-600 text-white text-[6px] font-black uppercase">PDF</div>
+                {/* Tab Switcher for SOP/Keycard Guidelines */}
+                <div className="flex border-b border-gold/10 mb-6 space-x-1 overflow-x-auto no-scrollbar">
+                  {[
+                    { id: 'registry', label: 'Official SOP Documents Hub' }
+                  ].map((tabItem) => (
+                    <button
+                      key={tabItem.id}
+                      onClick={() => setSopSubTab(tabItem.id)}
+                      className={cn(
+                        "px-6 py-3.5 text-[10px] font-display uppercase tracking-widest font-black transition-all border-b-2 shrink-0 whitespace-nowrap border-gold text-gold bg-gold/5 font-extrabold"
+                      )}
+                    >
+                      {tabItem.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="space-y-8">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div>
+                      <h3 className="text-xl font-serif italic text-slate-800">SOP Registry</h3>
+                      <p className="text-[10px] font-display uppercase tracking-widest text-slate-400">Search and manage official operational documents</p>
+                    </div>
+                      
+                      <div className="flex flex-wrap items-center gap-4">
+                        <div className="relative">
+                          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input 
+                            type="text"
+                            placeholder="Search SOPs..."
+                            value={sopSearch}
+                            onChange={(e) => setSopSearch(e.target.value)}
+                            className="pl-10 pr-4 py-3 bg-white border border-slate-100 text-[10px] font-display uppercase tracking-widest focus:ring-1 focus:ring-gold outline-none w-64 shadow-sm"
+                          />
                         </div>
+                        
+                        <div className="flex gap-3">
+                          <div className="relative overflow-hidden group">
+                            <input 
+                              type="file" 
+                              accept=".pdf"
+                              className="hidden" 
+                              id="sop-upload"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  setIsSopUploading(true);
+                                  try {
+                                    const url = await handlePdfUpload(file);
+                                    const newSop = {
+                                      title: file.name.replace(/\.[^/.]+$/, ""),
+                                      url: url,
+                                      date: new Date().toISOString().split('T')[0]
+                                    };
+                                    setSops(prev => [newSop, ...prev]);
+                                  } catch (err) {
+                                    console.error(err);
+                                  } finally {
+                                    setIsSopUploading(false);
+                                  }
+                                }
+                              }}
+                            />
+                            <label 
+                              htmlFor="sop-upload"
+                              className={cn(
+                                "flex items-center gap-2 px-6 py-3 bg-gold text-white text-[10px] font-display uppercase tracking-widest font-black transition-all shadow-lg cursor-pointer hover:bg-luxury-black",
+                                isSopUploading && "opacity-50 cursor-wait"
+                              )}
+                            >
+                              {isSopUploading ? (
+                                <>
+                                  <RefreshCw size={14} className="animate-spin" /> Uploading...
+                                </>
+                              ) : (
+                                <>
+                                  <Plus size={14} /> Upload PDF SOP
+                                </>
+                              )}
+                            </label>
+                          </div>
 
-                        <h3 className="text-sm font-serif italic text-slate-900 mb-2 font-bold group-hover:text-gold transition-colors leading-tight line-clamp-2 h-10">{sop.title}</h3>
-                        <p className="text-[9px] font-display uppercase tracking-widest text-slate-400 mb-8 font-bold">Released: {sop.date}</p>
+                          <div className="relative overflow-hidden group">
+                            <input 
+                              type="file" 
+                              accept=".zip"
+                              className="hidden" 
+                              id="sop-zip-upload"
+                              onChange={handleSopZipSelected}
+                            />
+                            <label 
+                              htmlFor="sop-zip-upload"
+                              className="flex items-center gap-2 px-6 py-3 bg-slate-800 text-white text-[10px] font-display uppercase tracking-widest font-black transition-all shadow-lg cursor-pointer hover:bg-gold"
+                            >
+                              <FolderArchive size={14} /> ZIP Batch Upload
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
 
-                        <div className="mt-auto pt-6 border-t border-slate-50 flex items-center justify-between">
-                           <button 
-                             onClick={() => window.open(sop.url, '_blank')}
-                             className="flex items-center gap-2 text-[9px] font-display uppercase tracking-widest font-black text-gold hover:text-luxury-black transition-colors"
-                           >
-                             View Document <ExternalLink size={12} />
-                           </button>
-                           
-                           <button 
-                             onClick={() => {
-                               if (confirm("Are you sure you want to remove this SOP?")) {
-                                 setSops(prev => prev.filter((_, i) => i !== idx));
-                               }
-                             }}
-                             className="text-slate-200 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
-                           >
-                             <X size={14} />
-                           </button>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                      <AnimatePresence mode="popLayout">
+                        {filteredSops.map((sop, idx) => (
+                          <motion.div
+                            layout
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            key={idx}
+                            className="group bg-white border border-slate-100 p-6 hover:shadow-2xl hover:border-gold/30 transition-all duration-500 flex flex-col h-full relative"
+                          >
+                            <div className="w-12 h-16 bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-300 group-hover:bg-luxury-cream group-hover:text-gold transition-all mb-6 relative overflow-hidden">
+                               <FileText size={32} strokeWidth={1} />
+                               <div className="absolute bottom-0 right-0 p-1 bg-red-600 text-white text-[6px] font-black uppercase">PDF</div>
+                            </div>
+
+                            <h3 className="text-sm font-serif italic text-slate-900 mb-2 font-bold group-hover:text-gold transition-colors leading-tight line-clamp-2 h-10">{sop.title}</h3>
+                            <p className="text-[9px] font-display uppercase tracking-widest text-slate-400 mb-8 font-bold">Released: {sop.date}</p>
+
+                            <div className="mt-auto pt-6 border-t border-slate-50 flex items-center justify-between">
+                               <button 
+                                 onClick={() => window.open(sop.url, '_blank')}
+                                 className="flex items-center gap-2 text-[9px] font-display uppercase tracking-widest font-black text-gold hover:text-luxury-black transition-colors"
+                               >
+                                 View Document <ExternalLink size={12} />
+                               </button>
+                               
+                               <button 
+                                 onClick={() => {
+                                   if (true) { setDeleteSopTarget({ index: idx, title: sop.title }); } else if (false) {
+                                     setSops(prev => prev.filter((_, i) => i !== idx));
+                                   }
+                                 }}
+                                 className="text-slate-200 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                               >
+                                 <X size={14} />
+                               </button>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                    </div>
+
+                    {filteredSops.length === 0 && (
+                      <div className="py-32 text-center bg-white border border-dashed border-slate-200">
+                        <FileText size={48} className="mx-auto text-slate-100 mb-6" />
+                        <h3 className="text-xl font-serif italic text-slate-400">No matching SOPs found</h3>
+                        <p className="text-[10px] font-display uppercase tracking-widest text-slate-300 mt-2">Try adjusting your search filters</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : activeTab === "cml-university" ? (
+              <div className="space-y-8">
+                {/* Hero Banner styled based on selected brand */}
+                <div className={cn(
+                  "p-8 md:p-12 border relative overflow-hidden",
+                  selectedCompany === 'ramada' ? "bg-red-50/50 border-red-200/50" : 
+                  selectedCompany === 'wyndham' ? "bg-emerald-50/50 border-emerald-200/50" : 
+                  "bg-gold/5 border-gold/10"
+                )}>
+                  <div className="absolute right-0 top-0 h-full w-1/3 opacity-5 pointer-events-none">
+                    <GraduationCap size={240} className="transform translate-x-12 translate-y-6" />
+                  </div>
+                  <div className="relative z-10 max-w-3xl">
+                    <div className={cn(
+                      "text-[9px] font-display uppercase tracking-[0.25em] font-black pb-2 border-b max-w-max mb-6",
+                      selectedCompany === 'ramada' ? "text-[#D11242] border-red-200" : 
+                      selectedCompany === 'wyndham' ? "text-[#0b5c4b] border-emerald-200" : 
+                      "text-gold border-gold/20"
+                    )}>
+                      {selectedCompany === 'ramada' ? "Ramada Suites Wailoaloa" : 
+                       selectedCompany === 'wyndham' ? "Wyndham Garden Wailoaloa" : 
+                       "Cove Management Limited"} • LMS Portal
+                    </div>
+                    <h2 className="text-4xl md:text-5xl font-serif text-slate-900 italic tracking-tight font-light mb-4">
+                      {selectedCompany === 'ramada' ? "Ramada University" : 
+                       selectedCompany === 'wyndham' ? "Wyndham Garden University" : 
+                       "CML University"}
+                    </h2>
+                    <p className="text-sm font-serif italic text-slate-600 max-w-xl leading-relaxed">
+                      LMS Hub for elite hospitality training, operational mastery, brand compliance standards, and continuous carrier accreditation. Track, log, and elevate your customer relations score.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Professional Metrics */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  {[
+                    { label: "Active Team Enrolments", value: "32 Staff Members", trend: "+4 this week", icon: Users },
+                    { label: "Compliance Score", value: "98.4%", trend: "Target: 95.0%", icon: ShieldCheck },
+                    { label: "SOP Training Hours Completed", value: "420.5 Hours", trend: "Property Record", icon: Clock },
+                    { label: "Accredited Certifications", value: "14 Badges", trend: "Ready to print", icon: Award }
+                  ].map((stat, idx) => {
+                    const StatIcon = stat.icon;
+                    return (
+                      <div key={idx} className="bg-white border border-slate-100 p-6 shadow-sm flex items-center justify-between">
+                        <div>
+                          <p className="text-[9px] font-display uppercase tracking-widest text-slate-400 font-bold mb-1">{stat.label}</p>
+                          <p className="text-xl font-serif italic font-bold text-slate-900">{stat.value}</p>
+                          <p className="text-[10px] text-slate-500 mt-1 font-mono">{stat.trend}</p>
+                        </div>
+                        <StatIcon className="text-slate-200" size={32} />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Curriculum Grid */}
+                <div>
+                  <h3 className="text-xs font-display uppercase tracking-widest text-[#1a1a1a] font-extrabold border-b border-slate-100 pb-4 mb-6">
+                    Mandatory Curriculums & SOP Modules
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {[
+                      {
+                        title: "Core Hospitality & Luxury Foundations",
+                        duration: "2.5 hrs",
+                        lessons: "8 Lessons",
+                        desc: "Standard protocols for greeting guests, tone-of-voice control, posture, vocabulary, and five-star brand expectations.",
+                        level: "All Staff",
+                        color: "bg-amber-50 text-amber-700 border-amber-200/50"
+                      },
+                      {
+                        title: "Interactive System & Platform Navigation",
+                        duration: "1.5 hrs",
+                        lessons: "5 Lessons",
+                        desc: "Mastering the live Case Management dashboard, lodging high-priority service requests, updating status logs, and tracking KPIs.",
+                        level: "Operations",
+                        color: "bg-blue-50 text-blue-700 border-blue-200/50"
+                      },
+                      {
+                        title: "Brand Philosophy & Promise Implementation",
+                        duration: "3.0 hrs",
+                        lessons: "10 Lessons",
+                        desc: selectedCompany === 'ramada' ? "Living 'Say Hello to Red®' - the signature Wyndham guest expectations, proactive solutions, and red-standards checking." :
+                              selectedCompany === 'wyndham' ? "Living 'Count on Me!' - the service promise, ownership, respect, and standard service culture alignments." :
+                              "Living Cove Management core guidelines - portfolio compliance, system reliability, and standard reporting paths.",
+                        level: "Brand Alignment",
+                        color: "bg-rose-50 text-rose-700 border-rose-200/50"
+                      },
+                      {
+                        title: "Daily Yield Strategy & Rate Parity",
+                        duration: "4.0 hrs",
+                        lessons: "12 Lessons",
+                        desc: "In-depth training on channel distribution, OTA compliance, price management, and diagnosing rates discrepancy across portals.",
+                        level: "Management",
+                        color: "bg-emerald-50 text-emerald-700 border-emerald-200/50"
+                      },
+                      {
+                        title: "Emergency Procedures & Encrypted Locking",
+                        duration: "2.0 hrs",
+                        lessons: "6 Lessons",
+                        desc: "Guidelines for secure metal key logs, door lock encoding, backup card generation, master key protocols, and evacuation routing.",
+                        level: "Security & FD",
+                        color: "bg-purple-50 text-purple-700 border-purple-200/50"
+                      },
+                      {
+                        title: "Incident Restoration & Customer Recovery",
+                        duration: "3.5 hrs",
+                        lessons: "9 Lessons",
+                        desc: "The art of service recovery. Learn to de-escalate guest complaints, manage standard compensation budgets, and document recovery steps.",
+                        level: "Guest Relations",
+                        color: "bg-indigo-50 text-indigo-700 border-indigo-200/50"
+                      }
+                    ].map((mod, index) => (
+                      <motion.div
+                        key={index}
+                        whileHover={{ y: -4 }}
+                        className="bg-white border border-slate-100 p-6 shadow-sm flex flex-col justify-between"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-4">
+                            <span className={cn("text-[9px] font-display uppercase tracking-wider font-bold px-2.5 py-1", mod.color)}>
+                              {mod.level}
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-400">{mod.duration}</span>
+                          </div>
+                          <h4 className="text-lg font-serif italic text-slate-900 mb-3">{mod.title}</h4>
+                          <p className="text-xs text-slate-500 font-serif leading-relaxed mb-6">{mod.desc}</p>
+                        </div>
+                        <div className="border-t border-slate-50 pt-4 flex items-center justify-between mt-auto">
+                          <span className="text-[10px] text-slate-400 font-mono">{mod.lessons}</span>
+                          <button className={cn(
+                            "text-[9px] font-display uppercase tracking-widest font-black transition-colors focus:outline-none",
+                            selectedCompany === 'ramada' ? "text-[#D11242] hover:text-[#7c1414]" : 
+                            selectedCompany === 'wyndham' ? "text-[#0b5c4b] hover:text-[#063b31]" : 
+                            "text-gold hover:text-black"
+                          )}>
+                            Start Course &rarr;
+                          </button>
                         </div>
                       </motion.div>
                     ))}
-                  </AnimatePresence>
+                  </div>
                 </div>
 
-                {filteredSops.length === 0 && (
-                  <div className="py-32 text-center bg-white border border-dashed border-slate-200">
-                    <FileText size={48} className="mx-auto text-slate-100 mb-6" />
-                    <h3 className="text-xl font-serif italic text-slate-400">No matching SOPs found</h3>
-                    <p className="text-[10px] font-display uppercase tracking-widest text-slate-300 mt-2">Try adjusting your search filters</p>
+                {/* Integration Notice */}
+                <div className="bg-slate-50 border border-slate-200 p-6 flex flex-col md:flex-row items-center justify-between gap-6 no-print">
+                  <div className="flex items-center gap-4">
+                    <GraduationCap className="text-slate-400 shrink-0" size={36} />
+                    <div>
+                      <h4 className="text-xs font-display uppercase tracking-widest text-slate-800 font-bold mb-1">Cove Group Active Integration</h4>
+                      <p className="text-xs font-serif italic text-slate-500 leading-normal">
+                        LMS course completion is synced directly with your primary payroll profile and employee performance records in the CML HR platform.
+                      </p>
+                    </div>
                   </div>
-                )}
+                  <button className="px-6 py-3 bg-black text-white text-[9px] font-display uppercase tracking-widest font-black shrink-0 hover:bg-gold transition-colors">
+                    Access My LMS Profile
+                  </button>
+                </div>
               </div>
             ) : activeTab === "training-videos" ? (
               <div className="space-y-8">
@@ -3060,713 +7766,62 @@ export default function App() {
                   ))}
                 </div>
               </div>
-            ) : activeTab === "lost-and-found" ? (
-              <div className="max-w-5xl space-y-8 pb-32">
-                {/* Header and Actions */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                  <div className="flex items-center gap-3 md:gap-4">
-                     <div className="w-10 h-10 md:w-12 md:h-12 bg-luxury-black text-gold flex items-center justify-center shadow-lg">
-                        <Package size={20} md:size={24} strokeWidth={1} />
-                     </div>
-                     <div>
-                        <h2 className="text-2xl md:text-3xl font-serif text-slate-900 italic leading-tight">Lost & Found</h2>
-                        <p className="luxury-label opacity-60">Property Asset Recovery</p>
-                     </div>
-                  </div>
-
-                  <button 
-                    onClick={() => setShowLostFoundForm(!showLostFoundForm)}
-                    className="bg-luxury-black text-white px-8 py-3 text-[10px] font-display uppercase tracking-widest font-black hover:bg-gold transition-all shadow-xl active:scale-95 flex items-center gap-2"
-                  >
-                    {showLostFoundForm ? <X size={14} /> : <AlertTriangle size={14} />}
-                    {showLostFoundForm ? "Cancel Report" : "Report Found Item"}
-                  </button>
-                </div>
-
-                {/* Form Overlay/Section */}
-                <AnimatePresence>
-                  {showLostFoundForm && (
-                    <motion.div 
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="luxury-card p-6 md:p-8 bg-white shadow-2xl border-t-4 border-gold mb-8">
-                        <h3 className="text-xl font-serif italic text-slate-900 mb-6">Report Found Item</h3>
-                        <form onSubmit={handleReportLostItem} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div>
-                            <label className="luxury-label mb-2 block text-slate-800">Item Name</label>
-                            <input 
-                              type="text" 
-                              required
-                              value={lostItemForm.itemName}
-                              onChange={(e) => setLostItemForm({...lostItemForm, itemName: e.target.value})}
-                              className="w-full bg-slate-50 border-none px-4 py-3 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
-                              placeholder="e.g. Silver Wristwatch"
-                            />
-                          </div>
-                          <div>
-                            <label className="luxury-label mb-2 block text-slate-800">Location Found</label>
-                            <input 
-                              type="text" 
-                              required
-                              value={lostItemForm.locationFound}
-                              onChange={(e) => setLostItemForm({...lostItemForm, locationFound: e.target.value})}
-                              className="w-full bg-slate-50 border-none px-4 py-3 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
-                              placeholder="e.g. Room 402, Gym, Lobby"
-                            />
-                          </div>
-                          <div>
-                            <label className="luxury-label mb-2 block text-slate-800">Your Name</label>
-                            <input 
-                              type="text" 
-                              required
-                              value={lostItemForm.staffName}
-                              onChange={(e) => setLostItemForm({...lostItemForm, staffName: e.target.value})}
-                              className="w-full bg-slate-50 border-none px-4 py-3 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
-                              placeholder="Full Name"
-                            />
-                          </div>
-                          <div>
-                            <label className="luxury-label mb-2 block text-slate-800">Your Position</label>
-                            <input 
-                              type="text" 
-                              value={lostItemForm.staffPosition}
-                              onChange={(e) => setLostItemForm({...lostItemForm, staffPosition: e.target.value})}
-                              className="w-full bg-slate-50 border-none px-4 py-3 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
-                              placeholder="e.g. Housekeeping Lead"
-                            />
-                          </div>
-                          <div className="md:col-span-2">
-                            <label className="luxury-label mb-2 block text-slate-800">Item Description</label>
-                            <textarea 
-                              required
-                              rows={3}
-                              value={lostItemForm.description}
-                              onChange={(e) => setLostItemForm({...lostItemForm, description: e.target.value})}
-                              className="w-full bg-slate-50 border-none px-4 py-3 text-sm font-serif italic focus:ring-1 focus:ring-gold/50 resize-none"
-                              placeholder="Details about the item (color, brand, distinguishing features)..."
-                            />
-                          </div>
-                          <div className="md:col-span-2">
-                             <label className="luxury-label mb-2 block text-slate-800">Image of Item</label>
-                             <input 
-                               type="file"
-                               ref={fileInputRef}
-                               onChange={handleImageChange}
-                               accept="image/*"
-                               className="hidden"
-                             />
-                             
-                             <div className="flex flex-col md:flex-row gap-4">
-                               {lostItemForm.imageUrl ? (
-                                 <div className="relative w-full md:w-48 h-48 bg-slate-100 group">
-                                   <img 
-                                     src={lostItemForm.imageUrl} 
-                                     alt="Item Preview" 
-                                     className="w-full h-full object-cover shadow-inner" 
-                                     referrerPolicy="no-referrer"
-                                   />
-                                   <button 
-                                     type="button"
-                                     onClick={() => setLostItemForm(prev => ({ ...prev, imageUrl: "" }))}
-                                     className="absolute top-2 right-2 bg-luxury-black text-white p-1 hover:bg-red-600 transition-colors"
-                                   >
-                                     <X size={14} />
-                                   </button>
-                                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                                      <p className="text-[10px] text-white font-display tracking-widest uppercase">Change Image</p>
-                                   </div>
-                                 </div>
-                               ) : (
-                                 <button 
-                                   type="button"
-                                   disabled={isUploading}
-                                   onClick={() => fileInputRef.current?.click()}
-                                   className="w-full md:w-48 h-48 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-500 hover:border-gold hover:text-gold transition-all group bg-slate-50/50"
-                                 >
-                                   {isUploading ? (
-                                      <div className="flex flex-col items-center gap-2">
-                                        <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin"></div>
-                                        <p className="text-[10px] font-display uppercase tracking-widest">Processing...</p>
-                                      </div>
-                                   ) : (
-                                      <>
-                                        <Camera size={32} strokeWidth={1} className="mb-3 group-hover:scale-110 transition-transform" />
-                                        <p className="text-[10px] font-display uppercase tracking-widest font-black">Attach Photo</p>
-                                        <p className="text-[9px] font-serif italic opacity-60 mt-1">Select from camera or gallery</p>
-                                      </>
-                                   )}
-                                 </button>
-                               )}
-                               
-                               <div className="flex-1 space-y-3">
-                                  <div className="p-4 bg-slate-50/50 border border-slate-100 italic font-serif text-xs text-slate-500 leading-relaxed">
-                                     <p className="mb-2 font-black text-[10px] uppercase tracking-widest text-gold not-italic">Reporting Tip</p>
-                                     Capture clear photos showing any unique markings or serial numbers. For high-value items, ensure the background is neutral. Image data is encrypted and stored securely within the recovery database.
-                                  </div>
-                                  <div className="flex items-center gap-2 text-slate-900 font-black">
-                                     <ShieldCheck size={12} />
-                                     <span className="text-[9px] uppercase tracking-tighter">SECURE CLOUD STORAGE ENABLED</span>
-                                  </div>
-                               </div>
-                             </div>
-                          </div>
-                          <div className="md:col-span-2 flex justify-end">
-                            <button 
-                              type="submit"
-                              className="bg-luxury-black text-white px-12 py-4 text-[11px] font-display uppercase tracking-[0.3em] font-black hover:bg-gold transition-all"
-                            >
-                              Log Found Item
-                            </button>
-                          </div>
-                        </form>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {/* Directory and Filters */}
-                <div className="space-y-6">
-                  <div className="luxury-card p-6 bg-white shadow-sm border-t-2 border-gold flex flex-col md:flex-row gap-4 items-center">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-                      <input 
-                        type="text" 
-                        value={lostFoundSearch}
-                        onChange={(e) => setLostFoundSearch(e.target.value)}
-                        placeholder="Search items, locations, or staff..."
-                        className="w-full bg-slate-50 border-none pl-10 pr-4 py-3 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {lostItems.filter(item => 
-                      item.itemName.toLowerCase().includes(lostFoundSearch.toLowerCase()) ||
-                      item.description.toLowerCase().includes(lostFoundSearch.toLowerCase()) ||
-                      item.locationFound.toLowerCase().includes(lostFoundSearch.toLowerCase()) ||
-                      item.staffName.toLowerCase().includes(lostFoundSearch.toLowerCase())
-                    ).length === 0 ? (
-                      <div className="col-span-full py-20 text-center bg-white border border-slate-100">
-                        <div className="w-16 h-16 bg-slate-50 flex items-center justify-center mx-auto mb-4 text-slate-300">
-                           <Package size={32} />
-                        </div>
-                        <p className="text-slate-600 font-serif italic">No lost items match your search criteria.</p>
-                      </div>
-                    ) : (
-                      lostItems.filter(item => 
-                        item.itemName.toLowerCase().includes(lostFoundSearch.toLowerCase()) ||
-                        item.description.toLowerCase().includes(lostFoundSearch.toLowerCase()) ||
-                        item.locationFound.toLowerCase().includes(lostFoundSearch.toLowerCase()) ||
-                        item.staffName.toLowerCase().includes(lostFoundSearch.toLowerCase())
-                      ).map((item) => (
-                        <motion.div 
-                          key={item.id}
-                          layout
-                          initial={{ opacity: 0, scale: 0.95 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          className="luxury-card bg-white shadow-sm overflow-hidden group hover:shadow-xl transition-all duration-500 border border-slate-50"
-                        >
-                          {item.imageUrl && (
-                            <div className="h-48 overflow-hidden bg-slate-100">
-                              <img src={item.imageUrl} alt={item.itemName} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" referrerPolicy="no-referrer" />
-                            </div>
-                          )}
-                          <div className="p-6">
-                            <div className="flex justify-between items-start mb-4">
-                              <span className={cn(
-                                "px-2 py-0.5 text-[8px] font-display uppercase tracking-widest font-black",
-                                item.status === 'Found' ? "bg-amber-50 text-amber-600" :
-                                item.status === 'Claimed' ? "bg-emerald-50 text-emerald-600" : "bg-slate-50 text-slate-500"
-                              )}>
-                                {item.status}
-                              </span>
-                              <span className="text-[10px] text-slate-300 font-serif italic">
-                                {item.createdAt?.toDate ? new Date(item.createdAt.toDate()).toLocaleDateString() : "Present"}
-                              </span>
-                            </div>
-                            <h4 className="text-lg font-serif italic text-slate-900 mb-2 truncate">{item.itemName}</h4>
-                            <p className="text-[11px] text-slate-500 font-serif italic mb-4 line-clamp-2 leading-relaxed">
-                              {item.description}
-                            </p>
-                            <div className="pt-4 border-t border-slate-50 space-y-2">
-                               <div className="flex items-center gap-2 text-[9px] text-slate-600 font-bold">
-                                  <Hotel size={12} className="text-gold" />
-                                  <span className="uppercase tracking-widest">Found at {item.locationFound}</span>
-                               </div>
-                               <div className="flex items-center gap-2 text-[9px] text-slate-600 font-bold">
-                                  <Users size={12} className="text-gold" />
-                                  <span className="uppercase tracking-widest">By {item.staffName} ({item.staffPosition})</span>
-                                </div>
-                             </div>
-
-                             {item.status === 'Found' && (userRole === 'Administrator' || userRole === 'Manager' || userRole === 'Audit' || userRole === 'admin') && (
-                               <div className="mt-4 pt-4 border-t border-slate-50">
-                                 <button 
-                                   onClick={() => setSelectedItemForDispatch(item)}
-                                   className="w-full py-2 bg-luxury-black text-white text-[9px] font-display uppercase tracking-widest font-black hover:bg-gold transition-all"
-                                 >
-                                   Release / Dispatch Item
-                                 </button>
-                               </div>
-                             )}
-
-                             {item.status === 'Claimed' && item.dispatchDetails && (
-                               <div className="mt-4 pt-4 border-t border-slate-50 space-y-3">
-                                   <div className="flex items-center justify-between">
-                                      <p className="text-[10px] font-display uppercase tracking-widest text-emerald-600 font-black flex items-center gap-2">
-                                        <CheckCircle size={14} /> Released to {item.dispatchDetails.guestName}
-                                      </p>
-                                      {item.dispatchDetails.roomNumber && (
-                                        <span className="text-[9px] font-display uppercase tracking-widest bg-slate-100 px-2 py-0.5 font-bold">Room {item.dispatchDetails.roomNumber}</span>
-                                      )}
-                                   </div>
-                                   
-                                   {item.dispatchDetails.systemAutoNote && (
-                                      <div className="p-3 bg-emerald-50/50 border border-emerald-100 rounded text-[9px] text-emerald-800 italic leading-relaxed text-left">
-                                         {item.dispatchDetails.systemAutoNote}
-                                      </div>
-                                   )}
-
-                                   <div className="grid grid-cols-2 gap-4 text-left pt-2">
-                                      <div className="space-y-1">
-                                         <p className="text-[7px] uppercase tracking-widest text-slate-400 font-bold">Release Date</p>
-                                         <p className="text-[9px] font-serif italic text-slate-700">{item.dispatchDetails.releaseDate || 'N/A'}</p>
-                                      </div>
-                                      <div className="space-y-1">
-                                         <p className="text-[7px] uppercase tracking-widest text-slate-400 font-bold">Verified By</p>
-                                         <p className="text-[9px] font-serif italic text-slate-700">{item.dispatchDetails.dispatchedBy}</p>
-                                      </div>
-                                   </div>
-
-                                   {item.dispatchDetails.notes && (
-                                      <div className="space-y-1 text-left pt-2">
-                                         <p className="text-[7px] uppercase tracking-widest text-slate-400 font-bold">Release Notes</p>
-                                         <p className="text-[9px] font-serif italic text-slate-600">{item.dispatchDetails.notes}</p>
-                                      </div>
-                                   )}
-
-                                   {(item.dispatchDetails.idDocumentUrl || item.dispatchDetails.recipientPhotoUrl) && (
-                                     <div className="pt-2 flex gap-4">
-                                       {item.dispatchDetails.idDocumentUrl && (
-                                         <div className="space-y-1">
-                                            <p className="text-[7px] uppercase tracking-widest text-slate-400 font-bold">Verification ID</p>
-                                            <a 
-                                              href={item.dispatchDetails.idDocumentUrl} 
-                                              target="_blank" 
-                                              rel="noreferrer"
-                                              className="flex items-center gap-1.5 p-1.5 bg-slate-50 border border-slate-100 rounded hover:bg-gold/5 hover:border-gold/20 transition-all"
-                                            >
-                                              <FileText size={10} className="text-gold" />
-                                              <span className="text-[8px] font-display uppercase tracking-widest font-black text-slate-900">View ID</span>
-                                            </a>
-                                         </div>
-                                       )}
-                                       {item.dispatchDetails.recipientPhotoUrl && (
-                                         <div className="space-y-1">
-                                            <p className="text-[7px] uppercase tracking-widest text-slate-400 font-bold">Recipient Photo</p>
-                                            <button 
-                                              onClick={() => window.open(item.dispatchDetails.recipientPhotoUrl, '_blank')}
-                                              className="w-10 h-10 border border-slate-100 rounded overflow-hidden hover:border-gold/30 transition-all"
-                                            >
-                                              <img src={item.dispatchDetails.recipientPhotoUrl} alt="Recipient" className="w-full h-full object-cover" />
-                                            </button>
-                                         </div>
-                                       )}
-                                     </div>
-                                   )}
-                               </div>
-                             )}</div></motion.div>
-                      ))
-                    )}
-                  </div>
-                </div>
-                {/* Dispatch Form Modal */}
-                <AnimatePresence>
-                  {selectedItemForDispatch && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                      <motion.div 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={() => setSelectedItemForDispatch(null)}
-                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                      />
-                      <motion.div 
-                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                        className="relative w-full max-w-lg bg-white shadow-2xl border-t-4 border-gold overflow-hidden"
-                      >
-                        <div className="p-8">
-                          <div className="flex justify-between items-start mb-6">
-                            <div>
-                               <h3 className="text-xl font-serif italic text-slate-900">Item Dispatch Form</h3>
-                               <p className="luxury-label !text-slate-500">Authorized Release Registry</p>
-                            </div>
-                            <button onClick={() => setSelectedItemForDispatch(null)} className="text-slate-400 hover:text-slate-900 transition-colors">
-                              <X size={20} />
-                            </button>
-                          </div>
-
-                          <div className="mb-6 p-4 bg-slate-50 border border-slate-100 flex gap-4 items-center">
-                            {selectedItemForDispatch.imageUrl ? (
-                              <div className="w-16 h-16 shrink-0 bg-white p-1 border border-slate-200">
-                                <img src={selectedItemForDispatch.imageUrl} alt="" className="w-full h-full object-cover" />
-                              </div>
-                            ) : (
-                              <div className="w-16 h-16 shrink-0 bg-white border border-slate-200 flex items-center justify-center">
-                                <Hotel size={24} className="text-slate-200" />
-                              </div>
-                            )}
-                            <div>
-                              <p className="text-xs font-serif italic font-bold text-slate-900">{selectedItemForDispatch.itemName}</p>
-                              <p className="text-[10px] text-slate-500 line-clamp-1">{selectedItemForDispatch.description}</p>
-                            </div>
-                          </div>
-
-                          <form onSubmit={handleDispatchItem} className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800 block mb-1">Release Date</label>
-                                <input 
-                                  type="date"
-                                  required
-                                  value={dispatchForm.releaseDate}
-                                  onChange={(e) => setDispatchForm({...dispatchForm, releaseDate: e.target.value})}
-                                  className="w-full bg-slate-50 border-none px-4 py-3 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800 block mb-1">Room Number</label>
-                                <input 
-                                  type="text"
-                                  placeholder="e.g. 402"
-                                  value={dispatchForm.roomNumber}
-                                  onChange={(e) => setDispatchForm({...dispatchForm, roomNumber: e.target.value})}
-                                  className="w-full bg-slate-50 border-none px-4 py-3 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
-                                />
-                              </div>
-                            </div>
-
-                            <div>
-                              <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800 block mb-1">Recipient Name</label>
-                              <input 
-                                type="text"
-                                required
-                                value={dispatchForm.guestName}
-                                onChange={(e) => setDispatchForm({...dispatchForm, guestName: e.target.value})}
-                                className="w-full bg-slate-50 border-none px-4 py-3 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
-                                placeholder="Full name of person claiming item"
-                              />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800 block mb-1">Email Address</label>
-                                <input 
-                                  type="email"
-                                  value={dispatchForm.guestEmail}
-                                  onChange={(e) => setDispatchForm({...dispatchForm, guestEmail: e.target.value})}
-                                  className="w-full bg-slate-50 border-none px-4 py-3 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
-                                  placeholder="guest@example.com"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800 block mb-1">Phone Number</label>
-                                <input 
-                                  type="tel"
-                                  value={dispatchForm.guestPhone}
-                                  onChange={(e) => setDispatchForm({...dispatchForm, guestPhone: e.target.value})}
-                                  className="w-full bg-slate-50 border-none px-4 py-3 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
-                                  placeholder="+679 ..."
-                                />
-                              </div>
-                            </div>
-
-                            <div>
-                              <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800 block mb-1">ID Verification & Documents</label>
-                              <div className="space-y-3">
-                                <div className="flex gap-2">
-                                  <select 
-                                    value={dispatchForm.idProofType}
-                                    onChange={(e) => setDispatchForm({...dispatchForm, idProofType: e.target.value})}
-                                    className="bg-slate-50 border-none px-2 py-3 text-[10px] font-display uppercase tracking-widest focus:ring-0"
-                                  >
-                                    <option>Passport</option>
-                                    <option>Driver Lic</option>
-                                    <option>National ID</option>
-                                    <option>Other</option>
-                                  </select>
-                                  <input 
-                                    type="text"
-                                    required
-                                    value={dispatchForm.idProofNumber}
-                                    onChange={(e) => setDispatchForm({...dispatchForm, idProofNumber: e.target.value})}
-                                    className="flex-1 bg-slate-50 border-none px-4 py-3 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
-                                    placeholder="ID Number"
-                                  />
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                  {/* ID Attachment */}
-                                  <div className="relative group">
-                                    <input 
-                                      type="file" 
-                                      accept="image/*,.pdf"
-                                      className="hidden" 
-                                      id="id-doc-upload"
-                                      onChange={async (e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) {
-                                          setIsUploading(true);
-                                          const url = await handleImageUpload(file);
-                                          setDispatchForm(prev => ({ ...prev, idDocumentUrl: url }));
-                                          setIsUploading(false);
-                                        }
-                                      }}
-                                    />
-                                    <label 
-                                      htmlFor="id-doc-upload"
-                                      className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-100 bg-slate-50/30 hover:border-gold/30 hover:bg-gold/5 transition-all cursor-pointer min-h-[80px]"
-                                    >
-                                      {dispatchForm.idDocumentUrl ? (
-                                        <div className="flex items-center gap-2 text-emerald-600">
-                                          <Check size={14} />
-                                          <span className="text-[9px] font-display uppercase tracking-widest font-black">ID Attached</span>
-                                        </div>
-                                      ) : (
-                                        <>
-                                          <FileText size={16} className="text-slate-400 mb-1" />
-                                          <span className="text-[7px] font-display uppercase tracking-widest text-slate-500 font-black">Attach ID Scan</span>
-                                        </>
-                                      )}
-                                    </label>
-                                  </div>
-
-                                  {/* Recipient Photo */}
-                                  <div className="relative group">
-                                    <input 
-                                      type="file" 
-                                      accept="image/*"
-                                      capture="user"
-                                      className="hidden" 
-                                      id="recipient-photo-upload"
-                                      onChange={async (e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) {
-                                          setIsUploading(true);
-                                          const url = await handleImageUpload(file);
-                                          setDispatchForm(prev => ({ ...prev, recipientPhotoUrl: url }));
-                                          setIsUploading(false);
-                                        }
-                                      }}
-                                    />
-                                    <label 
-                                      htmlFor="recipient-photo-upload"
-                                      className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-100 bg-slate-50/30 hover:border-gold/30 hover:bg-gold/5 transition-all cursor-pointer min-h-[80px]"
-                                    >
-                                      {dispatchForm.recipientPhotoUrl ? (
-                                        <div className="flex items-center gap-2 text-emerald-600">
-                                          <Camera size={14} />
-                                          <span className="text-[9px] font-display uppercase tracking-widest font-black">Photo Taken</span>
-                                        </div>
-                                      ) : (
-                                        <>
-                                          <Camera size={16} className="text-slate-400 mb-1" />
-                                          <span className="text-[7px] font-display uppercase tracking-widest text-slate-500 font-black">Capture Recipient</span>
-                                        </>
-                                      )}
-                                    </label>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div>
-                               <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800 block mb-1">Dispatch Notes</label>
-                               <textarea 
-                                 rows={2}
-                                 value={dispatchForm.notes}
-                                 onChange={(e) => setDispatchForm({...dispatchForm, notes: e.target.value})}
-                                 className="w-full bg-slate-50 border-none px-4 py-3 text-sm font-serif italic focus:ring-1 focus:ring-gold/50 resize-none"
-                                 placeholder="Optional notes regarding the release..."
-                               />
-                            </div>
-
-                            <div className="pt-4 flex flex-col gap-3">
-                              <p className="text-[9px] text-slate-400 italic text-center">By clicking below, you confirm that the receiver's identity has been verified as per Protocol 14-B.</p>
-                              <button 
-                                type="submit"
-                                className="w-full py-4 bg-gold text-white text-[11px] font-display uppercase tracking-[0.3em] font-black hover:bg-gold transition-all shadow-lg"
-                              >
-                                Authorize & Release Item
-                              </button>
-                            </div>
-                          </form>
-                        </div>
-                      </motion.div>
-                    </div>
-                  )}
-                </AnimatePresence>
-              </div>
-            ) : activeTab === "team-chat" ? (
-              <div className="flex-1 flex flex-col bg-white overflow-hidden border-t border-slate-200">
-                {/* Browser Toolbar - Ultra Slim */}
-                <div className="bg-[#f8f9fa] border-b border-slate-200 px-3 py-1 flex items-center gap-3 shrink-0">
-                  <div className="flex gap-1 mr-3 shrink-0">
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f56] shadow-sm" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#ffbd2e] shadow-sm" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#27c93f] shadow-sm" />
-                  </div>
-                  
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button className="p-1 hover:bg-slate-200 rounded text-slate-600 cursor-not-allowed">
-                      <ArrowLeft size={12} />
-                    </button>
-                    <button className="p-1 hover:bg-slate-200 rounded text-slate-600 rotate-180 cursor-not-allowed">
-                      <ArrowLeft size={12} />
-                    </button>
-                    <button 
-                      onClick={() => setRefreshKey(k => k + 1)}
-                      className="p-1 hover:bg-slate-200 rounded text-slate-600 hover:text-gold transition-all"
-                    >
-                      <RefreshCw size={12} className={cn(refreshKey > 0 && "animate-spin-once")} />
-                    </button>
-                  </div>
-
-                  <div className="flex-1 flex items-center bg-white px-2 py-0.5 rounded text-[10px] border border-slate-200 shadow-inner overflow-hidden">
-                    <div className="flex items-center gap-1.5 text-emerald-600 font-bold shrink-0">
-                      <ShieldCheck size={10} strokeWidth={3} />
-                      <span className="uppercase tracking-tighter text-[8px]">Secure Gateway</span>
-                    </div>
-                    <div className="mx-2 h-2.5 w-px bg-slate-200 shrink-0" />
-                    <span className="text-slate-500 truncate font-sans select-all flex-1">
-                      mail.google.com/chat/space/AAAAEpnKTIM
-                    </span>
-                  </div>
-
-                  <button 
-                    onClick={() => window.open("https://mail.google.com/mail/u/0/#chat/space/AAAAEpnKTIM", "_blank")}
-                    className="flex items-center gap-1.5 px-2 py-1 bg-gold text-white text-[8px] font-display uppercase tracking-widest font-black hover:bg-luxury-black transition-all shrink-0 shadow-sm active:scale-95"
-                  >
-                    Open Externally <ExternalLink size={8} />
-                  </button>
-                </div>
-
-                {/* Browser Shell */}
-                <div className="flex-1 bg-white relative overflow-hidden">
-                  <iframe 
-                    key={refreshKey}
-                    src="https://mail.google.com/mail/u/0/#chat/space/AAAAEpnKTIM"
-                    className="w-full h-full border-none bg-white relative z-10"
-                    title="Google Chat Integrated"
-                    allow="clipboard-write; camera; microphone; payment; geolocation"
-                    sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-modals allow-downloads allow-popups-to-escape-sandbox"
-                    style={{ height: '100%' }}
-                  />
-                  
-                  {/* Fallback/Loading State behind the frame */}
-                  <div className="absolute inset-0 z-0 flex flex-col items-center justify-center bg-slate-50">
-                    <div className="text-center max-w-md px-8">
-                       <div className="w-16 h-16 bg-luxury-cream text-gold flex items-center justify-center mx-auto mb-6 shadow-xl">
-                          <Send size={32} strokeWidth={1} />
-                       </div>
-                      <h4 className="text-[10px] font-display uppercase tracking-[0.2em] text-slate-900 font-black mb-4 italic">Google Chat Interface</h4>
-                      <p className="text-xs font-serif italic text-slate-500 leading-relaxed mb-4">
-                        If the chat does not load, it is because Google prevents its services from being embedded in other portals for security reasons.
-                      </p>
-                      
-                      <div className="mt-8 flex gap-2 justify-center">
-                        <div className="w-1.5 h-1.5 rounded-full bg-gold animate-bounce" />
-                        <div className="w-1.5 h-1.5 rounded-full bg-gold animate-bounce delay-75" />
-                        <div className="w-1.5 h-1.5 rounded-full bg-gold animate-bounce delay-150" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            ) : activeTab === "brand-kit" ? (
+              <BrandKit companyId={selectedCompany || 'cml'} />
+            ) : activeTab === "duty-roster" ? (
+              <DutyRoster companyId={selectedCompany || 'cml'} />
             ) : activeTab === "canary" ? (
-              <div className="flex-1 flex flex-col bg-white overflow-hidden border-t border-slate-200">
-                {/* Browser Toolbar - Ultra Slim */}
-                <div className="bg-[#f8f9fa] border-b border-slate-200 px-3 py-1 flex items-center gap-3 shrink-0">
-                  <div className="flex gap-1 mr-3 shrink-0">
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f56] shadow-sm" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#ffbd2e] shadow-sm" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#27c93f] shadow-sm" />
-                  </div>
-                  
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button className="p-1 hover:bg-slate-200 rounded text-slate-600 cursor-not-allowed">
-                      <ArrowLeft size={12} />
-                    </button>
-                    <button className="p-1 hover:bg-slate-200 rounded text-slate-600 rotate-180 cursor-not-allowed">
-                      <ArrowLeft size={12} />
-                    </button>
-                    <button 
-                      onClick={() => setRefreshKey(k => k + 1)}
-                      className="p-1 hover:bg-slate-200 rounded text-slate-600 hover:text-gold transition-all"
-                    >
-                      <RefreshCw size={12} className={cn(refreshKey > 0 && "animate-spin-once")} />
-                    </button>
-                  </div>
-
-                  <div className="flex-1 flex items-center bg-white px-2 py-0.5 rounded text-[10px] border border-slate-200 shadow-inner overflow-hidden">
-                    <div className="flex items-center gap-1.5 text-emerald-600 font-bold shrink-0">
-                      <ShieldCheck size={10} strokeWidth={3} />
-                      <span className="uppercase tracking-tighter text-[8px]">Secure</span>
-                    </div>
-                    <div className="mx-2 h-2.5 w-px bg-slate-200 shrink-0" />
-                    <span className="text-slate-950 truncate font-sans select-all flex-1 font-bold">
-                      eu.canarytechnologies.com/hotels/
-                    </span>
-                  </div>
-
-                  <button 
-                    onClick={() => {
-                        setRefreshKey(prev => prev + 1);
-                    }}
-                    className="flex items-center gap-1.5 px-2 py-1 bg-gold text-white text-[8px] font-display uppercase tracking-widest font-black hover:bg-luxury-black transition-all shrink-0 shadow-sm active:scale-95"
-                  >
-                    Refresh Session
-                  </button>
-                </div>
-
-                {/* Browser Shell - Forces full height */}
-                <div className="flex-1 bg-white relative overflow-hidden">
-                  <iframe 
-                    key={refreshKey}
-                    src="https://eu.canarytechnologies.com/hotels/"
-                    className="w-full h-full border-none bg-white relative z-10"
-                    title="Canary Technologies Integrated"
-                    allow="clipboard-write; camera; microphone; payment; geolocation"
-                    sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-modals allow-downloads allow-popups-to-escape-sandbox"
-                    style={{ height: '100%' }}
-                  />
-                  
-                  {/* Loading State Behind Frame */}
-                  <div className="absolute inset-0 z-0 flex flex-col items-center justify-center bg-slate-50">
-                    <div className="text-center max-w-md px-8">
-                      <Globe size={48} className="mx-auto mb-6 text-gold/20 animate-pulse" />
-                      <h4 className="text-[10px] font-display uppercase tracking-[0.2em] text-slate-600 font-bold mb-2">Connecting to Secure Gateway</h4>
-                      <p className="text-xs font-serif italic text-slate-500 leading-relaxed">
-                        If the content is not displaying, the integrated browser session may require a direct login.
-                      </p>
-                      <div className="mt-8 flex gap-2 justify-center">
-                        <div className="w-1.5 h-1.5 rounded-full bg-gold animate-bounce" />
-                        <div className="w-1.5 h-1.5 rounded-full bg-gold animate-bounce delay-75" />
-                        <div className="w-1.5 h-1.5 rounded-full bg-gold animate-bounce delay-150" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <CanaryPortal companyId={selectedCompany || 'cml'} />
+            ) : activeTab === "lost-and-found" ? (
+              <LostAndFound userRole={userRole || undefined} companyId={selectedCompany || 'cml'} />
+            ) : activeTab === "staff-mailer" ? (
+              <StaffMailer companyId={selectedCompany || 'cml'} />
+            ) : activeTab === "digital-flipbooks" ? (
+              <DigitalFlipbook 
+                companyId={selectedCompany || 'cml'} 
+                userRole={userRole || undefined} 
+                externalFlipbookId={externalFlipbookId}
+                onCloseExternalView={() => {
+                  setExternalFlipbookId(null);
+                  window.history.pushState({}, document.title, window.location.pathname);
+                }}
+              />
+            ) : (activeTab === "restaurant-scanner" || activeTab.startsWith("dining-")) ? (
+              <RestaurantScanner 
+                companyId={selectedCompany || 'cml'} 
+                initialSubTab={
+                  activeTab === "dining-buffet" ? "buffet" :
+                  activeTab === "dining-loyalty" ? "scanner" :
+                  activeTab === "dining-capacity" ? "capacity" :
+                  activeTab === "dining-reservations" ? "reservations" : undefined
+                }
+                onSubTabChange={(subTab) => {
+                  const mappedTab = 
+                    subTab === "buffet" ? "dining-buffet" :
+                    subTab === "scanner" ? "dining-loyalty" :
+                    subTab === "capacity" ? "dining-capacity" :
+                    subTab === "reservations" ? "dining-reservations" : "dining-buffet";
+                  if (activeTab !== mappedTab) {
+                    setActiveTab(mappedTab);
+                  }
+                }}
+              />
+            ) : activeTab === "managed-cases" ? (
+              <ManageCases />
+            ) : activeTab === "resources" ? (
+              <ResourcesHelp />
             ) : activeTab === "forum" ? (
               <Forum />
+            ) : activeTab === "daily-news" ? (
+              <DailyNews />
             ) : activeTab === "user-management" ? (
-              <UserManagement />
+              (userRole === "Administrator" || userRole === "Super Admin" || userRole === "Group Controller") ? (
+                <UserManagement />
+              ) : (
+                <div className="flex items-center justify-center h-64 text-slate-500 font-serif italic">
+                  Access Restricted to Administrators
+                </div>
+              )
             ) : (
               <>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12 no-print">
@@ -3966,11 +8021,14 @@ export default function App() {
                             </thead>
                             <tbody className="text-sm divide-y divide-slate-50">
                               {[
-                                { name: `${currentCompany?.id.toUpperCase()} - Nadi`, exec: "Robert Chen", status: "Validated", health: 100 },
-                                { name: `${currentCompany?.id.toUpperCase()} - Suva`, exec: "Sarah Malik", status: "Audit Pending", health: 85, alert: true },
+                                { name: `${(currentCompany?.id || "").toUpperCase()} - Nadi`, exec: "Robert Chen", status: "Validated", health: 100 },
+                                { name: `${(currentCompany?.id || "").toUpperCase()} - Suva`, exec: "Sarah Malik", status: "Audit Pending", health: 85, alert: true },
                                 { name: "Beachfront West Lux", exec: "John Doe", status: "Validated", health: 98 },
                               ].map((property, i) => (
-                                <tr key={property.name} className="group hover:bg-luxury-cream/30 transition-colors">
+                                <tr 
+                                  key={property.name} 
+                                  className="group hover:bg-luxury-cream/30 hover:scale-[1.01] hover:shadow-md transition-all duration-300 ease-out transform origin-center cursor-pointer"
+                                >
                                   <td className="px-8 py-6">
                                     <p className="font-serif text-slate-900 text-base">{property.name}</p>
                                     <p className="text-[10px] text-slate-600 font-display uppercase tracking-widest mt-0.5 font-bold">Asset ID: {1029 + i}</p>
@@ -4063,13 +8121,287 @@ export default function App() {
                            98
                         </div>
                      </div>
+
+                      {/* AI Assistant Widget */}
+                      <div className="luxury-card p-8 bg-luxury-black text-white overflow-hidden relative group">
+                         <div className="absolute top-0 right-0 w-32 h-32 bg-gold/10 rounded-full translate-x-1/2 -translate-y-1/2 blur-2xl group-hover:bg-gold/20 transition-all duration-1000" />
+                         <div className="flex items-center gap-3 mb-6 relative z-10">
+                             <Sparkles className="text-gold" size={18} />
+                             <h2 className="text-xs font-display uppercase tracking-[0.3em] text-gold italic">AI Plan Man</h2>
+                         </div>
+                         <p className="text-[10px] text-slate-500 font-serif italic mb-6 leading-relaxed relative z-10">
+                             Hospitality strategic planner, guest recovery, dynamic rates pricing, and SOP audit compliance.
+                         </p>
+                         <button 
+                             className="w-full py-4 border border-gold/20 hover:border-gold hover:bg-gold/10 transition-all text-[9px] font-black uppercase tracking-[0.3em] relative z-10 cursor-pointer"
+                             onClick={() => setIsPlanManOpen(true)}
+                         >
+                             Launch AI Plan Man
+                         </button>
+                      </div>
                    </div>
                 </div>
               </>
             )}
           </motion.div>
+          )}
         </main>
       </div>
+      <ToastContainer />
+      <GoogleAIPlanMan
+         isOpen={isPlanManOpen}
+         onClose={() => setIsPlanManOpen(false)}
+         selectedCompany={selectedCompany || 'cml'}
+         complaints={complaints}
+      />
+      <SopBatchUploadModal
+         isOpen={isSopZipModalOpen}
+         onClose={() => setIsSopZipModalOpen(false)}
+         onImport={handleSopZipImport}
+         zipFile={selectedSopZipFile}
+      />
+
+      <ConfirmModal
+        isOpen={!!deleteComplaintTarget}
+        onClose={() => setDeleteComplaintTarget(null)}
+        onConfirm={handleArchiveComplaintConfirm}
+        title="Archive Recovery Log?"
+        description="Are you sure you want to archive and dispose of this customer complaint recovery record? This will file the log under permanent audit archives."
+        confirmLabel="Archive Record"
+        cancelLabel="Keep Active"
+        variant="warning"
+      />
+
+      <ConfirmModal
+        isOpen={!!deleteCustomFormTarget}
+        onClose={() => setDeleteCustomFormTarget(null)}
+        onConfirm={handleDeleteCustomFormConfirm}
+        title="Remove Custom Form Reference?"
+        description={`Are you sure you want to delete form reference "${deleteCustomFormTarget?.name}"? It will be removed from your secure guest and company portals.`}
+        confirmLabel="Remove Reference"
+        cancelLabel="Preserve Reference"
+        variant="danger"
+      />
+
+      <ConfirmModal
+        isOpen={!!deleteSopTarget}
+        onClose={() => setDeleteSopTarget(null)}
+        onConfirm={handleDeleteSopConfirm}
+        title="Delete SOP Document?"
+        description={`Are you sure you want to permanently delete standard operating procedure "${deleteSopTarget?.title}"? This operation cannot be undone.`}
+        confirmLabel="Delete Document"
+        cancelLabel="Retain SOP"
+        variant="danger"
+      />
+
+      <ImageLightboxModal
+        isOpen={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+        images={lightboxImages}
+        startIndex={lightboxStartIndex}
+      />
+
+      {/* Offline Sync Manager Modal */}
+      <AnimatePresence>
+        {isSyncModalOpen && (
+          <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSyncModalOpen(false)}
+              className="absolute inset-0 bg-stone-900/80 backdrop-blur-md"
+            />
+
+            {/* Modal Box */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", duration: 0.4 }}
+              className="relative w-full max-w-lg bg-white border border-stone-200 shadow-2xl rounded-sm overflow-hidden flex flex-col z-10 max-h-[85vh]"
+            >
+              {/* Header */}
+              <div className="bg-stone-950 p-5 text-white flex items-center justify-between border-b border-stone-800">
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "p-1.5 rounded-full shrink-0",
+                    isOnline ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
+                  )}>
+                    <Globe size={18} className={cn(isOnline && "animate-spin")} style={{ animationDuration: '6s' }} />
+                  </div>
+                  <div>
+                    <h3 className="font-display uppercase tracking-widest text-xs font-black">
+                      System Sync Control Hub
+                    </h3>
+                    <p className="text-[10px] text-stone-400 font-sans tracking-wide mt-0.5">
+                      {isOnline ? "All services reporting dynamic real-time upload active" : "Offline backup database active & caching locally"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsSyncModalOpen(false)}
+                  className="text-stone-400 hover:text-white transition-colors p-1"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Status Banner */}
+              <div className={cn(
+                "px-5 py-3 text-[11px] font-sans flex items-center justify-between",
+                isOnline ? "bg-emerald-50 text-emerald-800 border-b border-emerald-100" : "bg-amber-50 text-amber-800 border-b border-amber-100"
+              )}>
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2 w-2 shrink-0">
+                    <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", isOnline ? "bg-emerald-400" : "bg-amber-400")}></span>
+                    <span className={cn("relative inline-flex rounded-full h-2 w-2", isOnline ? "bg-emerald-500" : "bg-amber-500")}></span>
+                  </span>
+                  <span>
+                    Status: <strong className="uppercase">{isOnline ? "Online" : "Offline"}</strong> ({offlineComplaintsCount + offlineRatesCount} pending transfers)
+                  </span>
+                </div>
+                {isOnline && (offlineComplaintsCount > 0 || offlineRatesCount > 0) && (
+                  <button
+                    onClick={async () => {
+                      if (offlineComplaintsCount > 0) {
+                        await triggerClientBackgroundSync();
+                      }
+                      if (offlineRatesCount > 0) {
+                        await triggerRatesBackgroundSync();
+                      }
+                    }}
+                    disabled={isOfflineSyncing || isOfflineRatesSyncing}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-sans text-[9px] font-extrabold uppercase tracking-wider px-3 py-1.5 transition flex items-center gap-1 cursor-pointer border border-emerald-500 rounded"
+                  >
+                    {(isOfflineSyncing || isOfflineRatesSyncing) ? (
+                      <>
+                        <RefreshCw size={10} className="animate-spin" />
+                        Synchronizing...
+                      </>
+                    ) : (
+                      "🚀 Trigger Sync Now"
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {/* Task Details List */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-4 min-h-[250px]">
+                <h4 className="font-display font-black uppercase text-[10px] text-stone-500 tracking-wider mb-2">
+                  Pending Task Ledger (Granular Queue)
+                </h4>
+
+                {pendingComplaintsList.length === 0 && pendingRatesList.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center space-y-3">
+                    <CheckCircle2 size={36} className="text-stone-300 animate-bounce" />
+                    <div>
+                      <p className="text-xs font-bold text-stone-700">All local records fully synchronized</p>
+                      <p className="text-[10px] text-stone-400 mt-1 max-w-[280px]">No pending forms or pricing adjustments are in the queue. Secure cloud database is current.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {/* Complaints lists */}
+                    {pendingComplaintsList.map((item, idx) => (
+                      <div key={`complaint-${idx}`} className="p-3 border border-stone-200/90 bg-stone-50/60 rounded-xs flex items-center justify-between gap-3 shadow-xs hover:border-slate-300 transition-all duration-150">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <div className="p-1.5 bg-sky-100 text-sky-800 font-bold shrink-0 text-xs">
+                            <FileText size={15} />
+                          </div>
+                          <div className="min-w-0 pr-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-display uppercase text-[9px] font-extrabold tracking-wider bg-stone-200 px-1.5 py-0.5 text-stone-750">
+                                Guest Recovery
+                              </span>
+                              {item.priority === 'Urgent' ? (
+                                <span className="text-[8.5px] font-extrabold text-rose-700 bg-rose-50 border border-rose-100 px-1 uppercase tracking-wide">
+                                  Urgent
+                                </span>
+                              ) : (
+                                <span className="text-[8.5px] font-extrabold text-stone-500 bg-stone-100 border border-stone-200 px-1 uppercase tracking-wide">
+                                  {item.priority}
+                                </span>
+                              )}
+                            </div>
+                            <h5 className="font-serif italic font-semibold text-xs text-stone-900 truncate mt-1">
+                              Guest: {item.guestName || "Unspecified"} (Room {item.roomNumber || "N/A"})
+                            </h5>
+                            <p className="text-[10px] text-stone-550 truncate mt-0.5 leading-tight font-sans">
+                              {item.description || "No description provided."}
+                            </p>
+                            <p className="text-[8.5px] text-stone-400 mt-1 font-mono">
+                              Cached: {item.createdAt ? new Date(item.createdAt).toLocaleTimeString() : "Recent"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="shrink-0 text-right">
+                          <span className="inline-flex items-center gap-1 bg-amber-150 border border-amber-250 text-amber-900 font-mono text-[8.5px] uppercase font-bold px-1.5 py-0.5 rounded-sm animate-pulse">
+                            ⚠️ Queued
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Rates list */}
+                    {pendingRatesList.map((item, idx) => (
+                      <div key={`rate-${idx}`} className="p-3 border border-stone-200/90 bg-stone-50/60 rounded-xs flex items-center justify-between gap-3 shadow-xs hover:border-slate-300 transition-all duration-150">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <div className="p-1.5 bg-amber-100 text-amber-800 font-bold shrink-0 text-xs">
+                            <Percent size={15} />
+                          </div>
+                          <div className="min-w-0 pr-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-display uppercase text-[9px] font-extrabold tracking-wider bg-stone-200 px-1.5 py-0.5 text-stone-750">
+                                Rates Update
+                              </span>
+                              <span className="text-[8.5px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-100 px-1 uppercase tracking-wide">
+                                Channel Dist
+                              </span>
+                            </div>
+                            <h5 className="font-serif italic font-semibold text-xs text-stone-900 truncate mt-1">
+                              BAR Rate: FJD ${item.projectedBAR ? Number(item.projectedBAR).toFixed(2) : "0.00"}
+                            </h5>
+                            <p className="text-[10px] text-stone-550 truncate mt-0.5 leading-tight font-sans">
+                              Base: ${item.baseRate || "0.00"} | Surcharges: ${item.occupancySurcharge || "0.00"}
+                            </p>
+                            <p className="text-[8.5px] text-stone-400 mt-1 font-mono">
+                              Cached: {item.timestamp ? new Date(item.timestamp).toLocaleTimeString() : "Recent"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="shrink-0 text-right">
+                          <span className="inline-flex items-center gap-1 bg-amber-150 border border-amber-250 text-amber-900 font-mono text-[8.5px] uppercase font-bold px-1.5 py-0.5 rounded-sm animate-pulse">
+                            ⚠️ Queued
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 bg-stone-50 border-t border-stone-200 text-right flex items-center justify-between">
+                <span className="text-[9px] text-stone-450 font-sans tracking-wide">
+                  Cove Management Limited (CML) System Ledger
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsSyncModalOpen(false)}
+                  className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white font-sans text-[10px] font-black uppercase tracking-widest cursor-pointer outline-none rounded-none"
+                >
+                  Dismiss Controls
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }

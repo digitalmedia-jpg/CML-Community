@@ -15,8 +15,12 @@
 }
 
 @layer base {
+  html {
+    font-size: 100%; /* Restore standard 100% typography scale for a professional, high-density, beautifully balanced UI */
+  }
+  
   body {
-    @apply bg-luxury-cream text-luxury-black antialiased font-sans;
+    @apply bg-luxury-cream text-luxury-black antialiased font-sans text-base;
   }
   
   h1, h2, h3, h4, h5, h6 {
@@ -30,11 +34,11 @@
   }
   
   .luxury-button {
-    @apply bg-luxury-black text-white px-6 py-2 tracking-widest text-[10px] font-bold uppercase transition-all duration-300 hover:bg-gold;
+    @apply bg-luxury-black text-white px-6 py-2.5 tracking-widest text-[12px] font-bold uppercase transition-all duration-300 hover:bg-gold;
   }
   
   .luxury-label {
-    @apply font-display text-[10px] uppercase tracking-[0.2em] font-bold text-slate-600;
+    @apply font-display text-[12px] uppercase tracking-[0.2em] font-bold text-slate-600;
   }
 
   .custom-scrollbar::-webkit-scrollbar {
@@ -60,6 +64,28 @@
 
   .animate-spin-once {
     animation: spin-once 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 4px rgba(239, 68, 68, 0.15), 0 4px 20px rgba(0,0,0,0.03);
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 14px rgba(239, 68, 68, 0.45), 0 4px 24px rgba(239, 68, 68, 0.1);
+      border-color: rgba(239, 68, 68, 0.8);
+    }
+  }
+
+  .urgent-pulse-glow {
+    animation: pulse-glow 2s infinite ease-in-out;
+    border-width: 1.5px !important;
+  }
+
+  /* Core horizontal scroll accessibility for restaurant scanner ledger table */
+  #restaurant-scanner-module table {
+    display: table;
+    min-width: 640px !important;
   }
 }
 

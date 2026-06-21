@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
+  db,
   collection, 
   query, 
   getDocs, 
   limit 
-} from 'firebase/firestore';
-import { db } from '../lib/firebase';
+} from '../lib/firebase';
 import { 
   Search as SearchIcon, 
   X, 
@@ -23,18 +23,25 @@ interface SearchResult {
   id: string;
   title: string;
   description: string;
-  category: 'Forum' | 'HR Forms' | 'Property Data' | 'SOPs';
+  category: 'Forum' | 'Forms' | 'Property Data' | 'SOPs';
   link: string;
   meta?: string;
 }
 
 const HR_FORMS = [
-  { name: "Missed Clock In/Clock Out Register", id: "missed-clock", tab: "hr" },
-  { name: "Early Leave Form", id: "early-leave", tab: "hr" },
-  { name: "Return to Work Form", id: "return-work", tab: "hr" },
-  { name: "Leave Application Form", id: "leave-app", tab: "hr" },
-  { name: "Guest SD Agreement Form", id: "guest-sd", tab: "hr" },
-  { name: "Overtime Approval Form", id: "overtime", tab: "hr" }
+  { name: "General Leave Application Form - Ramada Hotel Wailoaloa Fiji", id: "leave-app", tab: "hr" },
+  { name: "RETURN TO WORK FORM - Ramada Wailoaloa Fiji", id: "return-work", tab: "hr" },
+  { name: "Staff Feedback Form", id: "staff-feedback", tab: "hr" },
+  { name: "Guest Waiver Form", id: "guest-waiver", tab: "hr" },
+  { name: "Ramada Checkin Form", id: "ramada-checkin", tab: "hr" },
+  { name: "Contact Form Demo", id: "contact-form-demo", tab: "hr" },
+  { name: "Missed Clock-In/Clock-Out Register - Ramada Wailoaloa Fiji", id: "missed-clock", tab: "hr" },
+  { name: "Ramada Hotel - Property Officer Patrol LOG -Deck Area", id: "patrol-log-deck", tab: "hr" },
+  { name: "Property Officer Logging Form", id: "property-officer-logging", tab: "hr" },
+  { name: "Training Acknowledgement Form", id: "training-ack", tab: "hr" },
+  { name: "Ramada Hotel Employee Forms Portal", id: "employee-forms-portal", tab: "hr" },
+  { name: "EARLY LEAVE FORM - Ramada Hotel Wailoaloa Fiji", id: "early-leave-ext", tab: "hr" },
+  { name: "Overtime Approval Form - Ramada Wailoaloa Hotel Fiji", id: "overtime", tab: "hr" }
 ];
 
 const PROPERTY_DATA = [
@@ -96,7 +103,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onNavigate }) => {
             id: form.id,
             title: form.name,
             description: 'Employment and management documentation',
-            category: 'HR Forms',
+            category: 'Forms',
             link: form.tab
           });
         }
@@ -148,7 +155,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onNavigate }) => {
   }, [searchQuery]);
 
   const handleResultClick = (result: SearchResult) => {
-    if (result.category === 'HR Forms') {
+    if (result.category === 'Forms') {
       onNavigate(result.link, result.id);
     } else {
       onNavigate(result.link);
@@ -242,7 +249,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onNavigate }) => {
                             >
                               <div className="w-10 h-10 bg-white border border-slate-100 flex items-center justify-center text-slate-300 group-hover:text-gold group-hover:border-gold/30 transition-all shrink-0">
                                 {cat === 'Forum' ? <MessageSquare size={18} strokeWidth={1.5} /> : 
-                                 cat === 'HR Forms' ? <FileText size={18} strokeWidth={1.5} /> : 
+                                 cat === 'Forms' ? <FileText size={18} strokeWidth={1.5} /> : 
                                  <Hotel size={18} strokeWidth={1.5} />}
                               </div>
                               <div className="flex-1 min-w-0">

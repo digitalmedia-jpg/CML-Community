@@ -1,21 +1,411 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
+import fs from "fs";
 import nodemailer from "nodemailer";
+import { GoogleGenAI } from "@google/genai";
+
+async function safePostToWebhook(url: string, payload: any) {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 seconds timeout limit
+    
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (!response.ok) {
+      console.error(`[Webhook] response not OK for ${url.substring(0, 45)}... status: ${response.status}`);
+    }
+    return response.ok;
+  } catch (err: any) {
+    console.error(`[Webhook Error] Failed to send to ${url.substring(0, 45)}...:`, err.message || err);
+    return false;
+  }
+}
+
+async function sendToUserGoogleChat(messageText: string) {
+  const webhookUrl = "https://chat.googleapis.com/v1/spaces/AAQAfu2w5d0/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=HqXvfAtrBsMVgTl5GaMkOD1f_L-w8E3zq1mL-N-yIaI";
+  await safePostToWebhook(webhookUrl, { text: messageText });
+}
 
 async function startServer() {
   const app = express();
-  app.use(express.json());
-  const PORT = 3000;
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  app.get("/api/debug-rest", async (req, res) => {
+    try {
+      const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+        const base = `https://firestore.googleapis.com/v1/projects/${config.projectId}/databases/${config.firestoreDatabaseId || "(default)"}/documents/hybrid_sandbox`;
+        const url = `${base}?key=${config.apiKey}`;
+        const fetchRes = await fetch(url);
+        const text = await fetchRes.text();
+        try {
+          return res.json({ status: fetchRes.status, url, body: JSON.parse(text) });
+        } catch {
+          return res.json({ status: fetchRes.status, url, bodyText: text });
+        }
+      }
+      return res.json({ error: "Config not found" });
+    } catch (e: any) {
+      return res.json({ error: e.message });
+    }
+  });
+
+  // Synchronize all platform shortcut icons with the verified beautiful CML logo from the corporate website in the background
+  (async () => {
+    try {
+      const cmlLogoUrl = "https://cml.com.fj/wp-content/uploads/2026/06/CML-Logo-LG-BG-Icon.png";
+      console.log(`[PWA_ICONS_SYNC] Attempting to download the latest CML corporate shortcut icon in background: ${cmlLogoUrl}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000); // 4-second hard cutoff for the corporate site
+      
+      const iconRes = await fetch(cmlLogoUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      
+      const publicDir = path.join(process.cwd(), "public");
+      if (!fs.existsSync(publicDir)) {
+        fs.mkdirSync(publicDir, { recursive: true });
+      }
+
+      const allTargets = [
+        "apple-touch-icon.png",
+        "apple-touch-icon.jpg",
+        "apple-touch-icon-precomposed.png",
+        "apple-touch-icon-precomposed.jpg",
+        "icon.png",
+        "icon.jpg",
+        "icon-192.png",
+        "icon-192.jpg",
+        "icon-512.png",
+        "icon-512.jpg",
+        "favicon.ico",
+        "favicon.png"
+      ];
+
+      if (iconRes.ok) {
+        const buffer = Buffer.from(await iconRes.arrayBuffer());
+        for (const file of allTargets) {
+          const filePath = path.join(publicDir, file);
+          fs.writeFileSync(filePath, buffer);
+        }
+        console.log("[PWA_ICONS_SYNC] Successfully downloaded and synchronized all PWA, Apple and Android shortcut icons with the CML Logo!");
+      } else {
+        console.warn(`[PWA_ICONS_SYNC] Failed to fetch CML logo (status: ${iconRes.status}). Doing local legacy fallback...`);
+        const fallbackSource = path.join(publicDir, "apple-touch-icon.png");
+        if (fs.existsSync(fallbackSource)) {
+          for (const file of allTargets) {
+            if (file !== "apple-touch-icon.png") {
+              fs.copyFileSync(fallbackSource, path.join(publicDir, file));
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn("[PWA_ICONS_SYNC] Error fetching/synchronizing CML logo icon:", err.message || err);
+    }
+  })();
+
+  // Global anti-caching middleware to instantly bypass stale browser caches
+  app.use((req, res, next) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("Surrogate-Control", "no-store");
+    next();
+  });
+
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+  // API routes
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok" });
+  });
+
+  // Proxy endpoint to bypass browser CORS on external assets and force direct gallery download
+  app.get("/api/download-image", async (req, res) => {
+    const imageUrl = req.query.url as string;
+    const filename = (req.query.filename as string) || "business_card.png";
+    
+    if (!imageUrl) {
+      return res.status(400).send("URL parameter is required");
+    }
+
+    try {
+      console.log(`[Proxy Download] Fetching: ${imageUrl} -> naming: ${filename}`);
+      const response = await fetch(imageUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: status ${response.status}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      const contentType = response.headers.get("content-type") || "image/png";
+
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.send(Buffer.from(arrayBuffer));
+    } catch (err: any) {
+      console.error("[Proxy Download Error]", err);
+      // Fallback redirect if fetch failed so the user gets the raw file display anyway
+      res.redirect(imageUrl);
+    }
+  });
+
+  // Centralized In-Memory Business Card Registry for multi-device QR alignment
+  const cardsMemoryStore: Record<string, any> = {};
+
+  // Hydrate with default seeds so they are always ready server-side!
+  const SEEDED_MOCK_CARDS = {
+    "mock_cml_1": {
+      id: "mock_cml_1",
+      name: "Rohit Lal",
+      title: "General Manager | Director",
+      department: "Executive Board",
+      phone: "+679 998 9499",
+      email: "sales@cml.com.fj",
+      website: "cml.com.fj",
+      location: "Lot 14 Wasawasa Road, Wailoaloa Beach, Nadi, Fiji Islands",
+      pages: [],
+      companyId: "cml"
+    },
+    "mock_cml_2": {
+      id: "mock_cml_2",
+      name: "Charles Cebujano",
+      title: "Digital Media Specialist",
+      department: "Marketing & Design",
+      phone: "+679 998 4676",
+      email: "digitalmedia@cml.com.fj",
+      website: "cml.com.fj",
+      location: "Lot 14 Wasawasa Road, Wailoaloa Beach, Nadi, Fiji Islands",
+      pages: [],
+      companyId: "cml"
+    },
+    "mock_ramada_1": {
+      id: "mock_ramada_1",
+      name: "Avishek Chandra",
+      title: "Director of Operations",
+      department: "Property Management & Operations",
+      phone: "+679 672 5000",
+      email: "operations@ramadasuitesfiji.com",
+      website: "ramadasuitesfiji.com",
+      location: "Lot 14 Wasawasa Road, Wailoaloa Beach, Nadi, Fiji Islands",
+      pages: [],
+      companyId: "ramada"
+    },
+    "mock_wyndham_1": {
+      id: "mock_wyndham_1",
+      name: "Litia R.",
+      title: "Guest Relations Lead Manager",
+      department: "Guest Services",
+      phone: "+679 675 0411",
+      email: "litia.r@wyndhamfiji.com",
+      website: "wyndhamfiji.com",
+      location: "Denarau Island, Nadi, Fiji Islands",
+      pages: [],
+      companyId: "wyndham"
+    }
+  };
+
+  // Pre-populate memory store
+  Object.entries(SEEDED_MOCK_CARDS).forEach(([key, card]) => {
+    cardsMemoryStore[`${card.companyId}/${key}`] = card;
+  });
+
+  app.post("/api/business-cards", (req, res) => {
+    const { card } = req.body;
+    if (!card || !card.id || !card.companyId) {
+      return res.status(400).json({ error: "Invalid card payload schema" });
+    }
+    cardsMemoryStore[`${card.companyId}/${card.id}`] = card;
+    console.log(`[Card API] Registered memory registry backup for: ${card.name} (${card.id})`);
+    res.json({ success: true, id: card.id });
+  });
+
+  app.get("/api/business-cards/:companyId/:cardId", (req, res) => {
+    const { companyId, cardId } = req.params;
+    const key = `${companyId}/${cardId}`;
+    const card = cardsMemoryStore[key];
+    if (card) {
+      return res.json(card);
+    }
+    // Return mock data fallback structure if requested
+    res.status(404).json({ error: "Card not registered in server memory" });
+  });
+
+  // Dynamic vCard .VCF generation for physical QR code scans on mobile devices
+  app.get("/api/vcard", (req, res) => {
+    const name = (req.query.name as string) || "Rohit Lal";
+    const title = (req.query.title as string) || "General Manager | Director";
+    const phone1 = (req.query.phone1 as string) || "+679 998 9499";
+    const phone2 = (req.query.phone2 as string) || "";
+    const email = (req.query.email as string) || "sales@cml.com.fj";
+    const website = (req.query.website as string) || "cml.com.fj";
+    const location = (req.query.location as string) || "Lot 14 Wasawasa Road, Wailoaloa Fiji";
+
+    // Build the structural standard vCard v3.0 block with CRLF line breaks
+    const vcardLines = [
+      "BEGIN:VCARD",
+      "VERSION:3.0",
+      `FN:${name}`,
+      `N:${name.split(' ').reverse().join(';') || name}`,
+      "ORG:Cove Management Limited",
+      `TITLE:${title}`,
+      `TEL;TYPE=CELL,VOICE:${phone1}`,
+      phone2 ? `TEL;TYPE=WORK,VOICE:${phone2}` : "",
+      `EMAIL;TYPE=PREF,INTERNET:${email}`,
+      `URL;TYPE=WORK:${website.startsWith('http') ? website : 'https://' + website}`,
+      `ADR;TYPE=WORK:;;${location.replace(/,/g, ';')}`,
+      `REV:${new Date().toISOString()}`,
+      "END:VCARD"
+    ];
+
+    const vcardContent = vcardLines.filter(Boolean).join("\r\n");
+
+    res.setHeader("Content-Type", "text/vcard; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${name.replace(/[^a-zA-Z0-9]/g, '_')}.vcf"`);
+    res.send(vcardContent);
+  });
+
+  // AI Assistant Endpoint
+  app.post("/api/ai/analyze", async (req, res) => {
+    const { prompt, type } = req.body;
+    
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(503).json({ error: "AI Service not configured. Please supply a valid GEMINI_API_KEY in Secrets." });
+    }
+
+    try {
+      const ai = new GoogleGenAI({
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const systemPrompt = type === 'recovery' 
+        ? "You are an expert luxury hotel recovery specialist. Analyze the following guest complaint and provide a 3-step professional recovery plan and a draft response email. Keep it concise, empathetic, and hospitality-focused."
+        : "You are 'Plan Man' - the top-tier Google AI Hospitality Strategy Planner for Charles at Cove Management Limited. Generate a comprehensive operational plan, strategic action items, and actionable targets for standard operating procedures (SOPs) based on user instructions and data. Respond with professional structure, clear outline, and ambitious benchmarks.";
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: `${systemPrompt}\n\nInput: ${prompt}`,
+      });
+      
+      const text = response.text || "No response received from the Google AI model.";
+      res.json({ analysis: text });
+    } catch (error: any) {
+      console.error("[AI Error]", error);
+      res.status(500).json({ error: error.message || "AI analysis failed" });
+    }
+  });
+
+  // Background Sync Endpoint for Offline Guest Complaints
+  app.post("/api/sync-offline-complaints", async (req, res) => {
+    const { complaints } = req.body;
+    console.log(`[Offline Sync API] Received ${complaints?.length || 0} pending complaints to push to live Firestore.`);
+
+    if (!Array.isArray(complaints) || complaints.length === 0) {
+      return res.json({ success: true, count: 0 });
+    }
+
+    try {
+      const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+      if (!fs.existsSync(configPath)) {
+        throw new Error("firebase-applet-config.json not found");
+      }
+      const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      const apiKey = config.apiKey;
+      const projectId = config.projectId;
+      const databaseId = firestoreRestSync ? firestoreRestSync.getDatabaseId() : (config.firestoreDatabaseId || "(default)");
+
+      if (!apiKey || !projectId) {
+        throw new Error("apiKey or projectId missing in config");
+      }
+
+      let syncCount = 0;
+      for (const comp of complaints) {
+        const targetPropertyId = comp.propertyId || "wyndham";
+        const collectionName = `complaints-${targetPropertyId}`;
+        
+        // Strip out the custom auto-increment or indexeddb id
+        const { id, ...data } = comp;
+
+        // Map standard properties to Firestore REST structure
+        const fields: Record<string, any> = {};
+        for (const [key, val] of Object.entries(data)) {
+          if (val === null || val === undefined) continue;
+          if (typeof val === "string") {
+            fields[key] = { stringValue: val };
+          } else if (typeof val === "number") {
+            fields[key] = { doubleValue: val };
+          } else if (typeof val === "boolean") {
+            fields[key] = { booleanValue: val };
+          } else if (typeof val === "object") {
+            fields[key] = { stringValue: JSON.stringify(val) };
+          }
+        }
+
+        if (!fields["status"]) {
+          fields["status"] = { stringValue: "Pending" };
+        }
+        if (!fields["createdAt"]) {
+          fields["createdAt"] = { timestampValue: new Date().toISOString() };
+        }
+
+        const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/${collectionName}?key=${apiKey}`;
+        
+        const firestoreRes = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fields })
+        });
+
+        if (!firestoreRes.ok) {
+          const errText = await firestoreRes.text();
+          console.error(`[Offline Sync API] Failed to push document to ${collectionName}:`, errText);
+        } else {
+          syncCount++;
+          console.log(`[Offline Sync API] Successfully pushed offline complaint for ${comp.guestName || "Guest"} to ${collectionName}.`);
+
+          // Deliver Standard Notifications mirroring handleLodgeComplaint in App.tsx
+          try {
+            const messageText = `*🚨 [OFFLINE SYCURED COMPLAINT]*\n` +
+                                `*Property:* ${targetPropertyId.toUpperCase()}\n` +
+                                `*Guest:* ${comp.guestName || "Anonymous"}\n` +
+                                `*Room/Location:* ${comp.roomNumber || "N/A"}\n` +
+                                `*Type:* ${comp.type || "Service Issue"}\n` +
+                                `*Priority:* ${comp.priority || "Medium"}\n` +
+                                `*Reporter:* ${comp.reporterName || "Not Specified"}\n` +
+                                `*Desc:* "${comp.description || "No description provided."}"`;
+            await sendToUserGoogleChat(messageText);
+          } catch (notiErr) {
+            console.error("[Offline Sync API] Notification mirror failed:", notiErr);
+          }
+        }
+      }
+
+      res.json({ success: true, count: syncCount });
+    } catch (err: any) {
+      console.error("[Offline Sync API Error]", err);
+      res.status(500).json({ success: false, error: err.message || "Failed to sync offline complaints" });
+    }
+  });
 
   // Recovery Team Notification Endpoint
   app.post("/api/notify-recovery", async (req, res) => {
-    const { complaint, sender } = req.body;
+    const { complaint, sender, companyId } = req.body;
     
     console.log(`[Notification] New Complaint Lodged: ${complaint.guestName} (Room ${complaint.roomNumber})`);
     
-    // Simulate/Perform Email Sending
     try {
+      // 1. Email Notification
       const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST || "smtp.example.com",
         port: Number(process.env.SMTP_PORT) || 587,
@@ -38,12 +428,16 @@ async function startServer() {
             <p style="text-transform: uppercase; font-size: 10px; letter-spacing: 2px; color: #C5A059; font-weight: bold;">New Case Notification</p>
             
             <table style="width: 100%; margin: 30px 0; border-collapse: collapse;">
+               <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Property:</strong></td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${companyId?.toUpperCase() || 'CML'}</td>
+              </tr>
               <tr>
                 <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Guest Name:</strong></td>
                 <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${complaint.guestName}</td>
               </tr>
               <tr>
-                <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Room Number:</strong></td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Room Number / Venue:</strong></td>
                 <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${complaint.roomNumber}</td>
               </tr>
               <tr>
@@ -52,15 +446,31 @@ async function startServer() {
               </tr>
               <tr>
                 <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Priority:</strong></td>
-                <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><span style="color: red;">${complaint.priority}</span></td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><span style="color: red; font-weight: bold;">${complaint.priority}</span></td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Reporter Name:</strong></td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${complaint.reporterName || 'Not specified'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Reporter Role / Position / Status:</strong></td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${complaint.reporterRole || 'Not specified'}</td>
               </tr>
             </table>
             
             <p style="font-style: italic; color: #666; margin: 30px 0;">"${complaint.description}"</p>
             
+            ${complaint.photoBase64 ? `
+            <div style="margin: 20px 0; border: 1px solid #eee; padding: 10px; background: #fff; text-align: center;">
+              <p style="text-transform: uppercase; font-size: 8px; letter-spacing: 1px; color: #999; margin: 0 0 10px 0;">Attached Complaint Photo Evidence</p>
+              <img src="${complaint.photoBase64}" style="max-width: 100%; max-height: 250px; object-fit: contain;" alt="Evidence" />
+            </div>
+            ` : ''}
+
             <div style="background: #f8f9fa; padding: 20px; border-left: 4px solid #C5A059;">
-              <p style="margin: 0; font-size: 11px;">Lodged By: <strong>${sender.name}</strong></p>
-              <p style="margin: 5px 0 0; font-size: 11px;">Identity: ${sender.email}</p>
+              <p style="margin: 0; font-size: 11px;">Form Filled By: <strong>${complaint.reporterName || sender.name}</strong></p>
+              <p style="margin: 5px 0 0; font-size: 11px;">Department/Status: ${complaint.reporterRole || 'Staff'}</p>
+              <p style="margin: 5px 0 0; font-size: 11px;">Account: ${sender.email}</p>
             </div>
             
             <div style="margin-top: 40px; text-align: center;">
@@ -72,9 +482,43 @@ async function startServer() {
 
       if (process.env.SMTP_USER && process.env.SMTP_PASS) {
         await transporter.sendMail(mailOptions);
-        console.log("[SMTP] Notification sent successfully");
-      } else {
-        console.log("[SMTP] SMTP credentials missing. Notification simulated in logs.");
+      }
+
+      // 2. Google Chat Webhook (Copy any property updates to appropriate Webhook under new instructions)
+      {
+        let webhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=EBaBKpUjGgV-CxI8RiHbjzJL9uOCypvP1cr26XfO2AU";
+        if (companyId === "wyndham") {
+          webhookUrl = "https://chat.googleapis.com/v1/spaces/AAQAOj5WBis/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=5wfkQvH_r-eafOCkJDFNsYFvdJ_6fhgNjCutyDVrwuk";
+        }
+        const labelPropertyName = companyId === "ramada" ? "Ramada Suites" : (companyId === "wyndham" ? "Wyndham Garden" : "CML Asset");
+        
+        let messageText = `🚨 *New Guest Recovery Case Registered (${labelPropertyName})*\n\n` +
+                          `*Guest:* ${complaint.guestName}\n` +
+                          `*Room / Venue:* ${complaint.roomNumber}\n` +
+                          `*Priority:* ${complaint.priority}\n` +
+                          `*Type:* ${complaint.type}\n` +
+                          `*Description:* "${complaint.description}"\n\n` +
+                          `*Reported By:* ${complaint.reporterName || sender.name}\n` +
+                          `*Department / Relation:* ${complaint.reporterRole || "Staff"}\n`;
+
+        if (complaint.photoBase64) {
+          messageText += `🖼️ *Attached Photo Evidence:* Yes (Photo saved in official database registry)\n`;
+        } else {
+          messageText += `🖼️ *Attached Photo Evidence:* No\n`;
+        }
+
+        messageText += `\n*Portal Link:* https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app`;
+
+        const message = { text: messageText };
+
+        await fetch(webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json; charset=UTF-8" },
+          body: JSON.stringify(message)
+        }).catch(err => console.error("Complaints webhook failed:", err));
+
+        // Copy complaint directly to user's Google Chat space
+        await sendToUserGoogleChat(messageText);
       }
 
       res.status(200).json({ success: true, message: "Recovery team notified" });
@@ -84,7 +528,864 @@ async function startServer() {
     }
   });
 
-  // Mock API for Dashboard KPIs (existing)
+  // Case Notification Endpoint for graphicsmedia@cml.com.fj and digitalmedia@cml.com.fj
+  app.post("/api/cases/notify", async (req, res) => {
+    const { caseItem, submitterEmail } = req.body;
+    
+    console.log(`[Notification] New Case Lodged: ${caseItem.caseNumber} - ${caseItem.serviceArea}`);
+    
+    // Respond immediately to prevent client timeouts (Load failed in headless test browsers)
+    res.status(200).json({ success: true, message: "Cases request received and processing in background" });
+
+    // Handle notifications asynchronously in background
+    (async () => {
+      try {
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST || "smtp.example.com",
+          port: Number(process.env.SMTP_PORT) || 587,
+          secure: false,
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS,
+          },
+        });
+
+        // Recipient list
+        let recipients = "graphicsmedia@cml.com.fj, digitalmedia@cml.com.fj";
+        if (submitterEmail && !recipients.includes(submitterEmail)) {
+          recipients += `, ${submitterEmail}`;
+        }
+
+        const mailOptions = {
+          from: '"CML Cases Portal" <noreply@cml.com.fj>',
+          to: recipients,
+          subject: `[NEW CASE SUBMISSION] #${caseItem.caseNumber} - ${caseItem.serviceArea}`,
+          html: `
+            <div style="font-family: serif; color: #333; max-width: 600px; border: 1px solid #C5A059; padding: 40px; background-color: #ffffff;">
+              <h1 style="color: #000; font-style: italic; border-bottom: 2px solid #C5A059; padding-bottom: 20px;">CML Case Management Notification</h1>
+              <p style="text-transform: uppercase; font-size: 10px; letter-spacing: 2px; color: #C5A059; font-weight: bold; margin-bottom: 20px;">New Case Submission Detailed Below</p>
+              
+              <table style="width: 100%; margin: 30px 0; border-collapse: collapse;">
+                 <tr>
+                  <td style="padding: 10px 0; border-bottom: 1px solid #eee; width: 35%;"><strong>Case Number:</strong></td>
+                  <td style="padding: 10px 0; border-bottom: 1px solid #eee;">#${caseItem.caseNumber}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Date Opened:</strong></td>
+                  <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${caseItem.dateOpened}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Service Area:</strong></td>
+                  <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${caseItem.serviceArea}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Request Type:</strong></td>
+                  <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${caseItem.requestType}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Request Details:</strong></td>
+                  <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${caseItem.requestDetails}</td>
+                </tr>
+              </table>
+              
+              <div style="background: #fdfaf4; padding: 25px; border-left: 4px solid #C5A059; margin-top: 30px; margin-bottom: 40px;">
+                <p style="margin: 0; font-size: 12px; color: #333; line-height: 1.6;"><strong>Case Description / Logs:</strong></p>
+                <p style="margin: 10px 0 0; font-style: italic; color: #555; line-height: 1.6;">"${caseItem.description || 'No additional details.'}"</p>
+              </div>
+              
+              <div style="background: #f8f9fa; padding: 20px; border-left: 4px solid #bbb; margin-top: 30px;">
+                <p style="margin: 0; font-size: 11px; color: #666;">This notification has been sent automatically upon user submission in the case management portal.</p>
+              </div>
+              
+              <div style="margin-top: 40px; text-align: center;">
+                <a href="https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app" style="display: inline-block; background: #000; color: #fff; text-decoration: none; padding: 15px 35px; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; font-weight: bold;">Open Case Portal</a>
+              </div>
+            </div>
+          `
+        };
+
+        if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+          await transporter.sendMail(mailOptions);
+          console.log(`[SMTP] Cases notification sent to ${recipients} successfully`);
+        } else {
+          console.log("[SMTP] SMTP credentials missing. Logged Cases notification to console (Simulation):", mailOptions.subject);
+        }
+
+        // Sync the "My Request" case submission directly to user's personalized Google Chat space
+        try {
+          const caseGchatMsg = `📥 *New Case / Request Submitted (My Request Portal)*\n\n` +
+                               `*Case Number:* #${caseItem.caseNumber}\n` +
+                               `*Service Area:* ${caseItem.serviceArea}\n` +
+                               `*Request Type:* ${caseItem.requestType}\n` +
+                               `*Request Details:* ${caseItem.requestDetails}\n` +
+                               `*Submitter:* ${submitterEmail || "Staff Member"}\n` +
+                               `*Date Opened:* ${caseItem.dateOpened}\n` +
+                               `*Description:* "${caseItem.description || "No additional description."}"\n\n` +
+                               `*Portal Link:* https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app`;
+          await sendToUserGoogleChat(caseGchatMsg);
+        } catch (err: any) {
+          console.error("Failed to notify user via Google Chat case webhook:", err.message || err);
+        }
+      } catch (error) {
+        console.error("[SMTP Error on Case Notification]", error);
+      }
+    })();
+  });
+
+  // Lost & Found Notification Endpoint
+  app.post("/api/notify-found-item", async (req, res) => {
+    const { item, sender } = req.body;
+    
+    console.log(`[Notification] New Found Item Logged: ${item.itemName} at ${item.locationFound}`);
+    
+    try {
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || "smtp.example.com",
+        port: Number(process.env.SMTP_PORT) || 587,
+        secure: false,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      });
+
+      // Recipient list as requested
+      const recipients = "digitalmedia@cml.com.fj, rohit@cml.com.fj, graphics@cml.com.fj";
+      
+      const mailOptions = {
+        from: '"CML Community Gateway" <noreply@cml.com.fj>',
+        to: recipients,
+        subject: `[LOST & FOUND] New Item Found: ${item.itemName}`,
+        html: `
+          <div style="font-family: serif; color: #333; max-width: 600px; border: 1px solid #1a1a1a; padding: 40px; background: #fff;">
+            <h1 style="color: #000; font-style: italic; border-bottom: 2px solid #C5A059; padding-bottom: 20px; text-align: center;">Lost & Found Registry</h1>
+            <p style="text-transform: uppercase; font-size: 10px; letter-spacing: 2px; color: #C5A059; font-weight: bold; text-align: center;">New Entry Notification</p>
+            
+            <div style="margin: 30px 0; padding: 20px; border: 1px solid #f0f0f0;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #eee;"><strong>Item Name:</strong></td>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #eee;">${item.itemName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #eee;"><strong>Location Found:</strong></td>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #eee;">${item.locationFound}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #eee;"><strong>Reporting Staff:</strong></td>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #eee;">${item.staffName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #eee;"><strong>Department:</strong></td>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #eee;">${item.staffPosition || 'N/A'}</td>
+                </tr>
+              </table>
+            </div>
+            
+            <div style="margin: 30px 0;">
+              <p style="text-transform: uppercase; font-size: 9px; letter-spacing: 1px; color: #999; font-weight: bold; margin-bottom: 10px;">Item Description</p>
+              <p style="font-style: italic; color: #444; line-height: 1.6; margin: 0;">"${item.description}"</p>
+            </div>
+
+            ${item.imageUrls && item.imageUrls.length > 0 ? `
+              <div style="margin: 30px 0; text-align: center;">
+                <p style="text-transform: uppercase; font-size: 9px; letter-spacing: 1px; color: #999; font-weight: bold; margin-bottom: 15px;">Secured Evidence</p>
+                <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;">
+                  ${item.imageUrls.map((url: string) => `
+                    <img src="${url}" alt="Item Photo" style="width: 120px; height: 120px; object-fit: cover; border: 1px solid #ddd;" />
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
+            
+            <div style="background: #fdfaf4; padding: 25px; border-left: 4px solid #C5A059; margin-top: 40px;">
+              <p style="margin: 0; font-size: 11px; color: #666;">This item has been secured and logged into the property management system. Reference the portal for claim status updates.</p>
+            </div>
+            
+            <div style="margin-top: 40px; text-align: center;">
+              <a href="https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app" style="display: inline-block; background: #000; color: #fff; text-decoration: none; padding: 15px 35px; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; font-weight: bold;">View Registry</a>
+            </div>
+          </div>
+        `
+      };
+
+      if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+        await transporter.sendMail(mailOptions);
+        console.log("[SMTP] Lost & Found notification sent successfully");
+      } else {
+        console.log("[SMTP] SMTP credentials missing. Notification simulated in logs.");
+      }
+
+      res.status(200).json({ success: true, message: "Lost & Found team notified" });
+    } catch (error) {
+      console.error("[SMTP Error]", error);
+      res.status(500).json({ success: false, message: "Notification failed but item registered" });
+    }
+  });
+
+  // Google Chat Webhook Notification Endpoint
+  app.post("/api/webhook-notify", async (req, res) => {
+    const { item, sender, companyId, type = "found" } = req.body;
+    
+    // Choose webhook based on companyId
+    let webhookUrl = process.env.GOOGLE_CHAT_WEBHOOK_URL;
+    let propertyName = "CML Community";
+
+    if (companyId === "ramada") {
+      webhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=EBaBKpUjGgV-CxI8RiHbjzJL9uOCypvP1cr26XfO2AU";
+      propertyName = "Ramada Suites";
+    } else if (companyId === "wyndham") {
+      webhookUrl = "https://chat.googleapis.com/v1/spaces/AAQAOj5WBis/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=5wfkQvH_r-eafOCkJDFNsYFvdJ_6fhgNjCutyDVrwuk";
+      propertyName = "Wyndham Garden";
+    }
+
+    // Default fallback if no specific webhook
+    if (!webhookUrl) {
+      webhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=EBaBKpUjGgV-CxI8RiHbjzJL9uOCypvP1cr26XfO2AU";
+    }
+
+    try {
+      let messageText = "";
+      
+      if (type === "found") {
+        messageText = `📦 *New Found Item Registered (${propertyName})*\n\n` +
+                      `*Item:* ${item.itemName}\n` +
+                      `*Location Found:* ${item.locationFound}\n` +
+                      `*Reported By:* ${item.staffName} (${item.staffPosition || 'Staff'})\n` +
+                      `*Description:* ${item.description}\n` +
+                      `*Portal Link:* https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app`;
+      } else if (type === "secured") {
+        const receivedBy = item.receivedDetails?.receivedBy || "Staff";
+        const storageLoc = item.receivedDetails?.storageLocation || "Office Storage";
+        const department = item.receivedDetails?.department || "Front Office";
+        
+        messageText = `🔐 *Found Item Secured in Office (${propertyName})*\n\n` +
+                      `*Item:* ${item.itemName}\n` +
+                      `*Physical Storage Location:* ${storageLoc}\n` +
+                      `*Key Number/Ref:* ${item.receivedDetails?.storageKeyNumber || 'N/A'}\n` +
+                      `*Received By:* ${receivedBy} (${department})\n` +
+                      `*Notes:* ${item.receivedDetails?.notes || 'None'}\n` +
+                      `*Portal Link:* https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app`;
+      } else if (type === "claimed") {
+        const guestName = item.dispatchDetails?.guestName || "Guest";
+        const dispatchedBy = item.dispatchDetails?.dispatchedBy || "Staff";
+        
+        messageText = `✅ *Lost Item Claimed / Dispatched (${propertyName})*\n\n` +
+                      `*Item:* ${item.itemName}\n` +
+                      `*Released To:* ${guestName}\n` +
+                      `*Dispatched By:* ${dispatchedBy}\n` +
+                      `*Date:* ${item.dispatchDetails?.releaseDate || 'Today'}\n` +
+                      `*Description:* ${item.description}\n` +
+                      `*Portal Link:* https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app`;
+      } else if (type === "disposed") {
+        const disposedBy = item.disposalDetails?.disposedBy || "Staff";
+        const witnessName = item.disposalDetails?.witnessName || "None";
+        const reason = item.disposalDetails?.reason || "Expired retention period";
+        
+        messageText = `🗑️ *Lost Item Disposed (${propertyName})*\n\n` +
+                      `*Item:* ${item.itemName}\n` +
+                      `*Disposed By:* ${disposedBy}\n` +
+                      `*Witnessed By:* ${witnessName}\n` +
+                      `*Reason:* ${reason}\n` +
+                      `*Date:* ${item.disposalDetails?.date || 'Today'}\n` +
+                      `*Portal Link:* https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app`;
+      } else if (type === "comment") {
+        const commentAuthor = item.commentDetails?.authorName || "Staff";
+        const commentContent = item.commentDetails?.content || "";
+        const photoAttachment = item.commentDetails?.photoUrl ? `\n🖼️ *Attached Photo Evidence:* Yes (Base64 file synced in Registry)` : "";
+        
+        messageText = `💬 *New Staff Conversation/Message Added (${propertyName})*\n\n` +
+                      `*Item:* ${item.itemName}\n` +
+                      `*Description:* ${item.description}\n` +
+                      `*Author:* ${commentAuthor}\n` +
+                      `*Message:* "${commentContent}"${photoAttachment}\n` +
+                      `*Portal Link:* https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app`;
+      }
+
+      const message = { text: messageText };
+
+      // Send to primary space Webhook
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json; charset=UTF-8" },
+        body: JSON.stringify(message)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Primary Google Chat Webhook returned status ${response.status}`);
+      }
+
+      // Enforce duplicate copying to Ramada Suites Webhook as requested
+      const ramadaWebhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=EBaBKpUjGgV-CxI8RiHbjzJL9uOCypvP1cr26XfO2AU";
+      if (webhookUrl !== ramadaWebhookUrl) {
+        console.log("[Webhook] Copying/mirroring duplicate notification to Ramada Suites space...");
+        await fetch(ramadaWebhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json; charset=UTF-8" },
+          body: JSON.stringify(message)
+        }).catch(err => console.error("Mirror copy to Ramada webhook failed:", err));
+      }
+
+      // Direct mirror to user's personalized Google Chat webhook space
+      await sendToUserGoogleChat(messageText);
+
+      console.log("[Webhook] Google Chat notification(s) synced and sent successfully");
+      res.status(200).json({ success: true });
+    } catch (error) {
+      console.error("[Webhook Error]", error);
+      res.status(500).json({ success: false, error: "Webhook failed" });
+    }
+  });
+
+  // Complaint/Incident Update Webhook Notification Endpoint
+  app.post("/api/notify-complaint-update", async (req, res) => {
+    const { complaint, action, authorName, updateMessage, companyId, department, resolvedBy } = req.body;
+    
+    let webhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=EBaBKpUjGgV-CxI8RiHbjzJL9uOCypvP1cr26XfO2AU";
+    if (companyId === "wyndham") {
+      webhookUrl = "https://chat.googleapis.com/v1/spaces/AAQAOj5WBis/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=5wfkQvH_r-eafOCkJDFNsYFvdJ_6fhgNjCutyDVrwuk";
+    }
+    let propertyName = "CML Portfolio";
+
+    if (companyId === "ramada") {
+      propertyName = "Ramada Suites";
+    } else if (companyId === "wyndham") {
+      propertyName = "Wyndham Garden";
+    } else if (companyId === "cml") {
+      propertyName = "CML Asset";
+    }
+
+    try {
+      let messageText = "";
+
+      if (action === "update") {
+        messageText = `💬 *New Staff Update Added (${propertyName})*\n\n` +
+                      `*Guest Name:* ${complaint.guestName}\n` +
+                      `*Room Number:* ${complaint.roomNumber || 'N/A'}\n` +
+                      `*Issue Type:* ${complaint.type}\n` +
+                      `*Priority:* ${complaint.priority}\n` +
+                      `*Update Message:* ${updateMessage}\n` +
+                      `*Updated By:* ${authorName}\n` +
+                      `*Current Status:* ${complaint.status || 'Pending'}\n` +
+                      `*Portal Link:* https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app`;
+      } else if (action === "resolve") {
+        messageText = `✅ *Incident Log Officially Resolved (${propertyName})*\n\n` +
+                      `*Guest Name:* ${complaint.guestName}\n` +
+                      `*Room Number:* ${complaint.roomNumber || 'N/A'}\n` +
+                      `*Issue Type:* ${complaint.type}\n` +
+                      `*Priority:* ${complaint.priority}\n` +
+                      `*Resolved By:* ${resolvedBy || authorName}\n` +
+                      `*Resolving Department:* ${department || 'General'}\n` +
+                      `*Status:* Resolved\n` +
+                      `*Portal Link:* https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app`;
+      } else if (action === "hod_approve") {
+        messageText = `👥 *Step 1: Department Head (HOD) Cleared (${propertyName})*\n\n` +
+                      `*Guest Name:* ${complaint.guestName}\n` +
+                      `*Room Number:* ${complaint.roomNumber || 'N/A'}\n` +
+                      `*Issue Type:* ${complaint.type}\n` +
+                      `*Priority:* ${complaint.priority}\n` +
+                      `*HOD Approved By:* ${authorName}\n` +
+                      `*Current Status:* HOD Approved (Awaiting SuperAdmin Verification)\n` +
+                      `*Portal Link:* https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app`;
+      } else if (action === "superadmin_approve") {
+        messageText = `👑 *Step 2: SuperAdmin Verification Granted (${propertyName})*\n\n` +
+                      `*Guest Name:* ${complaint.guestName}\n` +
+                      `*Room Number:* ${complaint.roomNumber || 'N/A'}\n` +
+                      `*Issue Type:* ${complaint.type}\n` +
+                      `*Priority:* ${complaint.priority}\n` +
+                      `*SuperAdmin Approved By:* ${authorName}\n` +
+                      `*Status:* Fully Approved & Resolved\n` +
+                      `*Department:* ${department || 'Administration'}\n` +
+                      `*Portal Link:* https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app`;
+      }
+
+      const message = { text: messageText };
+
+      // Dispatch Webhook to Google Chat Room
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json; charset=UTF-8" },
+        body: JSON.stringify(message)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Google Chat API returned ${response.status}`);
+      }
+
+      // Copy update directly to user's Google Chat space
+      await sendToUserGoogleChat(messageText);
+
+      // 1. Send Email Notification to SuperAdmins automatically
+      try {
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST || "smtp.example.com",
+          port: Number(process.env.SMTP_PORT) || 587,
+          secure: false,
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS,
+          },
+        });
+
+        const mailSubject = `[COMPLAINT ${action.toUpperCase()}] ${complaint.priority} - Guest ${complaint.guestName}`;
+        const mailHtml = `
+          <div style="font-family: serif; color: #333; max-width: 600px; border: 1px solid #C5A059; padding: 40px;">
+            <h1 style="color: #000; font-style: italic; border-bottom: 2px solid #C5A059; padding-bottom: 20px;">Guest Recovery Registry</h1>
+            <p style="text-transform: uppercase; font-size: 10px; letter-spacing: 2px; color: #C5A059; font-weight: bold;">Multi-Step Workflow Update</p>
+            
+            <table style="width: 100%; margin: 30px 0; border-collapse: collapse;">
+               <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Property:</strong></td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${propertyName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Guest Name:</strong></td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${complaint.guestName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Room:</strong></td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${complaint.roomNumber || 'N/A'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Actioned By:</strong></td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${authorName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Operation:</strong></td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${action.replace("_", " ").toUpperCase()}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Workflow Status:</strong></td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #eee;">
+                  <span style="color: ${action === "superadmin_approve" ? "green" : "orange"}; font-weight: bold;">
+                    ${action === "superadmin_approve" ? "Fully Approved & Resolved" : 
+                      action === "hod_approve" ? "HOD Cleared & Awaiting SuperAdmin" : "Updated / Resolved"}
+                  </span>
+                </td>
+              </tr>
+            </table>
+            
+            <p style="font-style: italic; color: #666; margin: 30px 0;">"${complaint.description}"</p>
+            
+            <div style="background-color: #f9f9f9; padding: 20px; border-left: 4px solid #C5A059;">
+              <p style="margin: 0; font-size: 11px;">Form Actioned By: <strong>${authorName}</strong></p>
+              <p style="margin: 5px 0 0; font-size: 11px;">Update Message: ${updateMessage || 'Status updated inside multi-step guest recovery workflow'}</p>
+            </div>
+            
+            <p style="margin: 30px 0 0; font-size: 12px; font-weight: bold;">
+              <a href="https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app" style="color: #C5A059; text-decoration: none;">View On Guest Recovery Console →</a>
+            </p>
+          </div>
+        `;
+
+        const superAdminEmails = "digitalmedia@cml.com.fj, cml@wyndhamgardenwailoaloafiji.com, rohit@cml.com.fj, graphics@cml.com.fj, reservations@ramadawailoaloafiji.com";
+
+        await transporter.sendMail({
+          from: '"CML Community Gateway" <noreply@cml.com.fj>',
+          to: superAdminEmails,
+          subject: mailSubject,
+          html: mailHtml,
+        });
+        console.log(`[SMTP Mail] Automated notification sent to all relevant SuperAdmin users`);
+      } catch (mailErr) {
+        console.warn("[SMTP Mail] Failed to dispatch automated email notifications, proceeding with normal lifecycle:", mailErr);
+      }
+
+      console.log(`[Webhook] Complaint ${action} notification sent successfully`);
+      res.status(200).json({ success: true });
+    } catch (error) {
+      console.error("[Webhook Error]", error);
+      res.status(500).json({ success: false, error: "Webhook failed" });
+    }
+  });
+
+  // HRMS Login & Access Request Webhook Endpoint
+  app.post("/api/hrms/notify-login-request", async (req, res) => {
+    const { reqItem } = req.body;
+    if (!reqItem) {
+      return res.status(400).json({ success: false, error: "Missing reqItem payload" });
+    }
+
+    const {
+      requestType = "System Access Requisition",
+      status = "Pending",
+      date = new Date().toLocaleString(),
+      requestorName = "Staff Member",
+      departmentRole = "General",
+      platformNeeded = "CML PMS",
+      accessLevel = "User",
+      businessJustification = "General Access Required",
+      temporaryPasswordIssued = "No",
+      twoFactorEnabled = "No",
+      approvedBy = "Not Approved yet",
+      approvalDate = "N/A"
+    } = reqItem;
+
+    const webhookUrl = "https://chat.googleapis.com/v1/spaces/AAQAdLhqDd0/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=RSHYYr6Q9xRK--qeCHgJYQnmLixZblNHXFlEqimHzGE";
+
+    const statusEmoji = status === "Approved" ? "✅" : (status === "Rejected" ? "❌" : "🔴");
+
+    const messageText = `🔐 *CML HRMS: Logins Information / Request & Approval*\n\n` +
+                        `*Type:* ${requestType}\n` +
+                        `*Status:* ${statusEmoji} ${status}\n\n` +
+                        `*Request Details:*\n` +
+                        `• *Date/Time:* ${date}\n` +
+                        `• *Requestor Name:* ${requestorName}\n` +
+                        `• *Department/Role:* ${departmentRole}\n` +
+                        `• *Platform/System Needed:* ${platformNeeded}\n` +
+                        `• *Access Level Requested:* ${accessLevel}\n\n` +
+                        `*Business Justification:*\n` +
+                        `"${businessJustification}"\n\n` +
+                        `*Security & Compliance:*\n` +
+                        `• *Temporary Password Issued:* ${temporaryPasswordIssued}\n` +
+                        `• *Two-Factor Authentication (2FA) Enabled:* ${twoFactorEnabled}\n\n` +
+                        `*Approvals:*\n` +
+                        `• *Department Head (HOD) Approval:* ${status === "Approved" ? `Approved by ${approvedBy} on ${approvalDate}` : (status === "Rejected" ? `Rejected by ${approvedBy} on ${approvalDate}` : "Pending Department Head Approval")}\n\n` +
+                        `*Portal Link:* https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app`;
+
+    // Dispatch webhook calls asynchronously without blocking the client's HTTP response!
+    Promise.resolve().then(async () => {
+      try {
+        await safePostToWebhook(webhookUrl, { text: messageText });
+      } catch (err) {
+        console.error("Async login request webhook dispatch failure:", err);
+      }
+    });
+
+    res.json({ success: true, status: "queued" });
+  });
+
+  // HRMS Employee Clock-In / Clock-Out (Auto-Login/Logout) Event Webhook Endpoint
+  app.post("/api/hrms/notify-clock-event", async (req, res) => {
+    const { employeeName, employeeCode, department, managerName, actionType, purpose, dateTime, email, phone } = req.body;
+    if (!employeeName || !employeeCode) {
+      return res.status(400).json({ success: false, error: "Missing required employee details for clock event notification" });
+    }
+
+    const webhookUrl = "https://chat.googleapis.com/v1/spaces/AAQAdLhqDd0/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=RSHYYr6Q9xRK--qeCHgJYQnmLixZblNHXFlEqimHzGE";
+
+    let indicator = "";
+    let detailHeader = "";
+    if (actionType === "Clock-In") {
+      indicator = "🟢 CLOCK-IN / LOGIN";
+      detailHeader = "Daily Shift Purpose / Business Custody:";
+    } else if (actionType === "Clock-Out") {
+      indicator = "🔴 CLOCK-OUT / LOGOUT";
+      detailHeader = "Shift Handover Notes / Logout Purpose:";
+    } else if (actionType === "Layoff Request") {
+      indicator = "⚠️ EARLY LAYOFF APPLICATION";
+      detailHeader = "Reason for Early Layoff/Exit Request:";
+    } else if (actionType === "Movement Pass" || actionType === "Movement Approve") {
+      indicator = "✈️ GOING SOMEWHERE / DUTY APPROVAL";
+      detailHeader = "Destination & Purpose/Cover Plan:";
+    } else {
+      indicator = `📢 ${String(actionType).toUpperCase()}`;
+      detailHeader = "Details / Description:";
+    }
+
+    const messageText = `🔔 *CML HRMS: Employee ${actionType} Alert*\n\n` +
+                        `*Employee:* ${employeeName} (Code: ${employeeCode})\n` +
+                        `*Department:* ${department} (HOD/Manager: ${managerName || "Charles Cebujano"})\n` +
+                        `*Action:* ${indicator}\n` +
+                        `*Date/Time:* ${dateTime}\n\n` +
+                        `*${detailHeader}*\n` +
+                        `"${purpose || "Standard Daily Portal Access"}"\n\n` +
+                        `*Contact Info:*\n` +
+                        `• Email: ${email || "N/A"}\n` +
+                        `• Phone: ${phone || "N/A"}\n\n` +
+                        `*Portal Link:* https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app`;
+
+    // Dispatch webhook calls asynchronously without blocking the client's HTTP response!
+    Promise.resolve().then(async () => {
+      try {
+        await safePostToWebhook(webhookUrl, { text: messageText });
+        await sendToUserGoogleChat(messageText);
+      } catch (err) {
+        console.error("Async clock event webhook dispatch failure:", err);
+      }
+    });
+
+    res.json({ success: true, status: "queued" });
+  });
+
+  // KPI API
+  // Central Server-Backed Mock Datastore with high-fidelity REST API synchronization to share records perfectly across standard multi-container environments.
+  // This bypasses Cloud Run GCP IAM permissions restrictions by making clean client-authenticated REST requests.
+  const mockDbFilePath = path.join(process.cwd(), "mock_db_store.json");
+  let serverMockDbStore: Record<string, any> = {};
+
+  class FirestoreRestSync {
+    private projectId: string;
+    private databaseId: string;
+    private configDatabaseId: string | null = null;
+    private apiKey: string;
+
+    constructor(config: any) {
+      this.projectId = config.projectId;
+      this.configDatabaseId = config.firestoreDatabaseId || null;
+      this.apiKey = config.apiKey;
+      this.databaseId = this.configDatabaseId || "(default)";
+    }
+
+    public getDatabaseId(): string {
+      return this.databaseId;
+    }
+
+    private getCandidateDatabaseIds(): string[] {
+      const candidates: string[] = [];
+      if (this.configDatabaseId) {
+        candidates.push(this.configDatabaseId);
+      }
+      try {
+        const fbJsonPath = path.join(process.cwd(), "firebase.json");
+        if (fs.existsSync(fbJsonPath)) {
+          const fbJson = JSON.parse(fs.readFileSync(fbJsonPath, "utf8"));
+          if (fbJson && Array.isArray(fbJson.firestore)) {
+            for (const item of fbJson.firestore) {
+              if (item.database && !candidates.includes(item.database)) {
+                candidates.push(item.database);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("[MOCK_DB] Failed to read firebase.json for database candidates:", e);
+      }
+      if (!candidates.includes("(default)")) {
+        candidates.push("(default)");
+      }
+      if (!candidates.includes("default")) {
+        candidates.push("default");
+      }
+      return candidates;
+    }
+
+    private getUrl(docId?: string, forceDbId?: string) {
+      const dbId = forceDbId || this.databaseId;
+      const base = `https://firestore.googleapis.com/v1/projects/${this.projectId}/databases/${dbId}/documents/hybrid_sandbox`;
+      return docId ? `${base}/${docId}?key=${this.apiKey}` : `${base}?key=${this.apiKey}`;
+    }
+
+    async getMaster(): Promise<Record<string, any>> {
+      const candidates = this.getCandidateDatabaseIds();
+      const sortedCandidates = [this.databaseId, ...candidates.filter(c => c !== this.databaseId)];
+
+      for (const dbId of sortedCandidates) {
+        const url = this.getUrl("master_db", dbId);
+        try {
+          const res = await fetch(url);
+          if (res.ok) {
+            console.log(`[MOCK_DB] Successfully fetched master from database '${dbId}'`);
+            this.databaseId = dbId;
+            const doc = await res.json();
+            if (doc && doc.fields && doc.fields.db_json && doc.fields.db_json.stringValue) {
+              return JSON.parse(doc.fields.db_json.stringValue);
+            }
+            return {};
+          } else if (res.status === 404) {
+            console.log(`[MOCK_DB] Master document not found (404) in database '${dbId}', assuming empty cloud database`);
+            this.databaseId = dbId;
+            return {};
+          } else {
+            console.warn(`[MOCK_DB] Fetch master failed for database '${dbId}' (${res.status})`);
+          }
+        } catch (e: any) {
+          console.warn(`[MOCK_DB] Exception fetching master for database '${dbId}':`, e.message || e);
+        }
+      }
+      return {};
+    }
+
+    private sanitizeValue(val: any): any {
+      if (typeof val === "string") {
+        if (val.startsWith("data:") && val.length > 2048) {
+          return "[Truncated large binary/base64 for Cloud Sync]";
+        }
+        return val;
+      }
+      if (Array.isArray(val)) {
+        return val.map(item => this.sanitizeValue(item));
+      }
+      if (val !== null && typeof val === "object") {
+        const cleaned: Record<string, any> = {};
+        for (const [k, v] of Object.entries(val)) {
+          cleaned[k] = this.sanitizeValue(v);
+        }
+        return cleaned;
+      }
+      return val;
+    }
+
+    async saveMaster(db: Record<string, any>): Promise<void> {
+      const candidates = this.getCandidateDatabaseIds();
+      const sortedCandidates = [this.databaseId, ...candidates.filter(c => c !== this.databaseId)];
+
+      // Filter out massive flipbooks assets and giant base64 pages to respect the 1MB Firestore document limit
+      const prunedDb: Record<string, any> = {};
+      for (const [key, value] of Object.entries(db)) {
+        if (key.startsWith("flipbooks") || key.includes("/pages/") || key.includes("page")) {
+          continue;
+        }
+        prunedDb[key] = this.sanitizeValue(value);
+      }
+      const dbString = JSON.stringify(prunedDb);
+
+      let lastErrorText = "";
+      let lastStatus = 0;
+
+      for (const dbId of sortedCandidates) {
+        const patchUrl = this.getUrl("master_db", dbId) + "&updateMask.fieldPaths=db_json";
+        const body = {
+          name: `projects/${this.projectId}/databases/${dbId}/documents/hybrid_sandbox/master_db`,
+          fields: {
+            db_json: {
+              stringValue: dbString
+            }
+          }
+        };
+
+        try {
+          const res = await fetch(patchUrl, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+          });
+
+          if (res.ok) {
+            console.log(`[MOCK_DB] Successfully saved master state to database '${dbId}'`);
+            this.databaseId = dbId;
+            return;
+          }
+
+          lastStatus = res.status;
+          lastErrorText = await res.text();
+          console.warn(`[MOCK_DB] saveMaster patch failed for database '${dbId}' with status ${res.status}: ${lastErrorText}`);
+        } catch (e: any) {
+          lastStatus = 500;
+          lastErrorText = e.message || String(e);
+          console.warn(`[MOCK_DB] Exception in saveMaster patch for database '${dbId}':`, lastErrorText);
+        }
+      }
+
+      throw new Error(`Firestore REST saveMaster failed: last candidate status ${lastStatus} ${lastErrorText}`);
+    }
+
+    // Retained for backward compatibility
+    async getAll(): Promise<Record<string, any>> {
+      return this.getMaster();
+    }
+    async set(k: string, val: any): Promise<void> {}
+    async delete(k: string): Promise<void> {}
+  }
+
+  let firestoreRestSync: FirestoreRestSync | null = null;
+
+  try {
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      if (config.projectId && config.apiKey) {
+        firestoreRestSync = new FirestoreRestSync(config);
+        console.log(`[MOCK_DB] Firestore WebSync initialized with project '${config.projectId}' database '${config.firestoreDatabaseId || "(default)"}'`);
+      }
+    }
+  } catch (e) {
+    console.warn("[MOCK_DB] Failed to initialize live cloud Firestore WebSync client:", e);
+  }
+
+  const saveMockDbToDisk = () => {
+    try {
+      fs.writeFileSync(mockDbFilePath, JSON.stringify(serverMockDbStore, null, 2), "utf8");
+    } catch (err) {
+      console.error("[MOCK_DB] Failed to write mock database to disk:", err);
+    }
+  };
+
+  // Debounce saving the database to cloud to prevent rapid continuous write blasting
+  let saveMasterTimeout: NodeJS.Timeout | null = null;
+  const saveMasterCloudDebounced = () => {
+    if (saveMasterTimeout) {
+      clearTimeout(saveMasterTimeout);
+    }
+    saveMasterTimeout = setTimeout(async () => {
+      if (firestoreRestSync) {
+        try {
+          await firestoreRestSync.saveMaster(serverMockDbStore);
+          console.log("[MOCK_DB] Successfully committed aggregated state changes to cloud master document.");
+        } catch (e: any) {
+          console.warn("[MOCK_DB] Failed to save master database State to Firestore cloud:", e.message || e);
+        }
+      }
+    }, 2500); // 2.5 second aggregation window to keep Cloud writes low
+  };
+
+  // Load initial state from disk fallback AND try to hydrate from Firestore cloud to deal with Cloud Run multiple stateless containers!
+  const hydrateStore = async () => {
+    // 1. First feed from disk file (fast local fallback)
+    try {
+      if (fs.existsSync(mockDbFilePath)) {
+        const savedData = fs.readFileSync(mockDbFilePath, "utf8");
+        serverMockDbStore = JSON.parse(savedData);
+        console.log(`[MOCK_DB] Pre-hydrated ${Object.keys(serverMockDbStore).length} keys from container disk.`);
+      }
+    } catch (e) {
+      console.warn("[MOCK_DB] Disk load warning:", e);
+    }
+
+    // 2. Then merge from central cloud Firestore using REST
+    if (firestoreRestSync) {
+      try {
+        console.log("[MOCK_DB] Hydrating database from live central Firestore cloud REST API...");
+        const cloudState = await firestoreRestSync.getMaster();
+        if (Object.keys(cloudState).length > 0) {
+          serverMockDbStore = { ...serverMockDbStore, ...cloudState };
+          console.log(`[MOCK_DB] Fully synchronized and merged ${Object.keys(cloudState).length} records from central cloud Firestore database.`);
+          saveMockDbToDisk();
+        } else {
+          console.log("[MOCK_DB] Live central database is new or empty. Keeping local pre-hydrate parameters.");
+        }
+      } catch (err) {
+        console.warn("[MOCK_DB] Cloud Firestore REST connection warning (continuing with container filesystem only):", err);
+      }
+    }
+  };
+
+  // Fire hydration shortly after start
+  setTimeout(hydrateStore, 500);
+
+  app.get("/api/mock-db", async (req, res) => {
+    // Read from backend's local cache directly (extremely fast, zero latency, zero Firestore REST quota cost)
+    res.json(serverMockDbStore);
+  });
+
+  app.post("/api/mock-db", async (req, res) => {
+    const { updates, deletedKeys } = req.body;
+    let mutated = false;
+    
+    if (updates && typeof updates === "object" && Object.keys(updates).length > 0) {
+      serverMockDbStore = { ...serverMockDbStore, ...updates };
+      mutated = true;
+    }
+    
+    if (Array.isArray(deletedKeys) && deletedKeys.length > 0) {
+      deletedKeys.forEach((k: string) => {
+        delete serverMockDbStore[k];
+      });
+      mutated = true;
+    }
+    
+    if (mutated) {
+      saveMockDbToDisk();
+      
+      // Persist aggregated updates to central Cloud database in a debounced, rate-safe way
+      if (firestoreRestSync) {
+        saveMasterCloudDebounced();
+      }
+    }
+    
+    res.json({ success: true, db: serverMockDbStore });
+  });
+
   app.get("/api/kpis", (req, res) => {
     res.json({
       summary: {
@@ -101,7 +1402,7 @@ async function startServer() {
     });
   });
 
-  // Training Module Endpoints (existing)
+  // Training courses API
   app.get("/api/training/courses", (req, res) => {
     res.json([
       { id: "c1", title: "Standard Operating Procedures: Front Desk", duration: "45m", complete: true },
@@ -110,17 +1411,204 @@ async function startServer() {
     ]);
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
+  // Cloud Usage API for Gemini/Vertex AI
+  app.get("/api/cloud/usage", (req, res) => {
+    res.json({
+      dateRange: { start: "2026-04-17", end: "2026-05-17" },
+      grouping: "principal_api_key_id",
+      services: [
+        {
+          id: "AEFD-7695-64FA",
+          name: "Gemini API",
+          requests: 45200,
+          cost: 12.50,
+          usage: [
+            { date: "2026-04-20", count: 1200 },
+            { date: "2026-04-25", count: 1500 },
+            { date: "2026-05-01", count: 2100 },
+            { date: "2026-05-05", count: 1800 },
+            { date: "2026-05-10", count: 2500 },
+            { date: "2026-05-17", count: 2900 }
+          ]
+        },
+        {
+          id: "C7E2-9256-1C43",
+          name: "Gemini Enterprise Agent Platform (Vertex AI)",
+          requests: 12400,
+          cost: 85.20,
+          usage: [
+            { date: "2026-04-20", count: 400 },
+            { date: "2026-04-25", count: 550 },
+            { date: "2026-05-01", count: 800 },
+            { date: "2026-05-05", count: 700 },
+            { date: "2026-05-10", count: 950 },
+            { date: "2026-05-17", count: 1100 }
+          ]
+        }
+      ],
+      keys: [
+        { id: "principal-cml-hq-01", name: "HQ Primary Hub", totalRequests: 32000, lastActive: "2026-05-17T14:20:00Z" },
+        { id: "principal-ramada-serv-02", name: "Ramada Services Edge", totalRequests: 18000, lastActive: "2026-05-17T12:10:00Z" },
+        { id: "principal-wyndham-dev-03", name: "Wyndham Dev Sandbox", totalRequests: 7600, lastActive: "2026-05-16T09:45:00Z" }
+      ]
     });
-    app.use(vite.middlewares);
+  });
+
+  // Email Campaigns Dispatch API
+  app.post("/api/campaigns/send", async (req, res) => {
+    const { senderName, senderEmail, recipientEmail, recipientName, subject, body, config } = req.body;
+    
+    if (!recipientEmail) {
+      return res.status(400).json({ success: false, error: "Recipient email is required" });
+    }
+
+    // 1. Simulation Check
+    if (config?.provider === "simulation") {
+      console.log(`[SIMULATION MAIL] From: "${senderName}" <${senderEmail}> To: ${recipientEmail} Subject: "${subject}"`);
+      return res.json({ success: true, mode: "simulation" });
+    }
+
+    // 2. Transporter Selection
+    try {
+      let transporter;
+      let fromAddress = `"${senderName}" <${senderEmail || "newsletter@cml.com.fj"}>`;
+
+      if (config?.provider === "sendgrid" && config.sendgridApiKey) {
+        // Use SMTP gateway of SendGrid with custom API Key
+        transporter = nodemailer.createTransport({
+          host: "smtp.sendgrid.net",
+          port: 587,
+          secure: false,
+          auth: {
+            user: "apikey",
+            pass: config.sendgridApiKey
+          }
+        });
+        fromAddress = `"${senderName}" <${config.defaultSenderEmail || senderEmail || "newsletter@cml.com.fj"}>`;
+      } else if (config?.provider === "smtp" && config.smtpHost) {
+        transporter = nodemailer.createTransport({
+          host: config.smtpHost,
+          port: Number(config.smtpPort) || 587,
+          secure: Number(config.smtpPort) === 465,
+          auth: {
+            user: config.smtpUser,
+            pass: config.smtpPass
+          }
+        });
+        fromAddress = `"${senderName}" <${config.defaultSenderEmail || senderEmail || "newsletter@cml.com.fj"}>`;
+      } else {
+        // Fall back to server's own Env configuration if any
+        if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+          transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST || "smtp.example.com",
+            port: Number(process.env.SMTP_PORT) || 587,
+            secure: false,
+            auth: {
+              user: process.env.SMTP_USER,
+              pass: process.env.SMTP_PASS,
+            },
+          });
+          fromAddress = `"${senderName}" <${process.env.SMTP_USER || senderEmail}>`;
+        } else {
+          // If no custom config entered and no system env configured, run in simulation mode gracefully
+          console.log(`[NO_CONFIG FALLBACK SIMULATION] From: ${senderName} To: ${recipientEmail}`);
+          return res.json({ success: true, mode: "simulation_fallback" });
+        }
+      }
+
+      const isHtml = body.trim().startsWith("<");
+      await transporter.sendMail({
+        from: fromAddress,
+        to: `"${recipientName || ""}" <${recipientEmail}>`,
+        subject: subject,
+        text: isHtml ? "To view this email, please use an HTML-compatible client." : body,
+        html: isHtml ? body : body.replace(/\n/g, "<br/>")
+      });
+
+      return res.json({ success: true, mode: "production" });
+
+    } catch (error: any) {
+      console.error("[CAMPAIGN_SEND_ERROR]", error);
+      return res.status(500).json({ success: false, error: error.message || "Failed to deliver email" });
+    }
+  });
+
+  // Explicit favicon and apple-touch-icon routing to avoid wildcard SPA HTML fallback
+  app.get("/favicon.ico", (req, res) => {
+    const pubFav = path.join(process.cwd(), "public/favicon.ico");
+    const distFav = path.join(process.cwd(), "dist/favicon.ico");
+    const pubIcon = path.join(process.cwd(), "public/icon.png");
+    const distIcon = path.join(process.cwd(), "dist/icon.png");
+
+    res.setHeader("Content-Type", "image/x-icon");
+    if (fs.existsSync(pubFav)) return res.sendFile(pubFav);
+    if (fs.existsSync(distFav)) return res.sendFile(distFav);
+    if (fs.existsSync(pubIcon)) return res.sendFile(pubIcon);
+    if (fs.existsSync(distIcon)) return res.sendFile(distIcon);
+    res.sendStatus(404);
+  });
+
+  app.get("/favicon.png", (req, res) => {
+    const pubFav = path.join(process.cwd(), "public/favicon.png");
+    const distFav = path.join(process.cwd(), "dist/favicon.png");
+    const pubIcon = path.join(process.cwd(), "public/icon.png");
+    const distIcon = path.join(process.cwd(), "dist/icon.png");
+
+    res.setHeader("Content-Type", "image/png");
+    if (fs.existsSync(pubFav)) return res.sendFile(pubFav);
+    if (fs.existsSync(distFav)) return res.sendFile(distFav);
+    if (fs.existsSync(pubIcon)) return res.sendFile(pubIcon);
+    if (fs.existsSync(distIcon)) return res.sendFile(distIcon);
+    res.sendStatus(404);
+  });
+
+  // Dev server vs. Production static serving
+  if (process.env.NODE_ENV !== "production") {
+    try {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } catch (e) {
+      console.warn("Vite dev server not available, using static assets");
+      const distPath = path.join(process.cwd(), "dist");
+      app.use(express.static(distPath, {
+        etag: false,
+        maxAge: 0,
+        setHeaders: (res) => {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
+        }
+      }));
+      app.get("*", (req, res) => {
+        res.set({
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        });
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      etag: false,
+      maxAge: 0,
+      setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+    }));
     app.get("*", (req, res) => {
+      res.set({
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      });
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
@@ -131,3 +1619,4 @@ async function startServer() {
 }
 
 startServer();
+

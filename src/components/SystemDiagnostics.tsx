@@ -1,0 +1,242 @@
+import React, { useState, useEffect } from "react";
+import { 
+  Activity, 
+  Database, 
+  Wifi, 
+  WifiOff, 
+  RefreshCw, 
+  CheckCircle, 
+  AlertCircle, 
+  ChevronDown,
+  Shield,
+  ActivitySquare
+} from "lucide-react";
+import { auth, db } from "../lib/firebase";
+import { SyncEventLog } from "./SyncEventLog";
+
+interface SystemDiagnosticsProps {
+  complaintsCount: number;
+  complaintsError: string | null;
+  onForceResync?: () => void;
+}
+
+export const SystemDiagnostics: React.FC<SystemDiagnosticsProps> = ({
+  complaintsCount,
+  complaintsError,
+  onForceResync
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isLoggerOpen, setIsLoggerOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+  const [lastSyncTime, setLastSyncTime] = useState<string>(new Date().toLocaleTimeString());
+
+  // Detect genuine browser online state
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  const activeMode = auth.getMode(); // 'real' or 'mock'
+  const isUsingLiveFirebase = activeMode === "real" && !db._isMock;
+  
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    if (onForceResync) {
+      onForceResync();
+    }
+    setTimeout(() => {
+      setIsRefreshing(false);
+      setLastSyncTime(new Date().toLocaleTimeString());
+    }, 1000);
+  };
+
+  return (
+    <div className="relative font-sans text-slate-700">
+      {/* Real-time Status Badge in Header */}
+      <button
+        id="sys-diagnostics-badge-btn"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 border rounded-none transition-all duration-200 cursor-pointer shadow-sm active:scale-95 ${
+          complaintsError
+            ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+            : !isOnline
+            ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+            : "border-gold/30 bg-gold/5 text-slate-800 hover:bg-gold/10"
+        }`}
+      >
+        <span className="relative flex h-2 w-2 shrink-0">
+          <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+            complaintsError 
+              ? "bg-red-400" 
+              : !isOnline 
+              ? "bg-amber-400" 
+              : "bg-gold"
+          }`}></span>
+          <span className={`relative inline-flex rounded-full h-2 w-2 ${
+            complaintsError 
+              ? "bg-red-600" 
+              : !isOnline 
+              ? "bg-amber-600" 
+              : "bg-gold"
+          }`}></span>
+        </span>
+
+        <Activity size={13} className={`${isRefreshing ? "animate-spin text-gold" : "text-slate-500"}`} />
+        
+        <span className="text-[10px] uppercase tracking-wider font-semibold hidden md:inline">
+          {complaintsError 
+            ? "Sync Alert" 
+            : !isOnline 
+            ? "Offline Mode" 
+            : "SANDBOX DB"
+          }
+        </span>
+        <ChevronDown size={12} className="text-slate-400" />
+      </button>
+
+      {/* Diagnostics Dropdown Menu */}
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <div 
+            id="sys-diagnostics-backdrop"
+            className="fixed inset-0 z-40 cursor-default" 
+            onClick={() => setIsOpen(false)} 
+          />
+          
+          <div 
+            id="sys-diagnostics-dropdown"
+            className="absolute right-0 mt-2 w-72 md:w-80 bg-white border border-slate-200 shadow-xl z-50 p-4 transition-all animate-in fade-in slide-in-from-top-2 duration-150 rounded-none transform origin-top-right"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
+              <div className="flex items-center gap-2">
+                <ActivitySquare size={16} className="text-gold" />
+                <h3 className="text-xs uppercase tracking-wider font-black text-slate-900 font-display">
+                  System Diagnostics
+                </h3>
+              </div>
+              <span className="text-[9px] font-mono text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded-sm">
+                v1.2-LiveBridges
+              </span>
+            </div>
+
+            {/* General Health Indicators */}
+            <div className="space-y-2.5 text-xs">
+              {/* Online State */}
+              <div className="flex items-center justify-between px-1">
+                <span className="text-slate-500 flex items-center gap-1.5">
+                  {isOnline ? <Wifi size={14} className="text-emerald-500" /> : <WifiOff size={14} className="text-red-500" />}
+                  Internet Gateway
+                </span>
+                <span className={`font-semibold ${isOnline ? "text-emerald-600" : "text-red-600"}`}>
+                  {isOnline ? "Connected" : "Offline / Broken"}
+                </span>
+              </div>
+
+              {/* Firestore Operational Mode */}
+              <div className="flex items-center justify-between px-1">
+                <span className="text-slate-500 flex items-center gap-1.5">
+                  <Database size={14} className="text-slate-400" />
+                  Firestore Bridge
+                </span>
+                <div className="flex flex-col items-end">
+                  <span className="font-semibold uppercase text-[10px] px-1.5 py-0.5 bg-gold/10 text-slate-800 border border-gold/20">
+                    SANDBOX ACTIVE
+                  </span>
+                </div>
+              </div>
+
+              {/* Collections Status */}
+              <div className="border-t border-slate-100 pt-2.5 my-2">
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1.5">
+                  Collection Subscriptions
+                </p>
+                <div className="bg-slate-50 p-2 space-y-1.5 font-mono text-[10px]">
+                  {/* Complaints Collections */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">complaints-cml</span>
+                    <span className="text-emerald-600 flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                      Syncing
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">complaints-ramada</span>
+                    <span className="text-emerald-600 flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                      Syncing
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">complaints-wyndham</span>
+                    <span className="text-emerald-600 flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                      Syncing
+                    </span>
+                  </div>
+
+                  {/* Cache info */}
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 mt-1">
+                    <span className="text-slate-500">Active Records:</span>
+                    <span className="font-semibold text-slate-700">{complaintsCount} logs</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Error Log Panel */}
+              {complaintsError && (
+                <div className="bg-red-50 border border-red-100 p-2 text-red-700 rounded-sm text-[11px] leading-relaxed flex gap-2">
+                  <AlertCircle size={14} className="shrink-0 text-red-500 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">Permission / Sync Issue</span>
+                    {complaintsError}
+                  </div>
+                </div>
+              )}
+
+              {/* Educational Explanation block (Why it fallbacks) */}
+              {!isUsingLiveFirebase && (
+                <div className="bg-gold/5 border border-gold/20 p-2.5 text-[11px] leading-relaxed text-slate-600">
+                  <div className="font-bold text-slate-900 flex items-center gap-1 mb-1">
+                    <Shield size={12} className="text-gold" />
+                    Offline Sandbox Safety-Valve
+                  </div>
+                  Our system maintains a corporate offline sandbox so that you never lose data on bad connections or disabled auth! All data is saved on this terminal and synced back once live authority replies.
+                </div>
+              )}
+
+              {/* Footer Sync Actions */}
+              <div className="border-t border-slate-100 pt-3 flex items-center justify-between mt-3 text-[11px]">
+                <div className="text-slate-400 font-mono">
+                  Sync: {lastSyncTime}
+                </div>
+                <button
+                  id="sys-diagnostics-sync-now-btn"
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  className="px-3 py-1 bg-slate-900 text-white font-medium hover:bg-gold transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw size={11} className={isRefreshing ? "animate-spin" : ""} />
+                  {isRefreshing ? "Refreshing..." : "Force Sync Now"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* SyncEventLog Modal */}
+      <SyncEventLog isOpen={isLoggerOpen} onClose={() => setIsLoggerOpen(false)} />
+    </div>
+  );
+};

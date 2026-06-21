@@ -9,6 +9,8 @@
         "email": { "type": "string" },
         "photoURL": { "type": "string" },
         "role": { "type": "string", "enum": ["Administrator", "Manager", "Audit", "Staff", "Viewer"] },
+        "loginCount": { "type": "integer", "description": "Total number of successful logins." },
+        "lastLogin": { "type": "string", "format": "date-time", "description": "Timestamp of the last successful login." },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["displayName", "email", "createdAt"]
@@ -56,7 +58,7 @@
     },
     "Complaint": {
       "title": "Guest Complaint",
-      "description": "A formal complaint lodged via the Guest Recovery portal.",
+      "description": "A formal complaint lodged via the Guest Complaints portal.",
       "type": "object",
       "properties": {
         "guestName": { "type": "string" },
@@ -67,9 +69,10 @@
         "status": { "type": "string", "enum": ["Pending", "In Progress", "Resolved"] },
         "authorId": { "type": "string" },
         "authorName": { "type": "string" },
+        "propertyId": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["guestName", "roomNumber", "type", "priority", "description", "status", "authorId", "authorName", "createdAt"]
+      "required": ["guestName", "roomNumber", "type", "priority", "description", "status", "authorId", "authorName", "propertyId", "createdAt"]
     },
     "LostItem": {
       "title": "Lost & Found Item",
@@ -81,9 +84,10 @@
         "locationFound": { "type": "string" },
         "staffName": { "type": "string" },
         "staffPosition": { "type": "string" },
-        "imageUrl": { "type": "string" },
+        "imageUrls": { "type": "array", "items": { "type": "string" } },
         "status": { "type": "string", "enum": ["Found", "Claimed", "Disposed"] },
         "authorId": { "type": "string" },
+        "propertyId": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
         "dispatchDetails": {
           "type": "object",
@@ -104,7 +108,95 @@
           }
         }
       },
-      "required": ["itemName", "description", "locationFound", "staffName", "status", "authorId", "createdAt"]
+      "required": ["itemName", "description", "locationFound", "staffName", "status", "authorId", "propertyId", "createdAt"]
+    },
+    "BusinessCard": {
+      "title": "Business Card",
+      "description": "Standard digital business card templates with custom contact details.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "title": { "type": "string" },
+        "department": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "website": { "type": "string" },
+        "location": { "type": "string" },
+        "companyId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "title", "email", "companyId"]
+    },
+    "HRMSUser": {
+      "title": "HRMS Registered Employee",
+      "description": "Staff member profile containing official biometrics details for automatic login validation.",
+      "type": "object",
+      "properties": {
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "dateOfBirth": { "type": "string" },
+        "employeeCode": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "department": { "type": "string" },
+        "managerName": { "type": "string" },
+        "role": { "type": "string", "enum": ["Employee", "Administrator"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["firstName", "lastName", "dateOfBirth", "employeeCode", "email", "phone", "department", "managerName", "role"]
+    },
+    "HRMSLogin": {
+      "title": "HRMS Access & Sign-In Log",
+      "description": "Clock records, sign-ins, and active workspace session authorizations.",
+      "type": "object",
+      "properties": {
+        "requestorName": { "type": "string" },
+        "employeeCode": { "type": "string" },
+        "departmentRole": { "type": "string" },
+        "requestType": { "type": "string" },
+        "platformNeeded": { "type": "string" },
+        "accessLevel": { "type": "string" },
+        "businessJustification": { "type": "string" },
+        "temporaryPasswordIssued": { "type": "string" },
+        "twoFactorEnabled": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "Approved", "Rejected", "Active", "Logged Out"] },
+        "date": { "type": "string" },
+        "approvedBy": { "type": "string" },
+        "approvalDate": { "type": "string" },
+        "logoutNotes": { "type": "string" },
+        "logoutDate": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["requestorName", "status", "date"]
+    },
+    "HRMSEscalation": {
+      "title": "HRMS Manager Escalation Request",
+      "description": "High-level escalation requests sent by Managers to Super Admins.",
+      "type": "object",
+      "properties": {
+        "managerName": { "type": "string" },
+        "department": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "priority": { "type": "string", "enum": ["Low", "Medium", "High", "Critical"] },
+        "status": { "type": "string", "enum": ["Pending", "Approved", "Rejected"] },
+        "responseNotes": { "type": "string" },
+        "date": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["managerName", "department", "title", "description", "priority", "status"]
+    },
+    "WorkflowConfig": {
+      "title": "Workflow Configuration",
+      "description": "Global settings for designated approval groups.",
+      "type": "object",
+      "properties": {
+        "approverEmails": { "type": "array", "items": { "type": "string" } },
+        "approverNames": { "type": "array", "items": { "type": "string" } },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["approverEmails", "updatedAt"]
     }
   },
   "firestore": {
@@ -124,13 +216,41 @@
       "schema": "Comment",
       "description": "Replies to specific discussion threads."
     },
-    "/complaints/{complaintId}": {
+    "/complaints-{propertyId}/{complaintId}": {
       "schema": "Complaint",
-      "description": "Guest recovery complaints lodged by staff."
+      "description": "Guest complaints lodged by staff (property specific)."
     },
-    "/lost-and-found/{itemId}": {
+    "/lost-and-found-{propertyId}/{itemId}": {
       "schema": "LostItem",
-      "description": "Lost and found items reported by property staff."
+      "description": "Lost and found items reported by property staff (property specific)."
+    },
+    "/mailer-contacts-{companyId}/{contactId}": {
+      "schema": "MailerContact",
+      "description": "Subscribed contacts or lists for staff mailers."
+    },
+    "/mailer-logs-{companyId}/{logId}": {
+      "schema": "CampaignLog",
+      "description": "Chronological history of sent campaign broadcasts."
+    },
+    "/business-cards-{companyId}/{cardId}": {
+      "schema": "BusinessCard",
+      "description": "Digital business card records for physical raw QR synchronization (property specific)."
+    },
+    "/hrms-users-{companyId}/{userId}": {
+      "schema": "HRMSUser",
+      "description": "Registered employees and credentials (property specific)."
+    },
+    "/hrms-logins-{companyId}/{loginId}": {
+      "schema": "HRMSLogin",
+      "description": "Clock logs and authorization entries (property specific)."
+    },
+    "/hrms-escalations-{companyId}/{escalationId}": {
+      "schema": "HRMSEscalation",
+      "description": "High-level escalation requests sent by Managers to Super Admins (property specific)."
+    },
+    "/workflow-configs/{configId}": {
+      "schema": "WorkflowConfig",
+      "description": "Global or company-specific workflow with designated approval groups."
     }
   }
 }
