@@ -38,6 +38,7 @@ self.addEventListener("fetch", (event) => {
   if (
     event.request.method !== "GET" ||
     event.request.url.includes("/api/") ||
+    event.request.url.includes("version_info.json") ||
     event.request.url.includes("firestore.googleapis.com") ||
     event.request.url.includes("googleapis.com") ||
     event.request.url.includes("firebase")

@@ -678,6 +678,66 @@ export default function App() {
     }
   }, []);
 
+  // Dynamic Background Auto-Updater and Cache-Buster
+  useEffect(() => {
+    let checkInterval: any;
+    let initialLoadVersion: string | null = null;
+
+    const checkVersion = async () => {
+      try {
+        const response = await fetch(`/version_info.json?cb=${Date.now()}`);
+        if (!response.ok) return;
+        const data = await response.json();
+        const currentServerVersion = data.version;
+
+        if (currentServerVersion) {
+          const storedVersion = localStorage.getItem("cml_local_build_version");
+          
+          if (!storedVersion) {
+            localStorage.setItem("cml_local_build_version", currentServerVersion);
+            initialLoadVersion = currentServerVersion;
+          } else if (storedVersion !== currentServerVersion) {
+            console.log(`[Auto-Updater] New version detected! Server: ${currentServerVersion}, Local: ${storedVersion}. Triggering force refresh...`);
+            localStorage.setItem("cml_local_build_version", currentServerVersion);
+            
+            // Show a nice modern toast alert or banner so the user knows what's happening
+            const container = document.createElement('div');
+            container.id = 'dynamic-update-banner';
+            container.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#1e293b;color:white;padding:20px;border-radius:6px;box-shadow:0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);z-index:999999;font-family:ui-sans-serif, system-ui, sans-serif;font-size:14px;border:1px solid #c5a02d;max-width:360px;transition:all 0.5s ease;';
+            container.innerHTML = `
+              <div style="font-weight:bold;margin-bottom:6px;color:#c5a02d;display:flex;items-center:center;gap:6px;text-transform:uppercase;font-size:11px;letter-spacing:0.1em;">✨ Fresh System Update Published</div>
+              <div style="font-size:12px;opacity:0.9;line-height:1.5;">Applying optimized performance layouts and syncing offline rosters on this device...</div>
+            `;
+            document.body.appendChild(container);
+            
+            setTimeout(() => {
+              triggerHardRefresh();
+            }, 3000);
+          } else {
+            initialLoadVersion = currentServerVersion;
+          }
+        }
+      } catch (err) {
+        console.warn("[Auto-Updater Warning] Failed to reach version check server:", err);
+      }
+    };
+
+    // Run immediately on app mount
+    const startupTimeout = setTimeout(() => {
+      checkVersion();
+    }, 4000);
+
+    // Then check periodically every 25 seconds for any new publishes in the background
+    checkInterval = setInterval(() => {
+      checkVersion();
+    }, 25000);
+
+    return () => {
+      clearTimeout(startupTimeout);
+      clearInterval(checkInterval);
+    };
+  }, []);
+
   const handleArchiveComplaintConfirm = async () => {
     if (!deleteComplaintTarget) return;
     try {
