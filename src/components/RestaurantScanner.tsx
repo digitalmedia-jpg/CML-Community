@@ -379,11 +379,120 @@ export const RestaurantScanner: React.FC<RestaurantScannerProps> = ({ companyId,
       setLoading(true);
       const colRef = collection(db, `restaurant-guests-${companyId}`);
       const snapshot = await getDocs(colRef);
-      const list: GuestProfile[] = snapshot.docs.map(docSnap => ({
-        id: docSnap.id,
-        ...docSnap.data()
-      } as GuestProfile));
-      setGuests(list);
+      if (snapshot.empty) {
+        console.log("[RestaurantScanner] No guest profiles in Firestore. Auto-seeding CML Rewards now...");
+        
+        const sampleProfiles = [
+          {
+            id: "CML-RE-001",
+            fullName: "Charles (VIP Member)",
+            email: "charles.viti@cml.com.fj",
+            phone: "+679 883 2910",
+            visitCount: 14,
+            rewardPoints: 6850, // Super close to 7,000 threshold so Charles can test voucher redemption
+          },
+          {
+            id: "CML-RE-002",
+            fullName: "Savenaca Radrodro",
+            email: "savenaca.r@ramada.com",
+            phone: "+679 992 1044",
+            visitCount: 5,
+            rewardPoints: 2400,
+          },
+          {
+            id: "CML-RE-003",
+            fullName: "Mereoni Nasilasila",
+            email: "mereoni.n@wyndhamfiji.com",
+            phone: "+679 775 3215",
+            visitCount: 9,
+            rewardPoints: 4800,
+          },
+          {
+            id: "CML-RE-004",
+            fullName: "Marika Tuicuvu",
+            email: "marika.t@cml.com.fj",
+            phone: "+679 441 5509",
+            visitCount: 1,
+            rewardPoints: 100,
+          }
+        ];
+
+        for (const profile of sampleProfiles) {
+          const guestRef = doc(db, `restaurant-guests-${companyId}`, profile.id);
+          await setDoc(guestRef, {
+            fullName: profile.fullName,
+            email: profile.email,
+            phone: profile.phone,
+            visitCount: profile.visitCount,
+            rewardPoints: profile.rewardPoints,
+            createdAt: new Date(),
+            lastVisited: new Date()
+          });
+
+          // Seed initial visits
+          const colVisits = collection(db, `restaurant-guests-${companyId}`, profile.id, "visits");
+          await addDoc(colVisits, {
+            cardId: profile.id,
+            receiptNumber: "INV-2026-801",
+            billAmount: 125.50,
+            pointsAwarded: 1350,
+            type: "visit",
+            timestamp: new Date()
+          });
+        }
+
+        // Seed initial reservations
+        const initialReservations: Reservation[] = [
+          {
+            id: "res-1",
+            guestName: "Mereoni Nasilasila",
+            roomNumber: "305",
+            partySize: 4,
+            zoneId: "ocean",
+            timeSlot: "07:30 AM - 09:00 AM",
+            dateString: new Date().toISOString().split('T')[0]
+          },
+          {
+            id: "res-2",
+            guestName: "Marika Tuicuvu",
+            roomNumber: "104",
+            partySize: 2,
+            zoneId: "main",
+            timeSlot: "08:00 AM - 09:30 AM",
+            dateString: new Date().toISOString().split('T')[0]
+          }
+        ];
+        setReservations(initialReservations);
+        localStorage.setItem(`restaurant_reservations_${companyId}`, JSON.stringify(initialReservations));
+
+        // Seed initial buffet entries for today
+        const initialBuffet: BuffetLog[] = [
+          {
+            id: "buf-1",
+            roomNumber: "202",
+            guestName: "Savenaca Radrodro",
+            partySize: 2,
+            zoneId: "main",
+            timestamp: new Date().toISOString()
+          }
+        ];
+        setBuffetLogs(initialBuffet);
+        localStorage.setItem(`restaurant_buffet_${companyId}`, JSON.stringify(initialBuffet));
+
+        // Fetch again now that the data has been written
+        const refetchedSnapshot = await getDocs(colRef);
+        const list: GuestProfile[] = refetchedSnapshot.docs.map(docSnap => ({
+          id: docSnap.id,
+          ...docSnap.data()
+        } as GuestProfile));
+        setGuests(list);
+      } else {
+        const list: GuestProfile[] = snapshot.docs.map(docSnap => ({
+          id: docSnap.id,
+          ...docSnap.data()
+        } as GuestProfile));
+        setGuests(list);
+      }
     } catch (err) {
       console.error("Error loading guests:", err);
     } finally {

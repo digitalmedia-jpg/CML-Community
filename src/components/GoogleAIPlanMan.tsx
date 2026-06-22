@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Sparkles, 
@@ -54,6 +54,10 @@ export const GoogleAIPlanMan: React.FC<GoogleAIPlanManProps> = ({
   const [activeTab, setActiveTab] = useState<"builder" | "history">("builder");
   const [selectedHistoryPlan, setSelectedHistoryPlan] = useState<SavedPlan | null>(null);
   
+  // Mandatory safety triggers requested to prevent infinite loops, multiple firings, or programmatic triggers
+  const [isSafetyUnlocked, setIsSafetyUnlocked] = useState<boolean>(false);
+  const isGeneratingRef = useRef<boolean>(false);
+
   // Interactive checklist state for active plan
   const [checklist, setChecklist] = useState<{ text: string; done: boolean }[]>([]);
 
@@ -127,11 +131,20 @@ export const GoogleAIPlanMan: React.FC<GoogleAIPlanManProps> = ({
   };
 
   const generatePlanAction = async () => {
+    if (isGeneratingRef.current) {
+      toastService.warning("Action Blocked", "Another strategy synthesis is currently in progress. Please wait.");
+      return;
+    }
+    if (!isSafetyUnlocked) {
+      toastService.warning("Safety Lock Enabled", "Please unlock the Strict Manual AI Synthesis Trigger to authorize Gemini API usage.");
+      return;
+    }
     if (!customContext.trim()) {
       toastService.warning("Required Input", "Please provide operational context or inject data first.");
       return;
     }
 
+    isGeneratingRef.current = true;
     setIsGenerating(true);
     setGeneratedPlan("");
     setChecklist([]);
@@ -172,12 +185,14 @@ ${customContext}`;
         .slice(0, 8); // take top 8 action steps
 
       setChecklist(extractedTasks);
+      setIsSafetyUnlocked(false); // Reset unlock state on success to compel manual re-authorization for the next call
       toastService.success("Plan Created", "Google AI Plan Man has completed the dynamic strategy synthesis!");
 
     } catch (err: any) {
       console.error("[Plan Man Call Failed]", err);
       toastService.error("Synthesis Failed", err.message || "An unexpected error occurred during model analysis.");
     } finally {
+      isGeneratingRef.current = false;
       setIsGenerating(false);
     }
   };
@@ -467,10 +482,27 @@ ${customContext}`;
                 />
               </div>
 
+              {/* Strict manual authorization switch requested to safeguard tokens */}
+              <div className="flex items-center gap-2.5 p-3 bg-amber-500/5 rounded-xl border border-amber-500/20 my-1 animate-pulse-subtle">
+                <input
+                  id="ai-token-safety-lock"
+                  type="checkbox"
+                  checked={isSafetyUnlocked}
+                  onChange={(e) => setIsSafetyUnlocked(e.target.checked)}
+                  className="w-4 h-4 rounded border-amber-500 text-amber-500 bg-stone-900 focus:ring-amber-500/50 cursor-pointer accent-amber-500 shrink-0"
+                />
+                <label 
+                  htmlFor="ai-token-safety-lock" 
+                  className="text-[10px] text-stone-300 font-mono select-none cursor-pointer leading-tight flex-1"
+                >
+                  Confirm and Authorize **Manual AI Strategy Synthesis** (Requests @google/genai Token Usage)
+                </label>
+              </div>
+
               <button 
                 onClick={generatePlanAction}
-                disabled={isGenerating}
-                className="w-full h-11 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white rounded-xl text-[10px] uppercase font-extrabold tracking-[0.2em] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border border-amber-400/20 shadow-md shadow-amber-950/20 mt-2"
+                disabled={isGenerating || !isSafetyUnlocked}
+                className="w-full h-11 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white rounded-xl text-[10px] uppercase font-extrabold tracking-[0.2em] transition disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2 border border-amber-400/20 shadow-md shadow-amber-950/20 mt-1"
               >
                 {isGenerating ? (
                   <>

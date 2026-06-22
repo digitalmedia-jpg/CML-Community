@@ -7005,6 +7005,34 @@ export default function App() {
 
                   <div className="lg:col-span-4 space-y-12">
                     <div className="sticky top-12 space-y-12">
+                      {/* Active CML Rewards Promo Callout */}
+                      <div className="luxury-card p-8 bg-gradient-to-br from-indigo-950 via-slate-900 to-stone-900 text-white border border-[#C5A02D]/40 shadow-2xl relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-4 opacity-15">
+                           <Award size={90} className="text-[#C5A02D]" strokeWidth={1} />
+                        </div>
+                        <div className="relative z-10 space-y-5">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                            <span className="text-[9px] font-display uppercase tracking-[0.3em] text-[#C5A02D] font-black">CML Rewards Core Active</span>
+                          </div>
+                          
+                          <h4 className="text-xl font-serif italic text-white leading-snug">
+                            CML Member Dining & Loyalty Portal
+                          </h4>
+                          
+                          <p className="text-[10.5px] text-slate-300 leading-relaxed font-sans font-light">
+                            Instantly scan member profiles, award dining loyalty tokens, manage seatings, and process VIP voucher redemptions.
+                          </p>
+                          
+                          <button
+                            onClick={() => navigateTo("dining-loyalty")}
+                            className="w-full py-3 bg-[#C5A02D] hover:bg-gold-light text-[#1c1c1c] text-[10px] uppercase font-display font-black tracking-widest transition-all duration-300 hover:scale-[1.02] shadow-lg shadow-black/25 flex items-center justify-center gap-2"
+                          >
+                            <Award size={14} /> Launch CML Rewards
+                          </button>
+                        </div>
+                      </div>
+
                       {/* What's New Vertical Banner */}
                       <div className="luxury-card p-8 bg-gradient-to-br from-amber-500/10 to-gold/5 border border-gold/30 shadow-xl relative overflow-hidden group">
                         <div className="absolute right-0 top-0 p-4 opacity-10">

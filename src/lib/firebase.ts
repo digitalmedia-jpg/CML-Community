@@ -698,7 +698,40 @@ class HybridAuth {
   private activeMode: 'real' | 'mock' = 'mock';
   
   constructor() {
-    this.activeMode = 'mock';
+    try {
+      const savedMode = localStorage.getItem('cml_auth_mode');
+      if (savedMode === 'real' || savedMode === 'mock') {
+        this.activeMode = savedMode;
+      } else {
+        this.activeMode = initializedRealFirebase ? 'real' : 'mock';
+      }
+    } catch (e) {
+      this.activeMode = initializedRealFirebase ? 'real' : 'mock';
+    }
+
+    // Dynamic session healer / background auto-sync to live Firebase Auth:
+    if (initializedRealFirebase && productionAuth) {
+      try {
+        productionAuth.onAuthStateChanged(async (realUser: any) => {
+          console.log("[Firebase Hybrid] Live Auth callback: user is", realUser ? realUser.email : "none");
+          if (!realUser && mockAuthInstance.currentUser) {
+            const email = mockAuthInstance.currentUser.email;
+            const matched = EXPLICIT_CREDENTIALS.find(u => u.email.toLowerCase() === email.toLowerCase());
+            if (matched) {
+              console.log(`[Firebase Hybrid] Auto-healing background login to live Firebase Auth for ${matched.email}...`);
+              try {
+                await signInWithEmailAndPassword(productionAuth, matched.email, matched.password);
+                console.log("[Firebase Hybrid] Auto-healing background login success!");
+              } catch (authErr: any) {
+                console.warn("[Firebase Hybrid] Auto-healing background login failed:", authErr.message);
+              }
+            }
+          }
+        });
+      } catch (err) {
+        console.warn("[Firebase Hybrid] Auto-healing background listener subscription failed:", err);
+      }
+    }
   }
 
   get currentUser() {
@@ -708,13 +741,18 @@ class HybridAuth {
   setMode(mode: 'real' | 'mock') {
     if (isQuotaExhaustedGlobal) {
       this.activeMode = 'mock';
+      try { localStorage.setItem('cml_auth_mode', 'mock'); } catch (e) {}
       return;
     }
     this.activeMode = mode;
+    try { localStorage.setItem('cml_auth_mode', mode); } catch (e) {}
   }
 
   getMode() {
     if (isQuotaExhaustedGlobal) {
+      return 'mock';
+    }
+    if (initializedRealFirebase && productionAuth && !productionAuth.currentUser) {
       return 'mock';
     }
     return this.activeMode;
@@ -807,6 +845,64 @@ class HybridAuth {
 
 export const auth = new HybridAuth();
 export const db = initializedRealFirebase ? (productionDb || { _isMock: true }) : { _isMock: true };
+
+// Error diagnostic interfaces and utilities conforming to the Firebase Integration spec
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const realUser = (initializedRealFirebase && productionAuth) ? productionAuth.currentUser : null;
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid || realUser?.uid || null,
+      email: auth.currentUser?.email || realUser?.email || null,
+      emailVerified: realUser?.emailVerified ?? null,
+      isAnonymous: realUser?.isAnonymous ?? null,
+      tenantId: realUser?.tenantId ?? null,
+      providerInfo: realUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  const jsonStr = JSON.stringify(errInfo);
+  console.error('Firestore Error: ', jsonStr);
+  throw new Error(jsonStr);
+}
+
+function checkAndThrowPermissionError(error: unknown, operationType: OperationType, path: string | null) {
+  const errMsg = error instanceof Error ? error.message : String(error);
+  const errCode = (error && typeof error === 'object' && 'code' in error) ? String((error as any).code) : "";
+  if (errCode === "permission-denied" || errMsg.includes("permission-denied") || errMsg.includes("insufficient permissions")) {
+    handleFirestoreError(error, operationType, path);
+  }
+}
 
 // Helper to identify public collections bypass
 function isPublicPath(target: any, ...args: any[]): boolean {
@@ -1050,6 +1146,8 @@ export const onSnapshot = (target: any, onNext: (snap: any) => void, onError?: (
   };
 
   const safeOnError = (err: any) => {
+    const fallbackPath = target ? (target.type === 'document' ? `${target.parentPath}/${target.id}` : (target.path || target.collectionRef?.path || null)) : null;
+    checkAndThrowPermissionError(err, OperationType.GET, fallbackPath);
     if (isQuotaOrResourceExhausted(err)) {
       console.warn("[Firebase Hybrid] Quota exceeded inside onSnapshot listener. Activating local corporate sandbox.");
       if (activeUnsubscribe) {
@@ -1068,6 +1166,8 @@ export const onSnapshot = (target: any, onNext: (snap: any) => void, onError?: (
     try {
       activeUnsubscribe = fbOnSnapshot(realTarget, onNext, safeOnError);
     } catch (e) {
+      const fallbackPath = target ? (target.type === 'document' ? `${target.parentPath}/${target.id}` : (target.path || target.collectionRef?.path || null)) : null;
+      checkAndThrowPermissionError(e, OperationType.GET, fallbackPath);
       if (isQuotaOrResourceExhausted(e)) {
         console.warn("[Firebase Hybrid] fbOnSnapshot initialization failed on quota. Activating sandbox mock.");
         startMockListener();
@@ -1091,6 +1191,7 @@ export const onSnapshot = (target: any, onNext: (snap: any) => void, onError?: (
 export const getDoc = async (docRef: any) => {
   const isPub = isPublicPath(docRef);
   let targetRef = docRef;
+  const pathForError = docRef ? (docRef.path || (docRef.parentPath ? `${docRef.parentPath}/${docRef.id}` : null)) : null;
   if (!isQuotaExhaustedGlobal && initializedRealFirebase && (auth.getMode() === 'real' || isPub)) {
     targetRef = convertToRealReference(docRef) || docRef;
   }
@@ -1099,6 +1200,7 @@ export const getDoc = async (docRef: any) => {
     try {
       return await fbGetDoc(targetRef);
     } catch (e) {
+      checkAndThrowPermissionError(e, OperationType.GET, pathForError);
       if (isQuotaOrResourceExhausted(e)) {
         console.warn("[Firebase Hybrid] fbGetDocs/fbGetDoc hit quota limit. Transitioning to sandbox mode.");
       } else {
@@ -1107,7 +1209,7 @@ export const getDoc = async (docRef: any) => {
     }
   }
 
-  const fullPath = `${docRef.parentPath}/${docRef.id}`;
+  const fullPath = docRef ? (docRef.path || `${docRef.parentPath}/${docRef.id}`) : '';
   const data = MOCK_STORE[fullPath];
   return new MockDocSnapshot(docRef, data);
 };
@@ -1117,6 +1219,18 @@ export const getDocFromServer = getDoc;
 export const getDocs = async (queryOrCollection: any) => {
   const isPub = isPublicPath(queryOrCollection);
   let targetRef = queryOrCollection;
+  
+  let pathForError = null;
+  if (queryOrCollection) {
+    if (queryOrCollection.path) {
+      pathForError = queryOrCollection.path;
+    } else if (queryOrCollection.collectionRef && queryOrCollection.collectionRef.path) {
+      pathForError = queryOrCollection.collectionRef.path;
+    } else if ('_query' in queryOrCollection && queryOrCollection._query && queryOrCollection._query.path) {
+      pathForError = queryOrCollection._query.path.toString();
+    }
+  }
+
   if (!isQuotaExhaustedGlobal && initializedRealFirebase && (auth.getMode() === 'real' || isPub)) {
     targetRef = convertToRealReference(queryOrCollection) || queryOrCollection;
   }
@@ -1125,6 +1239,7 @@ export const getDocs = async (queryOrCollection: any) => {
     try {
       return await fbGetDocs(targetRef);
     } catch (e) {
+      checkAndThrowPermissionError(e, OperationType.LIST, pathForError);
       if (isQuotaOrResourceExhausted(e)) {
         console.warn("[Firebase Hybrid] fbGetDocs hit quota limit. Transitioning to sandbox mode.");
       } else {
@@ -1134,10 +1249,12 @@ export const getDocs = async (queryOrCollection: any) => {
   }
 
   let path = '';
-  if (queryOrCollection.type === 'collection') {
-    path = queryOrCollection.path;
-  } else if (queryOrCollection.collectionRef) {
-    path = queryOrCollection.collectionRef.path;
+  if (queryOrCollection) {
+    if (queryOrCollection.type === 'collection') {
+      path = queryOrCollection.path;
+    } else if (queryOrCollection.collectionRef) {
+      path = queryOrCollection.collectionRef.path;
+    }
   }
   const docs = getDocumentsInCollection(path);
   return new MockQuerySnapshot(docs);
@@ -1146,6 +1263,7 @@ export const getDocs = async (queryOrCollection: any) => {
 export const setDoc = async (docRef: any, data: any) => {
   const isPub = isPublicPath(docRef);
   let targetRef = docRef;
+  const pathForError = docRef ? (docRef.path || (docRef.parentPath ? `${docRef.parentPath}/${docRef.id}` : null)) : null;
   if (!isQuotaExhaustedGlobal && initializedRealFirebase && (auth.getMode() === 'real' || isPub)) {
     targetRef = convertToRealReference(docRef) || docRef;
   }
@@ -1154,6 +1272,7 @@ export const setDoc = async (docRef: any, data: any) => {
     try {
       return await fbSetDoc(targetRef, data);
     } catch (e) {
+      checkAndThrowPermissionError(e, OperationType.WRITE, pathForError);
       if (isQuotaOrResourceExhausted(e)) {
         console.warn("[Firebase Hybrid] fbSetDoc hit quota limit. Fallback to sandbox mode.");
       } else {
@@ -1162,16 +1281,20 @@ export const setDoc = async (docRef: any, data: any) => {
     }
   }
 
-  const fullPath = `${docRef.parentPath}/${docRef.id}`;
+  const fullPath = docRef ? (docRef.path || `${docRef.parentPath}/${docRef.id}`) : '';
   MOCK_STORE[fullPath] = { ...data };
   saveMockStore(fullPath);
-  triggerListeners(docRef.parentPath);
+  if (docRef) {
+    const parent = docRef.parentPath || (docRef.path ? docRef.path.split('/').slice(0, -1).join('/') : '');
+    triggerListeners(parent);
+  }
   triggerListeners(fullPath);
 };
 
 export const addDoc = async (collectionRef: any, data: any) => {
   const isPub = isPublicPath(collectionRef);
   let targetRef = collectionRef;
+  const pathForError = collectionRef ? collectionRef.path : null;
   if (!isQuotaExhaustedGlobal && initializedRealFirebase && (auth.getMode() === 'real' || isPub)) {
     targetRef = convertToRealReference(collectionRef) || collectionRef;
   }
@@ -1180,6 +1303,7 @@ export const addDoc = async (collectionRef: any, data: any) => {
     try {
       return await fbAddDoc(targetRef, data);
     } catch (e) {
+      checkAndThrowPermissionError(e, OperationType.CREATE, pathForError);
       if (isQuotaOrResourceExhausted(e)) {
         console.warn("[Firebase Hybrid] fbAddDoc hit quota limit. Fallback to sandbox mode.");
       } else {
@@ -1189,17 +1313,20 @@ export const addDoc = async (collectionRef: any, data: any) => {
   }
 
   const id = 'mock_id_' + Math.random().toString(36).substring(2, 11);
-  const docRef = new MockDocRef(collectionRef.path, id);
-  const fullPath = `${collectionRef.path}/${id}`;
+  const docRef = new MockDocRef(collectionRef ? collectionRef.path : '', id);
+  const fullPath = collectionRef ? `${collectionRef.path}/${id}` : id;
   MOCK_STORE[fullPath] = { ...data, id };
   saveMockStore(fullPath);
-  triggerListeners(collectionRef.path);
+  if (collectionRef) {
+    triggerListeners(collectionRef.path);
+  }
   return docRef;
 };
 
 export const updateDoc = async (docRef: any, updates: any) => {
   const isPub = isPublicPath(docRef);
   let targetRef = docRef;
+  const pathForError = docRef ? (docRef.path || (docRef.parentPath ? `${docRef.parentPath}/${docRef.id}` : null)) : null;
   if (!isQuotaExhaustedGlobal && initializedRealFirebase && (auth.getMode() === 'real' || isPub)) {
     targetRef = convertToRealReference(docRef) || docRef;
   }
@@ -1208,6 +1335,7 @@ export const updateDoc = async (docRef: any, updates: any) => {
     try {
       return await fbUpdateDoc(targetRef, updates);
     } catch (e) {
+      checkAndThrowPermissionError(e, OperationType.UPDATE, pathForError);
       if (isQuotaOrResourceExhausted(e)) {
         console.warn("[Firebase Hybrid] fbUpdateDoc hit quota limit. Fallback to sandbox mode.");
       } else {
@@ -1216,7 +1344,7 @@ export const updateDoc = async (docRef: any, updates: any) => {
     }
   }
 
-  const fullPath = `${docRef.parentPath}/${docRef.id}`;
+  const fullPath = docRef ? (docRef.path || `${docRef.parentPath}/${docRef.id}`) : '';
   const current = MOCK_STORE[fullPath] || {};
   
   const processedUpdates = { ...updates };
@@ -1238,13 +1366,17 @@ export const updateDoc = async (docRef: any, updates: any) => {
     ...processedUpdates
   };
   saveMockStore(fullPath);
-  triggerListeners(docRef.parentPath);
+  if (docRef) {
+    const parent = docRef.parentPath || (docRef.path ? docRef.path.split('/').slice(0, -1).join('/') : '');
+    triggerListeners(parent);
+  }
   triggerListeners(fullPath);
 };
 
 export const deleteDoc = async (docRef: any) => {
   const isPub = isPublicPath(docRef);
   let targetRef = docRef;
+  const pathForError = docRef ? (docRef.path || (docRef.parentPath ? `${docRef.parentPath}/${docRef.id}` : null)) : null;
   if (!isQuotaExhaustedGlobal && initializedRealFirebase && (auth.getMode() === 'real' || isPub)) {
     targetRef = convertToRealReference(docRef) || docRef;
   }
@@ -1253,6 +1385,7 @@ export const deleteDoc = async (docRef: any) => {
     try {
       return await fbDeleteDoc(targetRef);
     } catch (e) {
+      checkAndThrowPermissionError(e, OperationType.DELETE, pathForError);
       if (isQuotaOrResourceExhausted(e)) {
         console.warn("[Firebase Hybrid] fbDeleteDoc hit quota limit. Fallback to sandbox mode.");
       } else {
@@ -1261,10 +1394,13 @@ export const deleteDoc = async (docRef: any) => {
     }
   }
 
-  const fullPath = `${docRef.parentPath}/${docRef.id}`;
+  const fullPath = docRef ? (docRef.path || `${docRef.parentPath}/${docRef.id}`) : '';
   delete MOCK_STORE[fullPath];
   saveMockStore(fullPath, true);
-  triggerListeners(docRef.parentPath);
+  if (docRef) {
+    const parent = docRef.parentPath || (docRef.path ? docRef.path.split('/').slice(0, -1).join('/') : '');
+    triggerListeners(parent);
+  }
   triggerListeners(fullPath);
 };
 
@@ -1464,18 +1600,5 @@ export const onAuthStateChanged = (authObj: any, callback: (user: any) => void) 
   }
   return mockAuthInstance.onAuthStateChanged(callback);
 };
-
-export enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  console.error('[HYBRID_DB] Firestore warning: ', error, operationType, path);
-}
 
 export type User = any;

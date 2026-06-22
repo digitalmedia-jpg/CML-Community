@@ -91,7 +91,6 @@ export const notificationService = {
       const notificationType = type?.toLowerCase();
       switch (notificationType) {
         case NotificationType.MAINTENANCE:
-        case 'maintenance':
           // Maintenance alert: Gentle, warm double warning sequence (reassuring, engineering tone)
           // 261.63Hz (Middle C) and 220Hz (A3) with a slightly warmer triangle-wave decay
           playTone(261.63, playedTime, 0.22, 'triangle', 0.06);
@@ -99,7 +98,6 @@ export const notificationService = {
           break;
 
         case NotificationType.SYSTEM:
-        case 'system':
           // System alert: High, clear double ascending chime representing formal system alerts
           // 523.25Hz (C5) and 659.25Hz (E5)
           playTone(523.25, playedTime, 0.12, 'sine', 0.07);
@@ -107,14 +105,12 @@ export const notificationService = {
           break;
 
         case NotificationType.FORUM:
-        case 'forum':
           // Forum notification: Quick, organic bubble chirp style sound for light social updates
           playTone(493.88, playedTime, 0.10, 'sine', 0.08);
           playTone(739.99, playedTime + 0.07, 0.15, 'sine', 0.06);
           break;
 
         case NotificationType.ROLE:
-        case 'role':
           // Role/Access alert: Ascending, stately major 3-note chord for administrative authority
           // 349.23Hz (F4), 440.00Hz (A4), 523.25Hz (C5)
           playTone(349.23, playedTime, 0.12, 'sine', 0.08);
@@ -123,7 +119,6 @@ export const notificationService = {
           break;
 
         case NotificationType.LOST_FOUND:
-        case 'lost-found':
           // Lost & Found: Warm, light, double bell chime
           playTone(392.00, playedTime, 0.18, 'sine', 0.08);
           playTone(587.33, playedTime + 0.12, 0.28, 'sine', 0.08);
