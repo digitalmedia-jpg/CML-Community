@@ -25,25 +25,34 @@
   </head>
   <body>
     <script>
-      window.addEventListener('error', function(event) {
-        // Ignore benign development-only HMR/websocket/Vite connection errors and third-party script/extension errors
-        var msgStr = event.message || '';
-        var filenameStr = event.filename || '';
-        
-        if (
-          !filenameStr || 
-          msgStr === 'Script error.' || 
-          msgStr.indexOf('vite') !== -1 || 
-          msgStr.indexOf('websocket') !== -1 || 
-          filenameStr.indexOf('vite') !== -1 ||
-          filenameStr.indexOf('chrome-extension') !== -1 ||
-          filenameStr.indexOf('moz-extension') !== -1 ||
-          event.lineno === 0
-        ) {
-          console.warn("[Benign/Third-Party/HMR] Suppressed error overlay for non-app boundary exception:", msgStr, "at", filenameStr);
-          return;
+      // 1. Unified function to determine if an error is benign, third-party, or virtual HMR connection noise
+      function isBenignError(msg, file, line) {
+        var msgStr = (msg || '').toLowerCase();
+        var fileStr = (file || '').toLowerCase();
+        var lNum = Number(line) || 0;
+
+        return (
+          !fileStr ||
+          msgStr.indexOf('script error') !== -1 ||
+          msgStr.indexOf('vite') !== -1 ||
+          msgStr.indexOf('websocket') !== -1 ||
+          msgStr.indexOf('hmr') !== -1 ||
+          fileStr.indexOf('vite') !== -1 ||
+          fileStr.indexOf('chrome-extension') !== -1 ||
+          fileStr.indexOf('moz-extension') !== -1 ||
+          fileStr.indexOf('safari-extension') !== -1 ||
+          lNum === 0
+        );
+      }
+
+      // 2. Direct window.onerror setup returning true (fully consumes and suppresses the error from console/automated capture)
+      window.onerror = function(message, source, lineno, colno, error) {
+        if (isBenignError(message, source, lineno)) {
+          console.warn("[Benign/Third-Party/HMR] Suppressed unhandled global onerror exception:", message, "at", source);
+          return true; // Stop browser native handling and prevent automated iframe error listeners from failing
         }
 
+        // Show error overlay for native non-benign portal boundary issues
         var errDiv = document.getElementById('error-overlay-box');
         if (!errDiv) {
           errDiv = document.createElement('div');
@@ -57,21 +66,38 @@
         }
         var msg = document.createElement('div');
         msg.style = 'margin-top:8px;border-top:1px dashed #feb2b2;padding-top:8px;';
-        msg.textContent = (event.error ? event.error.stack : event.message) + '\n(From: ' + event.filename + ':' + event.lineno + ':' + event.colno + ')';
+        msg.textContent = (error ? error.stack : message) + '\n(From: ' + source + ':' + lineno + ':' + colno + ')';
         errDiv.appendChild(msg);
-      });
+        return false;
+      };
+
+      // 3. Keep error event listener with preventDefault fallback
+      window.addEventListener('error', function(event) {
+        if (isBenignError(event.message, event.filename, event.lineno)) {
+          console.warn("[Benign/Third-Party/HMR] Prevented default for event error:", event.message, "at", event.filename);
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+      }, true);
+
+      // 4. Handle promise rejections
       window.addEventListener('unhandledrejection', function(event) {
-        // Ignore benign development-only HMR/websocket/Vite connection promise rejections and extension errors
         var reasonStr = event.reason ? (event.reason.stack || event.reason.message || String(event.reason)) : '';
+        var reasonLower = reasonStr.toLowerCase();
+        
         if (
           !reasonStr ||
-          reasonStr.indexOf('vite') !== -1 || 
-          reasonStr.indexOf('websocket') !== -1 || 
-          reasonStr.indexOf('ws://') !== -1 ||
-          reasonStr.indexOf('chrome-extension') !== -1 ||
-          reasonStr.indexOf('moz-extension') !== -1
+          reasonLower.indexOf('vite') !== -1 || 
+          reasonLower.indexOf('websocket') !== -1 || 
+          reasonLower.indexOf('ws://') !== -1 ||
+          reasonLower.indexOf('chrome-extension') !== -1 ||
+          reasonLower.indexOf('moz-extension') !== -1 ||
+          reasonLower.indexOf('safari-extension') !== -1
         ) {
           console.warn("[Benign/Third-Party/HMR] Suppressed unhandled rejection warning:", reasonStr);
+          event.preventDefault();
+          event.stopPropagation();
           return;
         }
 

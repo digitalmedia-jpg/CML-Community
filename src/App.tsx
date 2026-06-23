@@ -137,6 +137,7 @@ import { toastService } from "./services/toastService";
 import { GoogleAIPlanMan } from "./components/GoogleAIPlanMan";
 import { SopBatchUploadModal } from "./components/SopBatchUploadModal";
 import { ImageLightboxModal } from "./components/ImageLightboxModal";
+import { AdminDashboard } from "./components/AdminDashboard";
 
 // Mock data for the chart
 const chartData = [
@@ -1049,8 +1050,10 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  // Treated as true to put all email users on the unified sandbox with master dashboard permissions
-  const isCmlUser = true;
+  
+  // Custom user session detection: restricts property-specific logins and unlocks corporate HQ permissions
+  const userEmail = currentUser?.email?.toLowerCase() || "";
+  const isCmlUser = currentUser ? (!userEmail.includes("ramada") && !userEmail.includes("wyndham")) : true;
 
   // Daily News Hook for Home Dashboard
   const [latestCorporateNews, setLatestCorporateNews] = useState<any[]>([]);
@@ -1162,6 +1165,15 @@ export default function App() {
   const [reporterTypeSelect, setReporterTypeSelect] = useState("Staff Member");
   const [reporterDeptInput, setReporterDeptInput] = useState("");
   const [selectedComplaint, setSelectedComplaint] = useState<any>(null);
+  useEffect(() => {
+    if (!selectedComplaint) return;
+    const updated = complaints.find(c => c.id === selectedComplaint.id);
+    if (updated) {
+      if (JSON.stringify(updated.updates) !== JSON.stringify(selectedComplaint.updates) || updated.status !== selectedComplaint.status || updated.hodApproved !== selectedComplaint.hodApproved || updated.superAdminApproved !== selectedComplaint.superAdminApproved) {
+        setSelectedComplaint(updated);
+      }
+    }
+  }, [complaints, selectedComplaint]);
   const [complaintSearch, setComplaintSearch] = useState("");
   const [guestRecoveryPropertyFilter, setGuestRecoveryPropertyFilter] = useState<string>("cml");
 
@@ -1453,7 +1465,9 @@ export default function App() {
     let unsubscribes: (() => void)[] = [];
     try {
       // Ensure strict dynamic isolation: users only subscribe to their active property, satisfying strict separation guidelines
-      const propertiesList = [selectedCompany || 'cml'];
+      const propertiesList = isCmlUser
+        ? ['cml', 'ramada', 'wyndham']
+        : [selectedCompany || 'cml'];
       const complaintsMap: { [key: string]: any[] } = {};
 
       propertiesList.forEach((prefix) => {
@@ -1542,7 +1556,7 @@ export default function App() {
       img.src = reader.result as string;
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const max_size = 800;
+        const max_size = 500; // Optimized and resized to 500 pixels max to stay within bounds
         let width = img.width;
         let height = img.height;
         if (width > height) {
@@ -1560,11 +1574,82 @@ export default function App() {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.5); // Reduced quality for maximum synchronization stability
         setComplaintForm(prev => ({ ...prev, photoBase64: dataUrl }));
       };
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleQuickApproveHOD = async (complaint: any) => {
+    try {
+      const authorName = currentUser?.displayName || currentUser?.email?.toLowerCase().split('@')[0] || "HOD Manager";
+      await updateDoc(doc(db, `complaints-${complaint.propertyId || selectedCompany || 'cml'}`, complaint.id), {
+        hodApproved: true,
+        hodApprovedBy: authorName,
+        hodApprovedAt: new Date(),
+        status: "HOD Approved",
+        updates: arrayUnion({
+          message: `STEP 1 APPROVED: Department Head (HOD) approval granted by ${authorName}.`,
+          authorName: "SYSTEM_ACTION",
+          timestamp: new Date()
+        })
+      });
+
+      // Trigger background notification sync
+      fetch("/api/notify-complaint-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          complaint,
+          action: "update",
+          authorName: "SYSTEM_ACTION",
+          updateMessage: `STEP 1 APPROVED: Department Head (HOD) approval granted by ${authorName}.`,
+          companyId: complaint.propertyId || selectedCompany || 'cml'
+        })
+      }).catch(err => console.error("Webhook update notification failed", err));
+
+      toastService.success("HOD Approval granted successfully!");
+    } catch (e: any) {
+      toastService.error("HOD Approval failed: " + e.message);
+    }
+  };
+
+  const handleQuickApproveSuperAdmin = async (complaint: any, name: string, dept: string) => {
+    try {
+      await updateDoc(doc(db, `complaints-${complaint.propertyId || selectedCompany || 'cml'}`, complaint.id), {
+        superAdminApproved: true,
+        superAdminApprovedBy: name,
+        superAdminApprovedAt: new Date(),
+        status: "Resolved",
+        resolvedAt: serverTimestamp(),
+        resolvedBy: name,
+        resolvedDepartment: dept,
+        updates: arrayUnion({
+          message: `STEP 2 RESOLVED: Final SuperAdmin sign-off granted by ${name} (${dept}).`,
+          authorName: "SYSTEM_ACTION",
+          timestamp: new Date()
+        })
+      });
+
+      // Trigger background webhook of Google Chat & Emails
+      fetch("/api/notify-complaint-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          complaint,
+          action: "superadmin_approve",
+          authorName: name,
+          companyId: complaint.propertyId || selectedCompany || 'cml',
+          department: dept,
+          resolvedBy: name
+        })
+      }).catch(err => console.error("SuperAdmin Approve notification failed", err));
+
+      toastService.success("SuperAdmin sign-off and resolve completed!");
+    } catch (e: any) {
+      toastService.error("SuperAdmin approval failed: " + e.message);
+    }
   };
 
   // ==========================================
@@ -1573,23 +1658,27 @@ export default function App() {
 
   const openOfflineComplaintsDB = (): Promise<IDBDatabase> => {
     return new Promise((resolve, reject) => {
-      if (!window.indexedDB) {
-        reject(new Error("IndexedDB is not supported"));
-        return;
-      }
-      const request = window.indexedDB.open("cml-offline-complaints-db", 1);
-      request.onupgradeneeded = (event: any) => {
-        const db = event.target.result;
-        if (!db.objectStoreNames.contains("pending-complaints")) {
-          db.createObjectStore("pending-complaints", { keyPath: "id", autoIncrement: true });
+      try {
+        if (!window.indexedDB) {
+          reject(new Error("IndexedDB is not supported"));
+          return;
         }
-      };
-      request.onsuccess = (event: any) => {
-        resolve(event.target.result);
-      };
-      request.onerror = (event: any) => {
-        reject(event.target.error);
-      };
+        const request = window.indexedDB.open("cml-offline-complaints-db", 1);
+        request.onupgradeneeded = (event: any) => {
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains("pending-complaints")) {
+            db.createObjectStore("pending-complaints", { keyPath: "id", autoIncrement: true });
+          }
+        };
+        request.onsuccess = (event: any) => {
+          resolve(event.target.result);
+        };
+        request.onerror = (event: any) => {
+          reject(event.target.error);
+        };
+      } catch (err) {
+        reject(err);
+      }
     });
   };
 
@@ -1629,23 +1718,27 @@ export default function App() {
 
   const openOfflineRatesDB = (): Promise<IDBDatabase> => {
     return new Promise((resolve, reject) => {
-      if (!window.indexedDB) {
-        reject(new Error("IndexedDB is not supported"));
-        return;
-      }
-      const request = window.indexedDB.open("cml-offline-rates-db", 1);
-      request.onupgradeneeded = (event: any) => {
-        const db = event.target.result;
-        if (!db.objectStoreNames.contains("pending-rates")) {
-          db.createObjectStore("pending-rates", { keyPath: "id", autoIncrement: true });
+      try {
+        if (!window.indexedDB) {
+          reject(new Error("IndexedDB is not supported"));
+          return;
         }
-      };
-      request.onsuccess = (event: any) => {
-        resolve(event.target.result);
-      };
-      request.onerror = (event: any) => {
-        reject(event.target.error);
-      };
+        const request = window.indexedDB.open("cml-offline-rates-db", 1);
+        request.onupgradeneeded = (event: any) => {
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains("pending-rates")) {
+            db.createObjectStore("pending-rates", { keyPath: "id", autoIncrement: true });
+          }
+        };
+        request.onsuccess = (event: any) => {
+          resolve(event.target.result);
+        };
+        request.onerror = (event: any) => {
+          reject(event.target.error);
+        };
+      } catch (err) {
+        reject(err);
+      }
     });
   };
 
@@ -1851,10 +1944,18 @@ export default function App() {
   // Synchronize and monitor offline guest complaints and rate updates cached in IndexedDB
   useEffect(() => {
     const updateOfflineCount = async () => {
-      const pendingList = await getOfflineComplaintsFromDB();
-      setOfflineComplaintsCount(pendingList.length);
-      const pendingRates = await getOfflineRatesFromDB();
-      setOfflineRatesCount(pendingRates.length);
+      try {
+        const pendingList = await getOfflineComplaintsFromDB();
+        setOfflineComplaintsCount(pendingList ? pendingList.length : 0);
+      } catch (err) {
+        console.warn("[App] Failed to update offline complaints count:", err);
+      }
+      try {
+        const pendingRates = await getOfflineRatesFromDB();
+        setOfflineRatesCount(pendingRates ? pendingRates.length : 0);
+      } catch (err) {
+        console.warn("[App] Failed to update offline rates count:", err);
+      }
     };
 
     updateOfflineCount();
@@ -2230,16 +2331,19 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
-        // Bypassed for unified sandbox: treat everyone as master users with unrestricted access
+        // Ensure strict dynamic segregation and total privacy as requested:
         const email = user.email?.toLowerCase() || "";
-        const userIsCml = true; // Put everyone on the sandbox!
-        if (!userIsCml) {
-          if (email.includes("ramada")) {
-            setSelectedCompany("ramada");
-          } else if (email.includes("wyndham")) {
-            setSelectedCompany("wyndham");
-          } else {
-            setSelectedCompany("cml");
+        const isRamada = email.includes("ramada");
+        const isWyndham = email.includes("wyndham");
+
+        if (isRamada) {
+          setSelectedCompany("ramada");
+        } else if (isWyndham) {
+          setSelectedCompany("wyndham");
+        } else {
+          // If CML HQ corporate staff, let them choose. Do not override if already selected.
+          if (!selectedCompany) {
+            setSelectedCompany(null);
           }
         }
 
@@ -2431,6 +2535,11 @@ export default function App() {
   }, []);
 
   const navItems = [
+    ...(isCmlUser ? [{
+      id: "admin-dashboard",
+      label: "ADMIN DASHBOARD",
+      icon: LayoutDashboard,
+    }] : []),
     {
       id: "property-overview",
       label: "HOME DASHBOARD",
@@ -3188,7 +3297,7 @@ export default function App() {
                   { id: "canary", label: "Wyndham Connect", icon: Globe, extraLabel: " (by Canary)" },
                   { id: "managed-cases", label: "My Request", icon: Send },
                   { id: "property-overview", label: "Property Management", icon: Hotel, url: "https://idcs-256bd455f58c4aeb8d0305d1ea06637c.identity.oraclecloud.com/ui/v1/signin" },
-                  { id: "hrms", label: "Sign-In Information", icon: Users, disabled: true }
+                  { id: "hrms", label: "Clock In/Out", icon: Clock, disabled: false }
                 ].map((link) => {
                   const LinkIcon = link.icon;
                   const isLinkActive = activeTab === link.id;
@@ -5054,6 +5163,20 @@ export default function App() {
                   </div>
                 )}
               </div>
+            ) : activeTab === "admin-dashboard" ? (
+              <AdminDashboard 
+                 complaints={complaints}
+                 userRole={userRole}
+                 workflowConfig={workflowConfig}
+                 currentUser={currentUser}
+                 onPropertySwitch={(propertyId, tabId) => {
+                   setSelectedCompany(propertyId);
+                   setActiveTab(tabId);
+                   setGuestRecoveryPropertyFilter(propertyId);
+                 }}
+                 onQuickApproveHOD={handleQuickApproveHOD}
+                 onQuickApproveSuperAdmin={handleQuickApproveSuperAdmin}
+              />
             ) : activeTab === "guest-recovery" ? (
               <div className="space-y-8">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">

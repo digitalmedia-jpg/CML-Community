@@ -199,6 +199,7 @@ export async function syncWithServerDirect(updates?: Record<string, any>, delete
       if (data && data.db) {
         const changedKeys = new Set<string>();
         
+        const clientOnlyKeys: Record<string, any> = {};
         for (const [k, newVal] of Object.entries(data.db)) {
           const oldVal = MOCK_STORE[k];
           if (k in pendingUpdates) {
@@ -212,8 +213,13 @@ export async function syncWithServerDirect(updates?: Record<string, any>, delete
         
         for (const k of Object.keys(MOCK_STORE)) {
           if (!(k in data.db) && !k.startsWith('users/') && !pendingDeletes.includes(k)) {
-            delete MOCK_STORE[k];
-            changedKeys.add(k);
+            if (!hasDoneInitialSync) {
+              // Gather client-only items on page load to sync back to server instead of deleting them!
+              clientOnlyKeys[k] = MOCK_STORE[k];
+            } else {
+              delete MOCK_STORE[k];
+              changedKeys.add(k);
+            }
           }
         }
 
@@ -231,7 +237,12 @@ export async function syncWithServerDirect(updates?: Record<string, any>, delete
         
         if (!hasDoneInitialSync) {
           hasDoneInitialSync = true;
-          if (Object.keys(data.db || {}).length === 0 && Object.keys(MOCK_STORE).length > 0) {
+          // If we had client-only additions on first load, push them back to the server so they sync everywhere!
+          if (Object.keys(clientOnlyKeys).length > 0) {
+            setTimeout(() => {
+              syncWithServerDirect(clientOnlyKeys, undefined, true);
+            }, 500);
+          } else if (Object.keys(data.db || {}).length === 0 && Object.keys(MOCK_STORE).length > 0) {
             setTimeout(() => {
               syncWithServerDirect(MOCK_STORE, undefined, true);
             }, 500);

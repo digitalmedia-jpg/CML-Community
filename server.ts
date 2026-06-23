@@ -1351,11 +1351,46 @@ async function startServer() {
       const sortedCandidates = [this.databaseId, ...candidates.filter(c => c !== this.databaseId)];
 
       for (const dbId of sortedCandidates) {
-        const url = this.getUrl("master_db", dbId);
         try {
-          const res = await fetch(url);
+          // 1. Try listing documents under hybrid_sandbox collection to merge chunks
+          const listUrl = this.getUrl(undefined, dbId) + "&pageSize=300";
+          const res = await fetch(listUrl);
           if (res.ok) {
-            console.log(`[MOCK_DB] Successfully fetched master from database '${dbId}'`);
+            const data = await res.json();
+            const combinedStore: Record<string, any> = {};
+            if (data && Array.isArray(data.documents)) {
+              for (const doc of data.documents) {
+                if (doc && doc.fields && doc.fields.db_json && doc.fields.db_json.stringValue) {
+                  try {
+                    const parsed = JSON.parse(doc.fields.db_json.stringValue);
+                    Object.assign(combinedStore, parsed);
+                  } catch (e) {
+                    console.warn(`[MOCK_DB] Failed to parse stringValue for a doc chunk:`, e);
+                  }
+                }
+              }
+              console.log(`[MOCK_DB] Successfully listed, parsed, and merged ${Object.keys(combinedStore).length} keys from '${dbId}'`);
+              this.databaseId = dbId;
+              return combinedStore;
+            } else {
+              // No documents array means the collection might be empty/new
+              console.log(`[MOCK_DB] Collection listings empty or new in database '${dbId}'`);
+              this.databaseId = dbId;
+              return {};
+            }
+          } else {
+            console.warn(`[MOCK_DB] Collection listing failed for '${dbId}' (${res.status}), trying direct master_db fallback.`);
+          }
+        } catch (e: any) {
+          console.warn(`[MOCK_DB] Exception listing database '${dbId}':`, e.message || e);
+        }
+
+        // 2. Direct document single master_db fetch fallback
+        const fallbackUrl = this.getUrl("master_db", dbId);
+        try {
+          const res = await fetch(fallbackUrl);
+          if (res.ok) {
+            console.log(`[MOCK_DB] Fallback: Successfully fetched single master_db from database '${dbId}'`);
             this.databaseId = dbId;
             const doc = await res.json();
             if (doc && doc.fields && doc.fields.db_json && doc.fields.db_json.stringValue) {
@@ -1363,14 +1398,12 @@ async function startServer() {
             }
             return {};
           } else if (res.status === 404) {
-            console.log(`[MOCK_DB] Master document not found (404) in database '${dbId}', assuming empty cloud database`);
+            console.log(`[MOCK_DB] Fallback: master_db document not found in database '${dbId}'`);
             this.databaseId = dbId;
             return {};
-          } else {
-            console.warn(`[MOCK_DB] Fetch master failed for database '${dbId}' (${res.status})`);
           }
         } catch (e: any) {
-          console.warn(`[MOCK_DB] Exception fetching master for database '${dbId}':`, e.message || e);
+          console.warn(`[MOCK_DB] Fallback: Exception fetching master_db for '${dbId}':`, e.message || e);
         }
       }
       return {};
@@ -1400,53 +1433,65 @@ async function startServer() {
       const candidates = this.getCandidateDatabaseIds();
       const sortedCandidates = [this.databaseId, ...candidates.filter(c => c !== this.databaseId)];
 
-      // Filter out massive flipbooks assets and giant base64 pages to respect the 1MB Firestore document limit
-      const prunedDb: Record<string, any> = {};
+      // Group keys into chunks by their category prefix to avoid the 1MB Firestore document limit
+      const chunks: Record<string, Record<string, any>> = {};
       for (const [key, value] of Object.entries(db)) {
         if (key.startsWith("flipbooks") || key.includes("/pages/") || key.includes("page")) {
           continue;
         }
-        prunedDb[key] = this.sanitizeValue(value);
+        
+        const firstPart = key.split('/')[0] || "misc";
+        const chunkName = `chunk_${firstPart}`;
+        if (!chunks[chunkName]) {
+          chunks[chunkName] = {};
+        }
+        chunks[chunkName][key] = this.sanitizeValue(value);
       }
-      const dbString = JSON.stringify(prunedDb);
+
+      let overallSuccess = false;
 
       for (const dbId of sortedCandidates) {
-        const patchUrl = this.getUrl("master_db", dbId) + "&updateMask.fieldPaths=db_json";
-        const body = {
-          name: `projects/${this.projectId}/databases/${dbId}/documents/hybrid_sandbox/master_db`,
-          fields: {
-            db_json: {
-              stringValue: dbString
+        let dbSucceeded = true;
+        
+        // Save each chunk as a separate PATCH document
+        for (const [chunkName, chunkData] of Object.entries(chunks)) {
+          const chunkString = JSON.stringify(chunkData);
+          const patchUrl = this.getUrl(chunkName, dbId) + "&updateMask.fieldPaths=db_json";
+          const body = {
+            name: `projects/${this.projectId}/databases/${dbId}/documents/hybrid_sandbox/${chunkName}`,
+            fields: {
+              db_json: {
+                stringValue: chunkString
+              }
             }
-          }
-        };
+          };
 
-        try {
-          const res = await fetch(patchUrl, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body)
-          });
+          try {
+            const res = await fetch(patchUrl, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body)
+            });
 
-          if (res.ok) {
-            console.log(`[MOCK_DB] Saved local changes to cloud database '${dbId}' successfully.`);
-            this.databaseId = dbId;
-            return true;
+            if (!res.ok) {
+              dbSucceeded = false;
+              console.log(`[MOCK_DB] Failed to save chunk '${chunkName}' to database '${dbId}' (status ${res.status}).`);
+            }
+          } catch (e: any) {
+            dbSucceeded = false;
+            console.log(`[MOCK_DB] Exception writing chunk '${chunkName}' to '${dbId}': ${e.message || e}`);
           }
+        }
 
-          if (res.status === 429) {
-            console.log(`[MOCK_DB] Rate limit active on database '${dbId}'. Local changes of CML and Wyndham systems are safely journaled on disk.`);
-          } else if (res.status === 404 || res.status === 400) {
-            console.log(`[MOCK_DB] Database '${dbId}' is pending cloud setup or access configuration. Continuing using secure local on-disk storage.`);
-          } else {
-            console.log(`[MOCK_DB] Database synchronization is postponed (status ${res.status}). Local fallback active.`);
-          }
-        } catch (e: any) {
-          console.log(`[MOCK_DB] System backup connection is active on local disk. Cloud sync offline trace: ${e.message || 'connection timeout'}`);
+        if (dbSucceeded) {
+          console.log(`[MOCK_DB] Saved all database chunks to cloud database '${dbId}' successfully.`);
+          this.databaseId = dbId;
+          overallSuccess = true;
+          break; // Saved successfully to primary candidate database, skip other candidates
         }
       }
 
-      return false;
+      return overallSuccess;
     }
 
     // Retained for backward compatibility
