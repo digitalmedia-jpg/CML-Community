@@ -946,7 +946,22 @@ export default function App() {
     "team-training",
     "resources-help"
   ]);
-  const [maintenanceHistory, setMaintenanceHistory] = useState<any[]>([]);
+  const [maintenanceHistory, setMaintenanceHistory] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem("cml_maintenance_history");
+      return saved ? JSON.parse(saved) : [];
+    } catch (_) {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("cml_maintenance_history", JSON.stringify(maintenanceHistory));
+    } catch (e) {
+      console.warn("Failed to save maintenance history", e);
+    }
+  }, [maintenanceHistory]);
   const [showHistory, setShowHistory] = useState(false);
   const [dashboardViewMode, setDashboardViewMode] = useState<"percentage" | "pie">("percentage");
   const [checklistDate, setChecklistDate] = useState(new Date().toISOString().split('T')[0]);
@@ -2423,7 +2438,7 @@ export default function App() {
       icon: Hotel,
       subItems: [
         { id: "hotel-info", label: "Hotel Information", icon: Hotel },
-        { id: "revenue-mgmt", label: "Revenue Management", icon: DollarSign }
+        { id: "revenue-mgmt", label: "Revenue Management", icon: DollarSign, disabled: true }
       ]
     },
     {
@@ -2987,20 +3002,6 @@ export default function App() {
             </div>
           ) : (
             <div className="space-y-1">
-            {tabHistory.length > 0 && isSidebarOpen && (
-              <motion.button
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                onClick={navigateBack}
-                className="w-full mb-6 flex items-center gap-4 px-4 py-4 text-gold border border-gold/20 bg-gold/5 hover:bg-gold/10 transition-all group overflow-hidden shadow-lg shadow-gold/5"
-              >
-                <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform shrink-0" />
-                <div className="text-left overflow-hidden">
-                   <p className="text-[7px] font-display uppercase tracking-widest font-black opacity-50 leading-none mb-1 text-gold">Return to</p>
-                   <p className="text-[10px] font-serif italic truncate text-white">{tabHistory[tabHistory.length-1].replace(/-/g, ' ')}</p>
-                </div>
-              </motion.button>
-            )}
             {navItems.map((item, index) => {
               const Icon = (item as any).icon;
               const isActive = activeTab === item.id;
@@ -3186,7 +3187,6 @@ export default function App() {
                   { id: "canary", label: "Wyndham Connect", icon: Globe, extraLabel: " (by Canary)" },
                   { id: "managed-cases", label: "My Request", icon: Send, disabled: true },
                   { id: "property-overview", label: "Property Management", icon: Hotel },
-                  { id: "duty-roster", label: "Duty Roster", icon: Calendar },
                   { id: "hrms", label: "Sign-In Information", icon: Users, disabled: true }
                 ].map((link) => {
                   const LinkIcon = link.icon;
@@ -3311,21 +3311,6 @@ export default function App() {
             <div className="h-6 w-px bg-slate-200 hidden md:block" />
             
             <div className="flex flex-col md:flex-row md:items-center truncate">
-              <AnimatePresence>
-                {activeTab !== "property-overview" && (
-                  <motion.button
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -10 }}
-                    onClick={navigateBack}
-                    className="flex items-center gap-3 mr-6 text-gold hover:text-white transition-all group px-4 py-2 bg-gold/10 border border-gold/30 rounded-none shadow-lg shadow-gold/5 active:scale-95"
-                  >
-                    <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-                    <span className="text-[11px] font-display uppercase tracking-[0.2em] font-black">Go Back</span>
-                  </motion.button>
-                )}
-              </AnimatePresence>
-              
               {transitionPhase === 'skeleton' ? (
                 <div className="flex items-center gap-4">
                   <div className="h-4 w-36 bg-slate-200 animate-pulse rounded-sm" />
@@ -4146,26 +4131,58 @@ export default function App() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                      {[
-                        { 
-                          id: "maintenance-checklist", 
-                          title: "Public Area Checklist", 
-                          desc: "Daily preventative maintenance for public spaces",
-                          cat: "DIGITAL / FILLABLE"
-                        },
-                        { 
-                          id: "maintenance-checklist-guest", 
-                          title: "Guest Room Checklist", 
-                          desc: "In-depth room condition and maintenance verification",
-                          cat: "DIGITAL / FILLABLE"
-                        },
-                        { 
-                          id: "concierge-checklist", 
-                          title: "Concierge & Porter Checklist", 
-                          desc: "Operational standards for guest service team",
-                          cat: "DIGITAL / FILLABLE"
+                      {(() => {
+                        const baseChecklists = [
+                          { 
+                            id: "maintenance-checklist", 
+                            title: "Public Area Checklist", 
+                            desc: "Daily preventative maintenance for public spaces",
+                            cat: "DIGITAL / FILLABLE"
+                          },
+                          { 
+                            id: "maintenance-checklist-guest", 
+                            title: "Guest Room Checklist", 
+                            desc: "In-depth room condition and maintenance verification",
+                            cat: "DIGITAL / FILLABLE"
+                          },
+                          { 
+                            id: "concierge-checklist", 
+                            title: "Concierge & Porter Checklist", 
+                            desc: "Operational standards for guest service team",
+                            cat: "DIGITAL / FILLABLE"
+                          }
+                        ];
+                        if (selectedCompany === "wyndham") {
+                          return [
+                            ...baseChecklists,
+                            {
+                              id: "wyndham-hk-supervisor",
+                              title: "Housekeeping Supervisor Daily Checklist",
+                              desc: "Daily tracking of staff grooming, store hygiene, and coordination",
+                              cat: "WYNDHAM HOUSEKEEPING"
+                            },
+                            {
+                              id: "wyndham-houseman",
+                              title: "Houseman Daily Checklist",
+                              desc: "Corridors, floor lobbies, linen bags and trash sorting",
+                              cat: "WYNDHAM HOUSEKEEPING"
+                            },
+                            {
+                              id: "wyndham-public-area",
+                              title: "Public Area Attendant Daily Checklist",
+                              desc: "Lobby, restroom sanitize, and exterior walkways pristine review",
+                              cat: "WYNDHAM HOUSEKEEPING"
+                            },
+                            {
+                              id: "wyndham-room-attendant",
+                              title: "Room Attendant Daily Checklist",
+                              desc: "Bed making standards, bathroom sanitization, and room layout audit",
+                              cat: "WYNDHAM HOUSEKEEPING"
+                            }
+                          ];
                         }
-                      ].map((item) => (
+                        return baseChecklists;
+                      })().map((item) => (
                         <motion.div
                           key={item.id}
                           whileHover={{ y: -5 }}
@@ -4198,7 +4215,7 @@ export default function App() {
                   </div>
                 )}
               </div>
-            ) : ["maintenance-checklist", "maintenance-checklist-guest", "concierge-checklist"].includes(activeTab) ? (
+            ) : ["maintenance-checklist", "maintenance-checklist-guest", "concierge-checklist", "wyndham-hk-supervisor", "wyndham-houseman", "wyndham-public-area", "wyndham-room-attendant"].includes(activeTab) ? (
               <div className="space-y-8 pb-32">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 no-print">
                   <div>
@@ -4206,6 +4223,10 @@ export default function App() {
                        <h2 className="text-3xl font-serif text-slate-900 italic">
                          {activeTab === "maintenance-checklist" ? "Public Areas Checklist" : 
                           activeTab === "maintenance-checklist-guest" ? "Guest Room Checklist" : 
+                          activeTab === "wyndham-hk-supervisor" ? "Housekeeping Supervisor Daily Checklist" :
+                          activeTab === "wyndham-houseman" ? "Houseman Daily Checklist" :
+                          activeTab === "wyndham-public-area" ? "Public Area Attendant Daily Checklist" :
+                          activeTab === "wyndham-room-attendant" ? "Room Attendant Daily Checklist" :
                           "Concierge & Porter Checklist"}
                        </h2>
                        <div className="h-0.5 w-12 bg-gold/30" />
@@ -4311,7 +4332,12 @@ export default function App() {
                                   <tr key={i} className="hover:bg-luxury-cream/20 transition-colors">
                                      <td className="px-8 py-6 font-serif text-slate-900 italic">{log.date}</td>
                                      <td className="px-8 py-6 text-[10px] font-bold text-gold uppercase tracking-widest">
-                                       {log.type === "public" ? "Public Area" : log.type === "guest" ? "Guest Room" : "Concierge"}
+                                       {log.type === "public" ? "Public Area" : 
+                                         log.type === "guest" ? "Guest Room" : 
+                                         log.type === "hk-supervisor" ? "HK Supervisor" : 
+                                         log.type === "houseman" ? "Houseman" : 
+                                         log.type === "public-area" ? "Public Area HK" : 
+                                         log.type === "room-attendant" ? "Room Attendant" : "Concierge"}
                                      </td>
                                      <td className="px-8 py-6 text-xs text-slate-500 font-display font-medium uppercase tracking-wider">
                                        {log.roomNumber || "N/A"}
@@ -4336,16 +4362,22 @@ export default function App() {
                         <div className="flex justify-between items-end mb-4">
                            <div>
                               <h1 className="text-2xl font-serif italic text-slate-900">
-                                {activeTab === "maintenance-checklist" ? "Public Areas Checklist" : 
-                                 activeTab === "maintenance-checklist-guest" ? "Guest Room Checklist" : 
-                                 "Concierge & Porter Checklist"}
+                                {activeTab === "maintenance-checklist" ? "Public Areas Checklist" :
+                          activeTab === "maintenance-checklist-guest" ? "Guest Room Checklist" :
+                          activeTab === "wyndham-hk-supervisor" ? "Housekeeping Supervisor Daily Checklist" :
+                          activeTab === "wyndham-houseman" ? "Houseman Daily Checklist" :
+                          activeTab === "wyndham-public-area" ? "Public Area Attendant Daily Checklist" :
+                          activeTab === "wyndham-room-attendant" ? "Room Attendant Daily Checklist" :
+                          "Concierge & Porter Checklist"}
                               </h1>
                               <p className="text-[10px] font-display uppercase tracking-widest text-gold font-bold">{currentCompany?.name || "CML"} PROPERTY REGISTRY</p>
                            </div>
                            <div className="text-right">
                               <p className="text-[9px] font-display uppercase tracking-widest text-slate-600 font-bold">Audit Registry Code</p>
                               <p className="text-xs font-mono font-bold text-slate-900">
-                                {activeTab === "maintenance-checklist-guest" ? `RM-CHKL-${checklistRoomNumber || 'N/A'}` : `CHKL-${activeTab.substring(12).toUpperCase()}`}
+                                {activeTab === "maintenance-checklist-guest" || activeTab === "wyndham-room-attendant" ? `RM-CHKL-${checklistRoomNumber || 'N/A'}` : 
+                                  activeTab.startsWith("wyndham-") ? `CHKL-${activeTab.replace("wyndham-", "").toUpperCase()}` : 
+                                  `CHKL-${activeTab.substring(12).toUpperCase()}`}
                               </p>
                            </div>
                         </div>
@@ -4353,7 +4385,7 @@ export default function App() {
                         <div className="grid grid-cols-4 gap-4 bg-slate-50/50 p-4 border border-slate-100 rounded-sm text-left">
                            <div>
                               <span className="block text-[8px] font-display uppercase tracking-widest text-slate-500 font-black">
-                                {activeTab === "maintenance-checklist-guest" ? "Room Number" : "Inspection Location"}
+                                {activeTab === "maintenance-checklist-guest" || activeTab === "wyndham-room-attendant" ? "Room Number" : "Inspection Location"}
                               </span>
                               <span className="text-xs font-serif italic font-bold text-slate-950 font-medium">{checklistRoomNumber || "Not Specified"}</span>
                            </div>
@@ -4377,21 +4409,22 @@ export default function App() {
                         <div className="flex items-center gap-2 border-b border-fold/10 pb-3">
                            <FileText size={16} className="text-gold" />
                            <h3 className="text-[11px] font-display uppercase tracking-widest font-black text-slate-800">
-                             {activeTab === "maintenance-checklist-guest" ? "Guest Room Registry Auditing" : 
-                              activeTab === "maintenance-checklist" ? "Public Area Inspection Details" : "Concierge Shift Specifications"}
+                             {activeTab === "maintenance-checklist-guest" || activeTab === "wyndham-room-attendant" ? "Room/Suite Registry Auditing" :
+                               activeTab.startsWith("wyndham-") ? "Wyndham Housekeeping Daily Details" :
+                               activeTab === "maintenance-checklist" ? "Public Area Inspection Details" : "Concierge Shift Specifications"}
                            </h3>
                         </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                            <div className="space-y-2">
                               <label className="block text-[9px] font-display uppercase tracking-widest font-black text-slate-800">
-                                {activeTab === "maintenance-checklist-guest" ? "Room Number *" : 
-                                 activeTab === "maintenance-checklist" ? "Inspection Location *" : "Assignment/Area *"}
+                                {activeTab === "maintenance-checklist-guest" || activeTab === "wyndham-room-attendant" ? "Room Number *" :
+                                  activeTab === "maintenance-checklist" ? "Inspection Location *" : "Assignment/Area *"}
                               </label>
                               <input 
                                  type="text" 
                                  required
-                                 placeholder={activeTab === "maintenance-checklist-guest" ? "e.g. 302, 415" : activeTab === "maintenance-checklist" ? "e.g. Lobby, Garden" : "e.g. Bell Desk, Valet"}
+                                 placeholder={activeTab === "maintenance-checklist-guest" || activeTab === "wyndham-room-attendant" ? "e.g. 302, 415" : activeTab === "maintenance-checklist" ? "e.g. Lobby, Garden" : "e.g. Bell Desk, Valet / HK Duty"}
                                  value={checklistRoomNumber}
                                  onChange={(e) => setChecklistRoomNumber(e.target.value)}
                                  className="w-full p-2.5 bg-white border border-slate-200 text-xs text-slate-900 font-serif italic focus:ring-1 focus:ring-gold focus:border-gold outline-none shadow-sm rounded-sm"
@@ -4494,6 +4527,162 @@ export default function App() {
                         {
                            title: "Pool & Mechanical",
                            items: ["Pool Container", "Gate/Lock", "Furniture", "Chemicals", "Pool deck", "Fence", "Lifesaving equipment", "Pump Room pressure", "Boiler operations"]
+                        }
+                      ] : activeTab === "wyndham-hk-supervisor" ? [
+                        {
+                          title: "Staff Attendance & Grooming Inspection",
+                          items: [
+                            "Staff roll call & shifts allocation",
+                            "Check uniform cleanliness & nametag",
+                            "Verify staff overall hygiene & grooming",
+                            "Ensure PPE (gloves/masks) issued",
+                            "Confirm radios & mobile devices active",
+                            "Review daily assignment sheets",
+                            "Discuss VIP arrivals & special requests",
+                            "Conduct motivational daily briefing"
+                          ]
+                        },
+                        {
+                          title: "Housekeeping Office & Store Inspection",
+                          items: [
+                            "Ensure office is clean & clutter-free",
+                            "Check store room shelving structure",
+                            "Verify chemical stocks & labeling",
+                            "Check vacuum cleaner operational state",
+                            "Inspect housekeeping trolleys & carts",
+                            "Verify lost and found registry update"
+                          ]
+                        },
+                        {
+                          title: "Daily Room Coordination & PMS",
+                          items: [
+                            "Review PMS vacant clean/inspected status",
+                            "Prioritize VIP and return rooms first",
+                            "Coordinate directly with Front Office",
+                            "Follow up on room attendant progress",
+                            "Confirm departures cleaned & inspected"
+                          ]
+                        },
+                        {
+                          title: "Corridor & Floor Area Inspection",
+                          items: [
+                            "Ensure guest corridors free of clutter",
+                            "Check secondary lighting & emergency signs",
+                            "Inspect wall paint & corner scuffs",
+                            "Verify fire exits clear of linen carts",
+                            "Ensure floor service rooms clean & locked"
+                          ]
+                        }
+                      ] : activeTab === "wyndham-houseman" ? [
+                        {
+                          title: "Start of Shift Preparation",
+                          items: [
+                            "Clock in on time in pristine uniform",
+                            "Receive shift assignment & master keys",
+                            "Prepare utility cart with heavy supplies"
+                          ]
+                        },
+                        {
+                          title: "Guest Room Assistance Support",
+                          items: [
+                            "Deliver heavy linens / rollaways to rooms",
+                            "Assist room attendants with heavy lifting",
+                            "Check baby cot availability & state"
+                          ]
+                        },
+                        {
+                          title: "Corridor & Walkway Cleaning",
+                          items: [
+                            "Vacuum corridors & lobby walk zones",
+                            "Dust baseboards, lamps, and wall art",
+                            "Spot clean lift doors & call frame buttons"
+                          ]
+                        },
+                        {
+                          title: "Linen & Garbage Handling",
+                          items: [
+                            "Collect dirty linen from floor carts",
+                            "Deliver fresh linen bales to floor stores",
+                            "Sort trash, recyclables, and cardboard",
+                            "Clear chute rooms & transport to compactor"
+                          ]
+                        }
+                      ] : activeTab === "wyndham-public-area" ? [
+                        {
+                          title: "Start of Shift Preparation",
+                          items: [
+                            "Clock in, check uniform, and collect keys",
+                            "Prepare public area chemical kits & mops"
+                          ]
+                        },
+                        {
+                          title: "Lobby & Reception Area Cleaning",
+                          items: [
+                            "Sanitize receptionist desk & counter glaze",
+                            "Polish main gold entrance door handles",
+                            "Vacuum high-traffic lobby carpets",
+                            "Wipe lounge tables, chairs & decorative items"
+                          ]
+                        },
+                        {
+                          title: "Public Restroom Maintenance",
+                          items: [
+                            "Sani-scrub public toilet bowl & urinal",
+                            "Wipe mirrors and chrome washbasin taps",
+                            "Check & refill liquid soap / tissues",
+                            "Mop restroom tiles & empty sanitary bins"
+                          ]
+                        },
+                        {
+                          title: "Poolside & Exterior Pathways",
+                          items: [
+                            "Wipe poolside lounges & clear dry leaves",
+                            "Inspect public bins & empty outdoor ashtrays",
+                            "Sweep beach boardwalks & entrance porch"
+                          ]
+                        }
+                      ] : activeTab === "wyndham-room-attendant" ? [
+                        {
+                          title: "Start of Shift Procedures",
+                          items: [
+                            "Clock in & review room assignment boards",
+                            "Sanitize trolley handle and stock amenities"
+                          ]
+                        },
+                        {
+                          title: "Room Entrance & Initial Check",
+                          items: [
+                            "Knock twice and announce 'Housekeeping'",
+                            "Check room lock handles & room numbers"
+                          ]
+                        },
+                        {
+                          title: "Bedroom Cleaning Procedures",
+                          items: [
+                            "Strip dirty linen & inspect mattress protectors",
+                            "Make the bed with signature Wyndham folds",
+                            "Check under bed for guest items or dust",
+                            "Dust nightstands, TV frame, lamp bases",
+                            "Clean mirror glaze & telephone receiver"
+                          ]
+                        },
+                        {
+                          title: "Bathroom Cleaning Procedures",
+                          items: [
+                            "Disinfect & scrub toilet, including the rim",
+                            "Scrub vanity basin & polish chrome taps",
+                            "Clean shower glass partitions (no streaks)",
+                            "Verify shower drain filter & water flow",
+                            "Replenish clean towels & vanity items"
+                          ]
+                        },
+                        {
+                          title: "Balcony & Final Finishes",
+                          items: [
+                            "Sweep balcony tiles & clean glass frame rails",
+                            "Vacuum carpets deeply, window track check",
+                            "Ensure AC operates and thermostat is nominal"
+                          ]
                         }
                       ] : activeTab === "maintenance-checklist-guest" ? [
                         {
@@ -4851,10 +5040,12 @@ export default function App() {
                        <button 
                           onClick={() => {
                              if (!checklistRoomNumber.trim()) {
-                               if (activeTab === "maintenance-checklist-guest") {
+                               if (activeTab === "maintenance-checklist-guest" || activeTab === "wyndham-room-attendant") {
                                  alert("Please specify the Room Number before submitting.");
                                } else if (activeTab === "maintenance-checklist") {
                                  alert("Please specify the Inspection Location before submitting.");
+                               } else if (activeTab.startsWith("wyndham-")) {
+                                 alert("Please specify the Inspection Assignment/Area before submitting.");
                                } else {
                                  alert("Please specify the Desk Assignment/Area before submitting.");
                                }
@@ -4868,7 +5059,11 @@ export default function App() {
                                inspectionType: checklistInspectionType,
                                shift: checklistShift,
                               type: activeTab === "maintenance-checklist" ? "public" : 
-                                    activeTab === "maintenance-checklist-guest" ? "guest" : "concierge",
+                                    activeTab === "maintenance-checklist-guest" ? "guest" : 
+                                    activeTab === "wyndham-hk-supervisor" ? "hk-supervisor" : 
+                                    activeTab === "wyndham-houseman" ? "houseman" : 
+                                    activeTab === "wyndham-public-area" ? "public-area" : 
+                                    activeTab === "wyndham-room-attendant" ? "room-attendant" : "concierge",
                               values: checklistValues,
                               notes: checklistNotes 
                             };
@@ -5180,16 +5375,12 @@ export default function App() {
                             </div>
 
                             <div className="space-y-2 border-b border-slate-100 pb-6">
-                               <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800">CML Portfolio Hotel/Property</label>
-                               <select 
-                                 value={complaintForm.propertyId || selectedCompany || 'wyndham'}
-                                 onChange={(e) => setComplaintForm({...complaintForm, propertyId: e.target.value})}
-                                 className="w-full bg-slate-50 border-none px-6 py-4 text-sm font-serif italic focus:ring-1 focus:ring-gold/50"
-                               >
-                                 <option value="wyndham">Wyndham Garden Wailoaloa Beach</option>
-                                 <option value="ramada">Ramada Suites by Wyndham Wailoaloa Beach</option>
-                                 <option value="cml">CML Corporate / Other</option>
-                               </select>
+                               <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800">CML Portfolio Hotel/Property (Authorized Login)</label>
+                               <div className="w-full bg-slate-50 border border-slate-100 rounded-sm px-6 py-4 text-sm font-serif italic text-slate-700 font-bold select-none">
+                                 {selectedCompany === 'ramada' ? "Ramada Suites by Wyndham Wailoaloa Beach" : 
+                                  selectedCompany === 'wyndham' ? "Wyndham Garden Wailoaloa Beach" : 
+                                  "CML Corporate / Other"}
+                               </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -5414,7 +5605,7 @@ export default function App() {
                                      </h4>
                                      <div className="space-y-6">
                                         <div className="space-y-4">
-                                           {(selectedComplaint.updates || []).map((update: any, i: number) => (
+                                           {(Array.isArray(selectedComplaint.updates) ? selectedComplaint.updates : []).map((update: any, i: number) => (
                                               <div key={i} className="flex gap-4 items-start">
                                                  <div className="w-8 h-8 rounded-sm bg-luxury-cream text-gold flex items-center justify-center shrink-0 text-[10px] font-black border border-gold/10">
                                                     {update.authorName?.[0] || 'S'}
@@ -5469,7 +5660,7 @@ export default function App() {
                                                     // Local state update for responsiveness
                                                     setSelectedComplaint((prev: any) => ({
                                                       ...prev,
-                                                      updates: [...(prev.updates || []), {
+                                                      updates: [...(Array.isArray(prev.updates) ? prev.updates : []), {
                                                         message: messageContent,
                                                         authorName: currentUser.displayName || currentUser.email?.split('@')[0],
                                                         timestamp: { toDate: () => new Date() }
@@ -5757,65 +5948,9 @@ export default function App() {
               </div>
             ) : activeTab === "hr" ? (
               <div className="space-y-8">
-                {/* Unified Forms Hub Navigation Switcher */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-2 no-print border-b border-gold/10 pb-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-12 no-print border-b border-gold/10 pb-6">
                   <div>
-                    <h2 className="text-4xl font-serif text-slate-900 mb-1 italic">Unified Forms Hub</h2>
-                    <p className="luxury-label !text-[11px] opacity-60">
-                      Access official templates, live Google analytics frameworks, and Interactive Forms Suite
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex border-b border-slate-200 gap-1 overflow-x-auto no-scrollbar no-print">
-                  <button
-                    onClick={() => setFormsViewMode("interactive")}
-                    className={cn(
-                      "px-6 py-3 text-[10px] font-display uppercase tracking-widest font-black transition-all border-b-2 -mb-px",
-                      formsViewMode === "interactive"
-                        ? "border-gold text-gold bg-gold/5"
-                        : "border-transparent text-slate-500 hover:text-slate-800"
-                    )}
-                  >
-                    Interactive Forms Suite
-                  </button>
-                  <button
-                    onClick={() => setFormsViewMode("google")}
-                    className={cn(
-                      "px-6 py-3 text-[10px] font-display uppercase tracking-widest font-black transition-all border-b-2 -mb-px flex items-center gap-2",
-                      formsViewMode === "google"
-                        ? "border-blue-600 text-blue-600 bg-blue-50/20"
-                        : "border-transparent text-slate-500 hover:text-slate-800"
-                    )}
-                  >
-                    Google Forms Integration
-                  </button>
-                  <button
-                    onClick={() => setFormsViewMode("registry")}
-                    className={cn(
-                      "px-6 py-3 text-[10px] font-display uppercase tracking-widest font-black transition-all border-b-2 -mb-px",
-                      formsViewMode === "registry"
-                        ? "border-emerald-600 text-emerald-600 bg-emerald-50/10"
-                        : "border-transparent text-slate-500 hover:text-slate-800"
-                    )}
-                  >
-                    WordPress Forms Registry
-                  </button>
-                </div>
-
-                {formsViewMode === "google" && (
-                  <GoogleFormsSuite companyId={selectedCompany || "cml"} />
-                )}
-
-                {formsViewMode === "interactive" && (
-                  <RamadaFormsSuite companySecret={selectedCompany === 'wyndham' ? 'wyndham' : 'ramada'} />
-                )}
-
-                {formsViewMode === "registry" && (
-                  <div className="space-y-8">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-12 no-print border-b border-gold/10 pb-6">
-                  <div>
-                    <h2 className="text-4xl font-serif text-slate-900 mb-2 italic">Forms Registry</h2>
+                    <h2 className="text-4xl font-serif text-slate-900 mb-2 italic">WordPress Forms Registry</h2>
                     <p className="luxury-label !text-[11px] opacity-60">
                       Access and submit internal property documentation and compliance forms via secure external portal
                     </p>
@@ -6102,8 +6237,6 @@ export default function App() {
                 </div>
               </div>
             </div>
-          )}
-        </div>
             ) : activeTab === "hotel-info" ? (
               <div className="space-y-8 pb-32">
                 {/* Header block with brand colors */}
