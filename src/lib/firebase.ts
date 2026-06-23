@@ -1,9 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-import firebaseConfig from "../../firebase-applet-config.json";
 
-// 1. Required Build Enums
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
@@ -13,25 +11,23 @@ export enum OperationType {
   WRITE = 'write',
 }
 
-// 2. Explicit Application Profiles
+// Complete updated team roster matching your raw spreadsheet input
 export const EXPLICIT_CREDENTIALS = [
-  { username: "Priyesh.Narayan", password: "CML2025!!", property: "cml", name: "Priyesh Narayan", email: "graphics@cml.com.fj" },
-  { username: "Rohit.Lal", password: "CML2026!!", property: "cml", name: "Rohit Lal", email: "rohit@cml.com.fj" },
-  { username: "Shahil.Sharma", password: "CML2026!!", property: "cml", name: "Shahil Sharma", email: "manageraccounts@cml.com.fj" },
-  { username: "Zaiba.Khan", password: "FLYAWAY2026!!", property: "cml", name: "Zaiba Khan", email: "accounts@cml.com.fj" },
-  { username: "Priyesh.Narayan.Ramada", password: "RAMADA2026!!", property: "ramada", name: "Priyesh Narayan", email: "graphics@cml.com.fj" },
-  { username: "Priyesh.Narayan.WG", password: "WG2026!!", property: "wyndham", name: "Priyesh Narayan", email: "graphics@cml.com.fj" },
-  { username: "Shwaran.Shivani", password: "CML2026!!", property: "cml", name: "Shwaran Shivani", email: "sales@cml.com.fj" },
-  { username: "John.Singh", password: "CML2026!!", property: "cml", name: "John Singh", email: "itmanager@cml.com.fj" },
-  { username: "Anjeshni.Devi", password: "FLYAWAY26!!", property: "cml", name: "Anjeshni Devi", email: "reservations@ramadawailoaloafiji.com" },
-  { username: "Charlene.Nand", password: "CHARLENE26!!", property: "ramada", name: "Charlene Nand", email: "MOD@ramadawailoaloafiji.com" },
-  { username: "Nolau.Malo", password: "RAMADA26!!", property: "ramada", name: "Nolau Malo", email: "roomsd@ramadawailoaloafiji.com" },
-  { username: "Neetisa.Devi", password: "CML2026!!", property: "cml", name: "Neetisa Devi", email: "hr@cml.com.fj" },
-  { username: "Charles.Cebujano", password: "Blukukurtz_8", property: "cml", name: "Charles Cebujano", email: "digitalmedia@cml.com.fj" },
-  { username: "Charles.Cebujano.WG", password: "WG123456!@", property: "wyndham", name: "Charles Cebujano", email: "cml@wyndhamgardenwailoaloafiji.com" }
+  { username: "Priyesh.Narayan", email: "graphics@cml.com.fj", password: "CML2025!!", property: "CML", name: "Priyesh Narayan" },
+  { username: "Rohit.Lal", email: "rohit@cml.com.fj", password: "CML2026!!", property: "CML", name: "Rohit Lal" },
+  { username: "Shahil.Sharma", email: "manageraccounts@cml.com.fj", password: "CML2026!!", property: "CML", name: "Shahil Sharma" },
+  { username: "Zaiba.Khan", email: "accounts@cml.com.fj", password: "FLYAWAY2026!!", property: "CML", name: "Zaiba Khan" },
+  { username: "Priyesh.Ramada", email: "graphics@cml.com.fj", password: "RAMADA2026!!", property: "Ramada", name: "Priyesh Narayan" },
+  { username: "Priyesh.WG", email: "graphics@cml.com.fj", password: "WG2026!!", property: "Wyndham Garden", name: "Priyesh Narayan" },
+  { username: "Shwaran.Shivani", email: "sales@cml.com.fj", password: "CML2026!!", property: "CML", name: "Shwaran Shivani" },
+  { username: "John.Singh", email: "itmanager@cml.com.fj", password: "CML2026!!", property: "CML", name: "John Singh" },
+  { username: "Anjeshni.Devi", email: "reservations@ramadawailoaloafiji.com", password: "FLYAWAY26!!", property: "CML", name: "Anjeshni Devi" },
+  { username: "Charlene.Nand", email: "MOD@ramadawailoaloafiji.com", password: "CHARLENE26!!", property: "Ramada", name: "Charlene Nand" },
+  { username: "Nolau.Malo", email: "roomsd@ramadawailoaloafiji.com", password: "RAMADA26!!", property: "Ramada", name: "Nolau Malo" },
+  { username: "Neetisa.Devi", email: "hr@cml.com.fj", password: "CML2026!!", property: "CML", name: "Neetisa Devi" },
+  { username: "Charles.Cebujano", email: "digitalmedia@cml.com.fj", password: "Blukukurtz_8", property: "CML", name: "Charles Cebujano" }
 ];
 
-// 3. Robust Mock References & Proxies to Prevent Runtime Crashes
 export class MockDocRef {
   type = 'document' as const;
   _isMock = true;
@@ -79,31 +75,42 @@ try {
   if (saved) Object.assign(MOCK_STORE, JSON.parse(saved));
 } catch (e) {}
 
-// 4. Custom Local Authentication Core
 export const auth = {
-  currentUser: null,
+  currentUser: null as any,
   onAuthStateChanged: (cb: any) => {
-    setTimeout(() => cb(null), 0);
+    setTimeout(() => cb(auth.currentUser), 0);
     return () => {};
   },
-  signInWithEmailAndPassword: async (email: string, pass: string) => {
-    const trimmed = (email || "").trim().toLowerCase();
+  signInWithEmailAndPassword: async (identifier: string, pass: string) => {
+    const trimmed = (identifier || "").trim().toLowerCase();
+    
+    // Looks for user profile matching either username or corporate email case-insensitively
     const matched = EXPLICIT_CREDENTIALS.find(u => 
-      (u.username.toLowerCase() === trimmed || u.email.toLowerCase() === trimmed) && u.password === pass
+      u.username.toLowerCase() === trimmed || 
+      u.email.toLowerCase() === trimmed
     );
+
+    if (!matched || matched.password !== pass) {
+      throw new Error("Invalid username/email combination or incorrect security password entry.");
+    }
+
     const mockUser = {
-      uid: matched ? `user_${matched.username.toLowerCase()}` : "mock-uid",
-      email: matched ? matched.email : email,
-      displayName: matched ? matched.name : "Mock User"
+      uid: `user_${matched.username.toLowerCase()}`,
+      email: matched.email,
+      displayName: matched.name,
+      photoURL: matched.property
     };
+
+    auth.currentUser = mockUser;
     return { user: mockUser };
   },
-  signOut: async () => {}
+  signOut: async () => {
+    auth.currentUser = null;
+  }
 };
 
 export const db = { _isMock: true };
 
-// 5. Functional Export Mappings Required by App Components
 export const onAuthStateChanged = (arg1: any, arg2?: any) => {
   const cb = typeof arg1 === 'function' ? arg1 : arg2;
   return auth.onAuthStateChanged(cb);
@@ -140,4 +147,4 @@ export const handleFirestoreError = (err: any, op: OperationType, path?: string)
 export const loginWithEmail = async (e: string, p: string) => auth.signInWithEmailAndPassword(e, p);
 export const registerWithEmail = async (e: string, p: string) => auth.signInWithEmailAndPassword(e, p);
 export const logout = async () => auth.signOut();
-export const resetPassword = async (email: string) => Promise.resolve(); // Resolves binding block in LoginPage.tsx
+export const resetPassword = async (email: string) => Promise.resolve();

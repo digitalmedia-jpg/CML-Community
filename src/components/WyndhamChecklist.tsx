@@ -28,7 +28,6 @@ interface ChecklistSection {
   items: ChecklistItem[];
 }
 
-// Available Forms Matching Provided Templates
 type RoleType = "porter" | "housekeeping" | "maintenance" | "houseman" | "public_area" | "property_officer" | "duty_manager" | "hotel_manager" | "hr_compliance";
 
 export default function WyndhamChecklist({ selectionProperty }: { selectionProperty: string }) {
@@ -39,23 +38,19 @@ export default function WyndhamChecklist({ selectionProperty }: { selectionPrope
   const [date, setDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [concernsNotes, setConcernsNotes] = useState<string>("");
   
-  // Signature Drawing State
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSigned, setHasSigned] = useState(false);
   
-  // Submit state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionComplete, setSubmissionComplete] = useState(false);
 
-  // Load staff name from logged in user if available
   useEffect(() => {
     if (auth.currentUser?.displayName) {
       setStaffName(auth.currentUser.displayName);
     }
   }, []);
 
-  // Form Definitions Mapping User Uploads
   const [porterSections, setPorterSections] = useState<ChecklistSection[]>([
     {
       title: "1. Attendance & Shift Readiness",
@@ -163,7 +158,6 @@ export default function WyndhamChecklist({ selectionProperty }: { selectionPrope
     }
   ]);
 
-  // Dynamic Section Strategy Resolver
   const getActiveDataset = (): ChecklistSection[] => {
     switch(selectedRole) {
       case "housekeeping": return hkSections;
@@ -193,8 +187,6 @@ export default function WyndhamChecklist({ selectionProperty }: { selectionPrope
   };
 
   const activeSections = getActiveDataset();
-
-  // Metrics Calculations
   const totalItems = activeSections.reduce((acc, sec) => acc + sec.items.length, 0);
   const checkedItems = activeSections.reduce((acc, sec) => acc + sec.items.filter(i => i.checked).length, 0);
   const percentComplete = totalItems > 0 ? Math.round((checkedItems / totalItems) * 100) : 0;
@@ -213,7 +205,6 @@ export default function WyndhamChecklist({ selectionProperty }: { selectionPrope
     updateActiveDataset(updated);
   };
 
-  // Canvas Drawing Actions
   const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -256,7 +247,6 @@ export default function WyndhamChecklist({ selectionProperty }: { selectionPrope
     setHasSigned(false);
   };
 
-  // Submission Pipeline Dispatching Alerts
   const handleSubmitChecklist = async () => {
     setIsSubmitting(true);
     try {
@@ -275,7 +265,6 @@ export default function WyndhamChecklist({ selectionProperty }: { selectionPrope
         notes: concernsNotes,
         signatureBase64: signatureDataUrl,
         submittedAt: new Date().toISOString(),
-        // System alerts targets requested by administration
         dispatchRecipients: ["digitalmedia@cml.com.fj", "graphics@cml.com.fj"],
         meta: {
           userAgent: navigator.userAgent,
@@ -317,17 +306,17 @@ export default function WyndhamChecklist({ selectionProperty }: { selectionPrope
   return (
     <div className="max-w-3xl mx-auto px-3 py-4 space-y-4 font-sans text-slate-800 select-none">
       
-      {/* ================= STANDARD HEADER ================= */}
+      {/* STANDARD HEADER */}
       <div className="bg-[#041e42] text-white p-4 text-center relative border-b-4 border-[#0b5c4b] shadow-sm rounded-t-md">
         <div className="flex items-center justify-center gap-2 mb-1">
           <Hotel size={20} className="text-amber-400" />
-          <span className="text-[10px] tracking-widest uppercase font-black tracking-wider text-amber-400">Wyndham Garden Hotel Group</span>
+          <span className="text-[10px] tracking-widest uppercase font-black text-amber-400">Wyndham Garden Hotel Group</span>
         </div>
         <h1 className="text-base font-extrabold tracking-tight">Compliance & Operational Audit Log</h1>
         <p className="text-[9px] text-slate-300 italic mt-0.5">Brand compliance inspection standards & digital validation workflow</p>
       </div>
 
-      {/* Form Selector Carousel — Highly Finger-Tap Friendly on Phones */}
+      {/* Form Selector Carousel */}
       <div className="bg-white p-3 border border-slate-200 space-y-2 rounded-md shadow-sm">
         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block flex items-center gap-1.5">
           <FileText size={12} className="text-[#0b5c4b]" /> Choose Active Target Form Template:
@@ -360,7 +349,7 @@ export default function WyndhamChecklist({ selectionProperty }: { selectionPrope
         </div>
       </div>
 
-      {/* Operational Parameters Blocks */}
+      {/* Parameters Blocks */}
       <div className="bg-white p-4 border border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-3 rounded-md shadow-sm">
         <div>
           <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Staff Member Name</label>
@@ -370,7 +359,7 @@ export default function WyndhamChecklist({ selectionProperty }: { selectionPrope
               type="text"
               value={staffName}
               onChange={(e) => setStaffName(e.target.value)}
-              placeholder="Enter text name"
+              placeholder="Enter name"
               className="w-full bg-slate-50 border border-slate-200 rounded pl-7 pr-2 py-2 text-xs font-semibold focus:outline-none focus:border-[#0b5c4b]"
             />
           </div>
@@ -423,7 +412,7 @@ export default function WyndhamChecklist({ selectionProperty }: { selectionPrope
         </div>
       </div>
 
-      {/* Persistent Mobile Sticky Metrics Tracker */}
+      {/* Sticky Metrics Tracker */}
       <div className="bg-slate-900 text-white p-3 flex items-center justify-between sticky top-2 z-40 rounded-md shadow-md border-l-4 border-amber-400">
         <div className="flex items-center gap-2">
           <ClipboardCheck className="text-amber-400" size={18} />
@@ -442,35 +431,33 @@ export default function WyndhamChecklist({ selectionProperty }: { selectionPrope
         </div>
       </div>
 
-      {/* Main Form Fields Checklist Criteria Cards Container */}
+      {/* Checklist Cards Container */}
       <div className="space-y-4">
         {activeSections.map((section, sectionIdx) => (
           <div key={section.title} className="bg-white border border-slate-200 overflow-hidden rounded-md shadow-sm">
             
-            {/* Section Header with Quick Tap Select-All functionality */}
             <div className="bg-slate-50 px-3 py-2.5 border-b border-slate-200 flex items-center justify-between gap-2">
               <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">{section.title}</h3>
               <button
                 type="button"
                 onClick={() => handleToggleSectionAll(sectionIdx)}
-                className="text-[10px] font-bold bg-slate-200 text-slate-600 hover:bg-slate-300 px-2.5 py-1 rounded transition-all active:scale-95"
+                className="text-[10px] font-bold bg-slate-200 text-slate-600 hover:bg-slate-300 px-2.5 py-1 rounded transition-all"
               >
                 Select/Check All
               </button>
             </div>
 
-            {/* Checklist List Target Blocks */}
             <div className="divide-y divide-slate-100">
               {section.items.map((item, itemIdx) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => handleToggleItem(sectionIdx, itemIdx)}
-                  className={`w-full text-left p-3.5 flex items-start gap-3 transition-colors active:bg-slate-100 ${
+                  className={`w-full text-left p-3.5 flex items-start gap-3 transition-colors ${
                     item.checked ? "bg-emerald-50/40" : "hover:bg-slate-50/50"
                   }`}
                 >
-                  <div className="shrink-0 mt-0.5 transition-transform duration-100 active:scale-90">
+                  <div className="shrink-0 mt-0.5">
                     {item.checked ? (
                       <CheckSquare className="text-[#0b5c4b]" size={20} />
                     ) : (
@@ -478,7 +465,7 @@ export default function WyndhamChecklist({ selectionProperty }: { selectionPrope
                     )}
                   </div>
                   <span className={`text-xs leading-relaxed font-medium transition-all ${
-                    item.checked ? "text-slate-500 line-through decoration-emerald-600/30 font-normal" : "text-slate-700"
+                    item.checked ? "text-slate-400 line-through font-normal" : "text-slate-700"
                   }`}>
                     {item.text}
                   </span>
@@ -490,7 +477,7 @@ export default function WyndhamChecklist({ selectionProperty }: { selectionPrope
         ))}
       </div>
 
-      {/* Concerns & Logs Input Field Box */}
+      {/* Concerns Log Input */}
       <div className="bg-white p-4 border border-slate-200 space-y-2 rounded-md shadow-sm">
         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
           Operational Concerns, Actions or Recommendations Log
@@ -500,11 +487,11 @@ export default function WyndhamChecklist({ selectionProperty }: { selectionPrope
           value={concernsNotes}
           onChange={(e) => setConcernsNotes(e.target.value)}
           placeholder="Type any concerns or notes recorded during the shift..."
-          className="w-full bg-slate-50 border border-slate-200 rounded p-2.5 text-xs font-medium focus:outline-none focus:border-[#0b5c4b] placeholder:text-slate-400"
+          className="w-full bg-slate-50 border border-slate-200 rounded p-2.5 text-xs font-medium focus:outline-none focus:border-[#0b5c4b]"
         />
       </div>
 
-      {/* ================= STANDARD FOOTER & COMPLIANCE SIGN-OFF ================= */}
+      {/* FOOTER & SIGN-OFF */}
       <div className="bg-white border border-slate-200 p-4 rounded-md shadow-sm space-y-4">
         
         <div className="border-b border-slate-100 pb-2">
@@ -514,7 +501,6 @@ export default function WyndhamChecklist({ selectionProperty }: { selectionPrope
           </p>
         </div>
 
-        {/* Signature Digital Canvas Block */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-slate-400 uppercase">Draw Signature (Use Touchscreen/Finger)</span>
@@ -551,7 +537,6 @@ export default function WyndhamChecklist({ selectionProperty }: { selectionPrope
           </div>
         </div>
 
-        {/* Submit Execution Trigger Action Button */}
         <div className="pt-2">
           <button
             type="button"
@@ -578,7 +563,6 @@ export default function WyndhamChecklist({ selectionProperty }: { selectionPrope
           )}
         </div>
 
-        {/* Standard Brand Footer Tags */}
         <div className="text-center pt-2 border-t border-slate-100 flex flex-col items-center justify-center gap-0.5">
           <span className="text-[10px] font-bold text-slate-500">wyndhamgardenwailoaloafiji.com</span>
           <span className="text-[8px] tracking-wider text-slate-400 font-medium uppercase">relax, you're here</span>
