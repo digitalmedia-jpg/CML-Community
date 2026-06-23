@@ -14,8 +14,7 @@ import {
   CheckCircle,
   FileText
 } from "lucide-react";
-import { db, auth } from "../lib/firebase";
-import { collection, addDoc } from "firebase/firestore";
+import { db, auth, collection, addDoc } from "../lib/firebase";
 
 interface ChecklistItem {
   id: string;

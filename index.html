@@ -26,11 +26,21 @@
   <body>
     <script>
       window.addEventListener('error', function(event) {
-        // Ignore benign development-only HMR/websocket/Vite connection errors
+        // Ignore benign development-only HMR/websocket/Vite connection errors and third-party script/extension errors
         var msgStr = event.message || '';
         var filenameStr = event.filename || '';
-        if (msgStr.indexOf('vite') !== -1 || msgStr.indexOf('websocket') !== -1 || filenameStr.indexOf('vite') !== -1) {
-          console.warn("[Vite HMR] Supressed benign dev error:", msgStr, "from", filenameStr);
+        
+        if (
+          !filenameStr || 
+          msgStr === 'Script error.' || 
+          msgStr.indexOf('vite') !== -1 || 
+          msgStr.indexOf('websocket') !== -1 || 
+          filenameStr.indexOf('vite') !== -1 ||
+          filenameStr.indexOf('chrome-extension') !== -1 ||
+          filenameStr.indexOf('moz-extension') !== -1 ||
+          event.lineno === 0
+        ) {
+          console.warn("[Benign/Third-Party/HMR] Suppressed error overlay for non-app boundary exception:", msgStr, "at", filenameStr);
           return;
         }
 
@@ -51,10 +61,17 @@
         errDiv.appendChild(msg);
       });
       window.addEventListener('unhandledrejection', function(event) {
-        // Ignore benign development-only HMR/websocket/Vite connection promise rejections
+        // Ignore benign development-only HMR/websocket/Vite connection promise rejections and extension errors
         var reasonStr = event.reason ? (event.reason.stack || event.reason.message || String(event.reason)) : '';
-        if (reasonStr.indexOf('vite') !== -1 || reasonStr.indexOf('websocket') !== -1 || reasonStr.indexOf('ws://') !== -1) {
-          console.warn("[Vite HMR] Suppressed benign dev promise rejection:", reasonStr);
+        if (
+          !reasonStr ||
+          reasonStr.indexOf('vite') !== -1 || 
+          reasonStr.indexOf('websocket') !== -1 || 
+          reasonStr.indexOf('ws://') !== -1 ||
+          reasonStr.indexOf('chrome-extension') !== -1 ||
+          reasonStr.indexOf('moz-extension') !== -1
+        ) {
+          console.warn("[Benign/Third-Party/HMR] Suppressed unhandled rejection warning:", reasonStr);
           return;
         }
 
