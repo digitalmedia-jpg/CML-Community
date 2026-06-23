@@ -11,7 +11,7 @@ export enum OperationType {
   WRITE = 'write',
 }
 
-// Complete updated team roster matching your raw spreadsheet input
+// Complete updated team roster matching your explicit spreadsheet input
 export const EXPLICIT_CREDENTIALS = [
   { username: "Priyesh.Narayan", email: "graphics@cml.com.fj", password: "CML2025!!", property: "CML", name: "Priyesh Narayan" },
   { username: "Rohit.Lal", email: "rohit@cml.com.fj", password: "CML2026!!", property: "CML", name: "Rohit Lal" },
@@ -82,16 +82,18 @@ export const auth = {
     return () => {};
   },
   signInWithEmailAndPassword: async (identifier: string, pass: string) => {
-    const trimmed = (identifier || "").trim().toLowerCase();
+    // Clean up input variations (lowercase, remove phone trailing spaces)
+    const trimmedInput = (identifier || "").trim().toLowerCase();
+    const cleanPassword = (pass || "").trim();
     
-    // Looks for user profile matching either username or corporate email case-insensitively
+    // Scan table for matches against BOTH username or email properties
     const matched = EXPLICIT_CREDENTIALS.find(u => 
-      u.username.toLowerCase() === trimmed || 
-      u.email.toLowerCase() === trimmed
+      u.username.toLowerCase() === trimmedInput || 
+      u.email.toLowerCase() === trimmedInput
     );
 
-    if (!matched || matched.password !== pass) {
-      throw new Error("Invalid username/email combination or incorrect security password entry.");
+    if (!matched || matched.password !== cleanPassword) {
+      throw new Error("Invalid login identifier or incorrect password entry.");
     }
 
     const mockUser = {
