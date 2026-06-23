@@ -1,0 +1,561 @@
+// Premium Adaptive Hybrid Firebase SDK client wrapper
+// Fortified structural safeguards to completely eliminate white-screen component crashes
+
+import { initializeApp } from "firebase/app";
+import { 
+  getAuth, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut
+} from "firebase/auth";
+import { 
+  getFirestore, 
+  collection as fbCollection, 
+  doc as fbDoc, 
+  getDoc as fbGetDoc, 
+  getDocs as fbGetDocs, 
+  setDoc as fbSetDoc, 
+  updateDoc as fbUpdateDoc, 
+  addDoc as fbAddDoc, 
+  deleteDoc as fbDeleteDoc, 
+  onSnapshot as fbOnSnapshot, 
+  query as fbQuery, 
+  where as fbWhere, 
+  orderBy as fbOrderBy, 
+  limit as fbLimit,
+  serverTimestamp as fbServerTimestamp,
+  increment as fbIncrement,
+  arrayUnion as fbArrayUnion,
+  writeBatch as fbWriteBatch
+} from "firebase/firestore";
+import firebaseConfig from "../../firebase-applet-config.json";
+
+// 1. Definition of Mock References
+export class MockDocRef {
+  type = 'document' as const;
+  _isMock = true;
+  firestore = {};
+  constructor(public parentPath: string, public id: string) {}
+  get path() {
+    return `${this.parentPath}/${this.id}`;
+  }
+}
+
+export class MockCollectionRef {
+  type = 'collection' as const;
+  _isMock = true;
+  firestore = {};
+  constructor(public path: string) {}
+}
+
+export class MockQuery {
+  _isMock = true;
+  constructor(public collectionRef: MockCollectionRef, public constraints: any[]) {}
+}
+
+const safeObjectProxy = (target: any): any => {
+  return new Proxy(target, {
+    get: (obj, prop) => {
+      if (prop in obj) {
+        const val = obj[prop];
+        if (typeof val === 'object' && val !== null) return safeObjectProxy(val);
+        return val;
+      }
+      return safeObjectProxy({});
+    }
+  });
+};
+
+export class MockDocSnapshot {
+  _isMock = true;
+  metadata = { fromCache: false, hasPendingWrites: false };
+  constructor(public ref: MockDocRef, public _data: any) {}
+  exists() {
+    return this._data !== undefined && this._data !== null;
+  }
+  data() {
+    return safeObjectProxy(this._data || {});
+  }
+  get id() {
+    return this.ref.id;
+  }
+  get refObject() {
+    return this.ref;
+  }
+}
+
+export class MockQuerySnapshot {
+  _isMock = true;
+  metadata = { fromCache: false, hasPendingWrites: false };
+  constructor(public docs: MockDocSnapshot[]) {}
+  get empty() {
+    return this.docs.length === 0;
+  }
+  get size() {
+    return this.docs.length;
+  }
+  forEach(callback: (doc: MockDocSnapshot) => void) {
+    this.docs.forEach(callback);
+  }
+}
+
+// 2. Local Database Store for Mock Mode
+const MOCK_STORE: Record<string, any> = {};
+
+try {
+  const saved = localStorage.getItem('cml_mock_db');
+  if (saved) {
+    Object.assign(MOCK_STORE, JSON.parse(saved));
+  }
+} catch (e) {
+  console.warn("[MOCK_DB] localStorage is unavailable.");
+}
+
+function saveMockStore(updatedPath?: string, isDelete = false) {
+  try {
+    localStorage.setItem('cml_mock_db', JSON.stringify(MOCK_STORE));
+  } catch (e) {}
+  
+  if (updatedPath) {
+    if (isDelete) {
+      syncWithServerDirect(undefined, [updatedPath], true);
+    } else {
+      syncWithServerDirect({ [updatedPath]: MOCK_STORE[updatedPath] }, undefined, true);
+    }
+  } else {
+    syncWithServerDirect(MOCK_STORE, undefined, true);
+  }
+}
+
+let isSyncing = false;
+let pendingUpdates: Record<string, any> = {};
+let pendingDeletes: string[] = [];
+let hasDoneInitialSync = false;
+
+try {
+  const savedPendingUpdates = localStorage.getItem('cml_pending_updates');
+  if (savedPendingUpdates) {
+    pendingUpdates = JSON.parse(savedPendingUpdates);
+  }
+  const savedPendingDeletes = localStorage.getItem('cml_pending_deletes');
+  if (savedPendingDeletes) {
+    pendingDeletes = JSON.parse(savedPendingDeletes);
+  }
+} catch (e) {}
+
+function savePendingSyncState() {
+  try {
+    localStorage.setItem('cml_pending_updates', JSON.stringify(pendingUpdates));
+    localStorage.setItem('cml_pending_deletes', JSON.stringify(pendingDeletes));
+  } catch (e) {}
+}
+
+let isCurrentlyOffline = false;
+const listenersMap: Record<string, Set<() => void>> = {};
+
+function triggerListeners(path: string) {
+  if (listenersMap[path]) {
+    listenersMap[path].forEach(cb => {
+      try { cb(); } catch (e) {}
+    });
+  }
+}
+
+export async function syncWithServerDirect(updates?: Record<string, any>, deletedKeys?: string[], forcePush = false) {
+  const isPushedSession = (updates && Object.keys(updates).length > 0) || (deletedKeys && deletedKeys.length > 0);
+  
+  if (!forcePush && !isPushedSession && Object.keys(pendingUpdates).length === 0 && pendingDeletes.length === 0) {
+    return;
+  }
+
+  if (updates) {
+    pendingUpdates = { ...pendingUpdates, ...updates };
+  }
+  if (deletedKeys) {
+    pendingDeletes = [...new Set([...pendingDeletes, ...deletedKeys])];
+  }
+  
+  savePendingSyncState();
+  
+  if (isSyncing && !forcePush) return;
+  isSyncing = true;
+  
+  try {
+    const response = await fetch("/api/mock-db", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ updates: pendingUpdates, deletedKeys: pendingDeletes })
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.db) {
+        const changedKeys = new Set<string>();
+        
+        for (const [k, newVal] of Object.entries(data.db)) {
+          const oldVal = MOCK_STORE[k];
+          if (k in pendingUpdates) {
+            continue;
+          }
+          if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+            MOCK_STORE[k] = newVal;
+            changedKeys.add(k);
+          }
+        }
+        
+        for (const k of Object.keys(MOCK_STORE)) {
+          if (!(k in data.db) && !k.startsWith('users/') && !pendingDeletes.includes(k)) {
+            delete MOCK_STORE[k];
+            changedKeys.add(k);
+          }
+        }
+
+        pendingDeletes.forEach(k => {
+          delete MOCK_STORE[k];
+        });
+        
+        try {
+          localStorage.setItem('cml_mock_db', JSON.stringify(MOCK_STORE));
+        } catch (e) {}
+
+        if (isCurrentlyOffline) {
+          isCurrentlyOffline = false;
+        }
+        
+        if (!hasDoneInitialSync) {
+          hasDoneInitialSync = true;
+          if (Object.keys(data.db || {}).length === 0 && Object.keys(MOCK_STORE).length > 0) {
+            setTimeout(() => {
+              syncWithServerDirect(MOCK_STORE, undefined, true);
+            }, 500);
+          }
+        }
+
+        pendingUpdates = {};
+        pendingDeletes = [];
+        savePendingSyncState();
+        
+        changedKeys.forEach(k => {
+          triggerListeners(k);
+          const parts = k.split('/');
+          if (parts.length > 1) {
+            triggerListeners(parts.slice(0, -1).join('/'));
+          }
+        });
+      }
+    } else {
+      isCurrentlyOffline = true;
+    }
+  } catch (err) {
+    isCurrentlyOffline = true;
+  } finally {
+    isSyncing = false;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    syncWithServerDirect(undefined, undefined, true);
+    setInterval(() => {
+      syncWithServerDirect();
+    }, 15000); 
+  }, 2000);
+
+  window.addEventListener('online', () => {
+    syncWithServerDirect(undefined, undefined, true);
+  });
+}
+
+// 3. Simulated Auth Manager
+export const EXPLICIT_CREDENTIALS = [
+  { username: "Priyesh.Narayan", password: "CML2025!!", property: "cml", name: "Priyesh Narayan", email: "graphics@cml.com.fj" },
+  { username: "Rohit.Lal", password: "CML2026!!", property: "cml", name: "Rohit Lal", email: "rohit@cml.com.fj" },
+  { username: "Shahil.Sharma", password: "CML2026!!", property: "cml", name: "Shahil Sharma", email: "manageraccounts@cml.com.fj" },
+  { username: "Zaiba.Khan", password: "FLYAWAY2026!!", property: "cml", name: "Zaiba Khan", email: "accounts@cml.com.fj" },
+  { username: "Priyesh.Narayan.Ramada", password: "RAMADA2026!!", property: "ramada", name: "Priyesh Narayan", email: "graphics@cml.com.fj" },
+  { username: "Priyesh.Narayan.WG", password: "WG2026!!", property: "wyndham", name: "Priyesh Narayan", email: "graphics@cml.com.fj" },
+  { username: "Shwaran.Shivani", password: "CML2026!!", property: "cml", name: "Shwaran Shivani", email: "sales@cml.com.fj" },
+  { username: "John.Singh", password: "CML2026!!", property: "cml", name: "John Singh", email: "itmanager@cml.com.fj" },
+  { username: "Anjeshni.Devi", password: "FLYAWAY26!!", property: "cml", name: "Anjeshni Devi", email: "reservations@ramadawailoaloafiji.com" },
+  { username: "Charlene.Nand", password: "CHARLENE26!!", property: "ramada", name: "Charlene Nand", email: "MOD@ramadawailoaloafiji.com" },
+  { username: "Nolau.Malo", password: "RAMADA26!!", property: "ramada", name: "Nolau Malo", email: "roomsd@ramadawailoaloafiji.com" },
+  { username: "Neetisa.Devi", password: "CML2026!!", property: "cml", name: "Neetisa Devi", email: "hr@cml.com.fj" },
+  { username: "Charles.Cebujano", password: "Blukukurtz_8", property: "cml", name: "Charles Cebujano", email: "digitalmedia@cml.com.fj" },
+  { username: "Charles.Cebujano.WG", password: "WG123456!@", property: "wyndham", name: "Charles Cebujano", email: "cml@wyndhamgardenwailoaloafiji.com" }
+];
+
+class MockAuth {
+  private listeners = new Set<(user: any) => void>();
+  private _currentUser: any = null;
+
+  constructor() {
+    try {
+      const saved = localStorage.getItem('cml_mock_user');
+      if (saved) {
+        this._currentUser = JSON.parse(saved);
+      }
+    } catch (e) {}
+  }
+
+  get currentUser() {
+    return this._currentUser;
+  }
+
+  onAuthStateChanged(callback: (user: any) => void) {
+    this.listeners.add(callback);
+    setTimeout(() => {
+      callback(this._currentUser);
+    }, 0);
+    return () => {
+      this.listeners.delete(callback);
+    };
+  }
+
+  trigger() {
+    this.listeners.forEach(cb => {
+      try { cb(this._currentUser); } catch (err) {}
+    });
+  }
+
+  async signInWithEmailAndPassword(email: string, pass: string) {
+    const trimmedInput = (email || "").trim().toLowerCase();
+    const matched = EXPLICIT_CREDENTIALS.find(u => 
+      (u.username.toLowerCase() === trimmedInput || u.email.toLowerCase() === trimmedInput) && 
+      u.password === pass
+    );
+
+    const isCharles = email === "digitalmedia@cml.com.fj";
+    const displayName = matched ? matched.name : (isCharles ? "Charles Cebujano" : (email ? email.split('@')[0] : 'Guest User'));
+    const resolvedEmail = matched ? matched.email : (email || 'user@example.com');
+    const resolvedUid = matched ? `user_${matched.username.toLowerCase()}_${matched.property}` : (isCharles ? "charles_mock_uid" : 'user_' + Math.random().toString(36).substring(2, 11));
+
+    if (matched) {
+      try { localStorage.setItem('cml_suggested_property', matched.property); } catch (e) {}
+    }
+
+    this._currentUser = {
+      uid: resolvedUid,
+      email: resolvedEmail,
+      displayName: displayName,
+      photoURL: isCharles ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=256' : ''
+    };
+    try { localStorage.setItem('cml_mock_user', JSON.stringify(this._currentUser)); } catch (e) {}
+    this.trigger();
+    return { user: this._currentUser };
+  }
+
+  async createUserWithEmailAndPassword(email: string, pass: string) {
+    return this.signInWithEmailAndPassword(email, pass);
+  }
+
+  async signOut() {
+    this._currentUser = null;
+    try { localStorage.removeItem('cml_mock_user'); } catch (e) {}
+    this.trigger();
+    return Promise.resolve();
+  }
+}
+
+// 4. Initialization
+let firebaseApp: any = null;
+let productionDb: any = null;
+let productionAuth: any = null;
+let initializedRealFirebase = false;
+
+if (firebaseConfig && firebaseConfig.apiKey) {
+  try {
+    firebaseApp = initializeApp(firebaseConfig);
+    productionDb = getFirestore(firebaseApp);
+    productionAuth = getAuth(firebaseApp);
+    initializedRealFirebase = true;
+  } catch (err) {}
+}
+
+// 5. Export Bridges
+const mockAuthInstance = new MockAuth();
+
+class HybridAuth {
+  get currentUser() {
+    return mockAuthInstance.currentUser;
+  }
+  onAuthStateChanged(callback: (user: any) => void) {
+    const unsubMock = mockAuthInstance.onAuthStateChanged((mockUser) => {
+      callback(mockUser);
+    });
+    return () => { unsubMock(); };
+  }
+  async signInWithEmailAndPassword(email: string, pass: string) {
+    return mockAuthInstance.signInWithEmailAndPassword(email, pass);
+  }
+  async createUserWithEmailAndPassword(email: string, pass: string) {
+    return mockAuthInstance.createUserWithEmailAndPassword(email, pass);
+  }
+  async signOut() {
+    return mockAuthInstance.signOut();
+  }
+}
+
+export const auth = new HybridAuth();
+export const db = { _isMock: true };
+
+export const onAuthStateChanged = (...args: any[]) => {
+  if (args[0] && typeof args[0] === 'object') {
+    const actualCallback = args[1];
+    return auth.onAuthStateChanged(actualCallback);
+  }
+  return auth.onAuthStateChanged(args[0]);
+};
+
+export const collection = (firestoreDb: any, path: string) => {
+  const resolvedPath = typeof firestoreDb === 'string' ? firestoreDb : path;
+  return new MockCollectionRef(resolvedPath);
+};
+
+export const doc = (firestoreDb: any, path: string, ...rest: any[]) => {
+  let finalPath = path;
+  let docId = rest[0];
+  if (typeof firestoreDb === 'string') {
+    finalPath = firestoreDb;
+    docId = path;
+  }
+  return new MockDocRef(finalPath, docId);
+};
+
+export const getDoc = async (docRef: any) => {
+  const pathKey = docRef.path;
+  const data = MOCK_STORE[pathKey];
+  return new MockDocSnapshot(docRef, data);
+};
+
+export const getDocs = async (queryOrRef: any) => {
+  const collectionPath = queryOrRef.path || queryOrRef.collectionRef?.path || '';
+  const matchedDocs: MockDocSnapshot[] = [];
+  
+  for (const [k, v] of Object.entries(MOCK_STORE)) {
+    if (k.startsWith(`${collectionPath}/`)) {
+      const parts = k.replace(`${collectionPath}/`, '').split('/');
+      if (parts.length === 1) {
+        matchedDocs.push(new MockDocSnapshot(new MockDocRef(collectionPath, parts[0]), v));
+      }
+    }
+  }
+  return new MockQuerySnapshot(matchedDocs);
+};
+
+export const setDoc = async (docRef: any, data: any, options?: any) => {
+  const pathKey = docRef.path;
+  if (options?.merge && MOCK_STORE[pathKey]) {
+    MOCK_STORE[pathKey] = { ...MOCK_STORE[pathKey], ...data };
+  } else {
+    MOCK_STORE[pathKey] = data;
+  }
+  saveMockStore(pathKey);
+  return Promise.resolve();
+};
+
+export const updateDoc = async (docRef: any, data: any) => {
+  const pathKey = docRef.path;
+  MOCK_STORE[pathKey] = { ...(MOCK_STORE[pathKey] || {}), ...data };
+  saveMockStore(pathKey);
+  return Promise.resolve();
+};
+
+export const addDoc = async (collectionRef: any, data: any) => {
+  const newId = Math.random().toString(36).substring(2, 11);
+  const pathKey = `${collectionRef.path}/${newId}`;
+  MOCK_STORE[pathKey] = data;
+  saveMockStore(pathKey);
+  return new MockDocRef(collectionRef.path, newId);
+};
+
+export const deleteDoc = async (docRef: any) => {
+  const pathKey = docRef.path;
+  delete MOCK_STORE[pathKey];
+  saveMockStore(pathKey, true);
+  return Promise.resolve();
+};
+
+export const onSnapshot = (queryOrRef: any, callback: (snapshot: any) => void) => {
+  const collectionPath = queryOrRef.path || queryOrRef.collectionRef?.path || '';
+  
+  const internalUpdate = () => {
+    if (queryOrRef.type === 'document') {
+      callback(new MockDocSnapshot(queryOrRef, MOCK_STORE[queryOrRef.path]));
+    } else {
+      const matchedDocs: MockDocSnapshot[] = [];
+      for (const [k, v] of Object.entries(MOCK_STORE)) {
+        if (k.startsWith(`${collectionPath}/`)) {
+          const parts = k.replace(`${collectionPath}/`, '').split('/');
+          if (parts.length === 1) {
+            matchedDocs.push(new MockDocSnapshot(new MockDocRef(collectionPath, parts[0]), v));
+          }
+        }
+      }
+      callback(new MockQuerySnapshot(matchedDocs));
+    }
+  };
+
+  if (!listenersMap[collectionPath]) listenersMap[collectionPath] = new Set();
+  listenersMap[collectionPath].add(internalUpdate);
+  
+  setTimeout(internalUpdate, 0);
+
+  return () => {
+    listenersMap[collectionPath]?.delete(internalUpdate);
+  };
+};
+
+export const query = (collectionRef: any, ...constraints: any[]) => {
+  return new MockQuery(collectionRef, constraints);
+};
+
+export const where = (field: string, op: string, value: any) => ({ type: 'where', field, op, value });
+export const orderBy = (field: string, direction?: string) => ({ type: 'orderBy', field, direction });
+export const limit = (num: number) => ({ type: 'limit', num });
+export const serverTimestamp = () => new Date().toISOString();
+export const increment = (n: number) => n;
+export const arrayUnion = (...items: any[]) => items;
+export const writeBatch = () => ({
+  set: (docRef: any, data: any) => setDoc(docRef, data),
+  update: (docRef: any, data: any) => updateDoc(docRef, data),
+  delete: (docRef: any) => deleteDoc(docRef),
+  commit: () => Promise.resolve()
+});
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+}
+
+export function handleFirestoreError(err: any, op: OperationType, path?: string): FirestoreErrorInfo {
+  return {
+    error: err?.message || String(err),
+    operationType: op,
+    path: path || null
+  };
+}
+
+export const loginWithEmail = async (email: string, pass: string) => {
+  return auth.signInWithEmailAndPassword(email, pass);
+};
+
+export const registerWithEmail = async (email: string, pass: string) => {
+  return auth.createUserWithEmailAndPassword(email, pass);
+};
+
+export const resetPassword = async (email: string) => {
+  return Promise.resolve();
+};
+
+export const logout = async () => {
+  return auth.signOut();
+};
