@@ -837,16 +837,23 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
     const matchesSearch = item.itemName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           item.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           item.locationFound.toLowerCase().includes(searchTerm.toLowerCase());
-    if (filter === "Archived") {
-      return item.isArchived === true && matchesSearch;
+    
+    if (filter === "All") {
+      // Show Found and Secured/Received at Office items that are not archived
+      return item.isArchived !== true && item.status !== "Claimed" && item.status !== "Disposed" && matchesSearch;
+    } else if (filter === "Secured in Office") {
+      return (item.status === "Secured in Office" || item.status === "Received at Office") && item.isArchived !== true && matchesSearch;
+    } else if (filter === "Claimed") {
+      // Dispatched/Claimed items go to Dispatch folder
+      return item.status === "Claimed" && matchesSearch;
     } else if (filter === "Disposed") {
+      // Disposed items go to Dispose folder
       return item.status === "Disposed" && matchesSearch;
+    } else if (filter === "Archived") {
+      // Deleted/Archived items (where isArchived is true but they aren't explicitly Claimed or Disposed)
+      return item.isArchived === true && item.status !== "Claimed" && item.status !== "Disposed" && matchesSearch;
     } else {
-      if (item.isArchived === true) return false;
-      const matchesFilter = filter === "All" || 
-                            (filter === "Secured in Office" && (item.status === "Secured in Office" || item.status === "Received at Office")) ||
-                            item.status === filter;
-      return matchesFilter && matchesSearch;
+      return item.status === filter && item.isArchived !== true && matchesSearch;
     }
   });
 
@@ -918,16 +925,22 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
         </div>
 
         <div className="flex items-center gap-2 bg-white/5 p-1 border border-white/10 overflow-x-auto no-scrollbar">
-          {(["All", "Found", "Secured in Office", "Claimed", "Disposed", "Archived"] as const).map((s) => (
+          {([
+            { id: "All", label: "Active Items" },
+            { id: "Secured in Office", label: "Secured in Office" },
+            { id: "Claimed", label: "Dispatch Folder (Claimed)" },
+            { id: "Disposed", label: "Dispose Folder (Disposed)" },
+            { id: "Archived", label: "Archive Folder" }
+          ] as const).map((tab) => (
             <button
-              key={s}
-              onClick={() => setFilter(s)}
+              key={tab.id}
+              onClick={() => setFilter(tab.id)}
               className={cn(
                 "whitespace-nowrap px-4 py-2 text-[9px] font-display uppercase tracking-widest font-bold transition-all",
-                filter === s ? "bg-white/10 text-white shadow-sm" : "text-slate-500 hover:text-slate-300"
+                filter === tab.id ? "bg-white/10 text-white shadow-sm" : "text-slate-500 hover:text-slate-300"
               )}
             >
-              {s}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -1793,18 +1806,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                     </div>
                   </div>
 
-                  {newItem.isHighValue && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: -5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="bg-[#c5a02d]/10 border border-[#c5a02d]/30 p-4 flex gap-3 text-[#c5a02d]"
-                    >
-                      <div className="shrink-0 text-lg">🚨</div>
-                      <div className="text-[10px] font-medium leading-relaxed font-serif italic">
-                        <strong>Security Protocol Armed:</strong> This item has been classified as high-value. Saving this entry will instantly dispatch real-time <span className="font-sans font-semibold text-white underline decoration-gold/40">Push Notifications</span> and premium database triggers to alert the Administrator, Manager, and Auditing team.
-                      </div>
-                    </motion.div>
-                  )}
+
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

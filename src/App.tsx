@@ -67,7 +67,8 @@ import {
   List,
   LayoutGrid,
   Newspaper,
-  Calendar
+  Calendar,
+  ClipboardCheck
 } from "lucide-react";
 import { notificationService, NotificationType } from './services/notificationService';
 import { 
@@ -129,6 +130,7 @@ import { PublicCardDownloadGateway } from "./components/PublicCardDownloadGatewa
 import { ManageCases } from "./components/ManageCases";
 import { DailyNews } from "./components/DailyNews";
 import { SystemDiagnostics } from "./components/SystemDiagnostics";
+import WyndhamChecklist from "./components/WyndhamChecklist";
 import { syncLogger } from "./lib/syncLogger";
 import { ToastContainer } from "./components/ToastContainer";
 import { toastService } from "./services/toastService";
@@ -1283,6 +1285,8 @@ export default function App() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [formsViewMode, setFormsViewMode] = useState<"google" | "interactive" | "registry">("interactive");
   const [formsLayoutView, setFormsLayoutView] = useState<"grid" | "list">("list");
+  const [selectedFormCategory, setSelectedFormCategory] = useState<string>("All");
+  const [isPrintFriendly, setIsPrintFriendly] = useState(false);
   const [hotelInfoViewMode, setHotelInfoViewMode] = useState<"team" | "property">("team");
   const [revenueDivisionFilter, setRevenueDivisionFilter] = useState<"All" | "Western" | "Central">("All");
   const [portfolioSortKey, setPortfolioSortKey] = useState<"name" | "occupancy" | "revpar" | null>(null);
@@ -2450,7 +2454,7 @@ export default function App() {
         { id: "lost-and-found", label: "Lost & Found", icon: Package },
         { id: "customer-care", label: "Customer Care", icon: MessageSquare, disabled: true },
         { id: "cml-connect", label: "CML Connect", icon: Globe, disabled: true },
-        { id: "count-on-me", label: "Count on Me", icon: CheckCircle2 }
+        { id: "count-on-me", label: "Count on Me", icon: CheckCircle2, disabled: true }
       ]
     },
     {
@@ -2483,8 +2487,8 @@ export default function App() {
       id: "team-training",
       label: "Team & Training",
       icon: GraduationCap,
-      disabled: true,
       subItems: [
+        { id: "checklist", label: "Checklist", icon: ClipboardCheck },
         { 
           id: "cml-university", 
           label: selectedCompany === 'ramada' ? "Ramada University" : selectedCompany === 'wyndham' ? "Wyndham Garden University" : "CML University", 
@@ -2500,7 +2504,7 @@ export default function App() {
       icon: LifeBuoy,
       subItems: [
         { id: "resources", label: "IT Help", icon: LifeBuoy, disabled: true },
-        { id: "managed-cases", label: "Managed Cases", icon: Settings, disabled: true },
+        { id: "managed-cases", label: "Managed Cases", icon: Settings },
         { id: "hotel-resources", label: "Hotel Resources", icon: FileText, disabled: true },
         { id: "sop", label: "Hotel System Training", icon: BookOpen, disabled: true },
         { id: "hr", label: "Forms", icon: ClipboardList },
@@ -3018,7 +3022,6 @@ export default function App() {
                     <button
                       onClick={() => {
                         if (isParentDisabled) {
-                          toastService.warning(`${item.label} is temporarily offline for maintenance.`);
                           return;
                         }
                         if (!isSidebarOpen) {
@@ -3067,7 +3070,6 @@ export default function App() {
                               key={sub.id}
                               onClick={() => {
                                 if (sub.disabled) {
-                                  toastService.warning(`${sub.label} is temporarily offline for maintenance.`);
                                   return;
                                 }
                                 navigateTo(sub.id);
@@ -3142,7 +3144,6 @@ export default function App() {
                   <button
                     onClick={() => {
                       if (item.disabled) {
-                        toastService.warning(`${item.label} is temporarily offline for maintenance.`);
                         return;
                       }
                       navigateTo(item.id);
@@ -3185,8 +3186,8 @@ export default function App() {
                 {[
                   { id: "brand-standards", label: "Brand Standards", icon: Award },
                   { id: "canary", label: "Wyndham Connect", icon: Globe, extraLabel: " (by Canary)" },
-                  { id: "managed-cases", label: "My Request", icon: Send, disabled: true },
-                  { id: "property-overview", label: "Property Management", icon: Hotel },
+                  { id: "managed-cases", label: "My Request", icon: Send },
+                  { id: "property-overview", label: "Property Management", icon: Hotel, url: "https://idcs-256bd455f58c4aeb8d0305d1ea06637c.identity.oraclecloud.com/ui/v1/signin" },
                   { id: "hrms", label: "Sign-In Information", icon: Users, disabled: true }
                 ].map((link) => {
                   const LinkIcon = link.icon;
@@ -3196,7 +3197,10 @@ export default function App() {
                       key={link.id}
                       onClick={() => {
                         if (link.disabled) {
-                          toastService.warning(`${link.label} is temporarily offline for maintenance.`);
+                          return;
+                        }
+                        if ('url' in link && link.url) {
+                          window.open(link.url, "_blank");
                           return;
                         }
                         navigateTo(link.id);
@@ -3233,55 +3237,7 @@ export default function App() {
           )}
         </div>
         
-        <div className="mt-auto p-4 border-t border-white/5 bg-black/15 shrink-0">
-          <div className="flex items-center justify-between gap-2">
-            <div 
-              onClick={() => setIsSyncModalOpen(true)}
-              className="flex items-center gap-2 cursor-pointer hover:bg-white/5 p-1 transition-all rounded"
-              title="Click to manage and view granular offline sync status"
-            >
-              <div className={cn(
-                "w-2 h-2 rounded-full transition-all duration-500 shrink-0",
-                isOnline 
-                  ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" 
-                  : "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)] animate-pulse"
-              )}></div>
-              {isSidebarOpen && (
-                <div className="flex flex-col text-left leading-none">
-                  <span className={cn(
-                    "text-[9px] font-display uppercase tracking-[0.15em] font-extrabold transition-colors duration-500",
-                    isOnline ? "text-emerald-400" : "text-rose-400"
-                  )}>
-                    {isOnline ? "Online" : "Offline"}
-                  </span>
-                  <span className="text-[7px] text-stone-400 uppercase tracking-wider font-sans font-bold mt-0.5">
-                    {isOnline ? "Real-Time Sync Active" : "Local Backup Active"}
-                  </span>
-                </div>
-              )}
-            </div>
-            {isSidebarOpen ? (
-              <button
-                onClick={triggerHardRefresh}
-                title="Force deep server reload & clear browser cache"
-                className="text-gold/60 hover:text-gold transition-colors p-1 hover:bg-white/5 rounded-xs flex items-center gap-1.5 text-[8.5px] font-mono uppercase font-semibold"
-                id="btn-sidebar-hard-reload-compact"
-              >
-                <RefreshCw size={10} className="hover:rotate-180 transition-transform duration-300 shrink-0" />
-                Refresh
-              </button>
-            ) : (
-              <button
-                onClick={triggerHardRefresh}
-                title="Force deep server reload & clear browser cache"
-                className="mx-auto text-gold/60 hover:text-gold transition-colors p-1 bg-white/5 rounded-full"
-                id="btn-force-hard-refresh-status-icon-only"
-              >
-                <RefreshCw size={10} />
-              </button>
-            )}
-          </div>
-        </div>
+
       </nav>
 
       {/* Backdrop for mobile */}
@@ -5995,6 +5951,25 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Horizontal Category Filtering Bar */}
+                <div className="no-print mb-8 py-3 px-4 bg-slate-50 border border-slate-100 flex flex-wrap items-center gap-2 rounded-lg">
+                  <span className="text-[9px] font-display uppercase tracking-widest text-slate-400 font-extrabold mr-2">Filter Category:</span>
+                  {["All", "HR & Leave Operations", "Operations & Logs", "Guest & Front Office", "Feedback & Portals", "General Administration"].map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setSelectedFormCategory(cat)}
+                      className={`px-4 py-2 text-[9px] font-display uppercase tracking-widest font-extrabold rounded transition-all duration-200 ${
+                        selectedFormCategory === cat
+                          ? "bg-gold text-white shadow-sm"
+                          : "bg-white text-slate-600 hover:text-slate-900 border border-slate-200"
+                      }`}
+                    >
+                      {cat === "All" ? "All categories" : cat}
+                    </button>
+                  ))}
+                </div>
+
                 {/* Inline Add form creator panel with luxury style */}
                 <AnimatePresence>
                   {showAddForm && (
@@ -6080,7 +6055,8 @@ export default function App() {
                   {(() => {
                     const defaultFormsMerged = getDefaultForms(selectedCompany);
                     const displayForms = [...customForms.map(f => ({ ...f, isDefault: false })), ...defaultFormsMerged.map(f => ({ ...f, isDefault: true }))];
-                    const categories = Array.from(new Set(displayForms.map(f => f.category || "General")));
+                    const categories = Array.from(new Set(displayForms.map(f => f.category || "General")))
+                      .filter(category => selectedFormCategory === "All" || category === selectedFormCategory);
                     return categories.map((category) => (
                       <section key={category} className="space-y-6">
                         <div className="flex items-center gap-4">
@@ -6485,20 +6461,34 @@ export default function App() {
                     <div className="bg-white border border-slate-100 p-6 shadow-sm flex flex-col justify-between">
                       <div>
                         <h3 className="text-xs font-display uppercase tracking-widest text-[#1a1a1a] font-extrabold border-b border-slate-50 pb-3 mb-4">
-                          Property Identity Profile
+                          {selectedCompany === 'ramada' ? "Ramada Suites Profile" : 
+                           selectedCompany === 'wyndham' ? "Wyndham Garden Profile" : 
+                           "CML Property Profile"}
                         </h3>
                         <table className="w-full text-xs font-sans text-slate-600 space-y-2">
                           <tbody>
                             <tr className="border-b border-slate-50">
                               <td className="py-2.5 font-semibold text-slate-800">Physical Address</td>
-                              <td className="py-2.5 text-right font-serif">Wailoaloa Beach Road, Nadi, Fiji Islands</td>
+                              <td className="py-2.5 text-right font-serif">
+                                {selectedCompany === 'ramada' ? "14 Wailoaloa Road, Wailoaloa Beach, Nadi, Fiji" :
+                                 selectedCompany === 'wyndham' ? "Lot 3 Wailoaloa Beach Road, Nadi, Fiji" :
+                                 "Wailoaloa Beach Road, Nadi, Fiji Islands"}
+                              </td>
                             </tr>
                             <tr className="border-b border-slate-50">
                               <td className="py-2.5 font-semibold text-slate-800">Room Units</td>
                               <td className="py-2.5 text-right font-serif">
-                                {selectedCompany === 'ramada' ? "40 Luxury Condominium Suites" : 
-                                 selectedCompany === 'wyndham' ? "75 Premium Guest Rooms" : 
+                                {selectedCompany === 'ramada' ? "40 Luxury 1, 2, & 3 Bedroom Suites" : 
+                                 selectedCompany === 'wyndham' ? "75 Premium Guest Rooms & Suites" : 
                                  "Multi-Property Group Portfolio"}
+                              </td>
+                            </tr>
+                            <tr className="border-b border-slate-50">
+                              <td className="py-2.5 font-semibold text-slate-800">Key Features</td>
+                              <td className="py-2.5 text-right font-serif text-[11px]">
+                                {selectedCompany === 'ramada' ? "Full Kitchens, Ocean views, Senikai Spa, Pool, Gym" :
+                                 selectedCompany === 'wyndham' ? "Outdoor Courtyard Pool, Garden Terrace, Close to Airport" :
+                                 "Dual-brand beach resort operations"}
                               </td>
                             </tr>
                             <tr className="border-b border-slate-50">
@@ -6507,9 +6497,22 @@ export default function App() {
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Active
                               </td>
                             </tr>
-                            <tr>
+                            <tr className="border-b border-slate-50">
                               <td className="py-2.5 font-semibold text-slate-800">Default Check-in</td>
                               <td className="py-2.5 text-right font-serif">14:00 (Check-out 11:00)</td>
+                            </tr>
+                            <tr>
+                              <td className="py-2.5 font-semibold text-slate-800">Official Web Link</td>
+                              <td className="py-2.5 text-right">
+                                <a 
+                                  href={selectedCompany === 'ramada' ? "https://ramadawailoaloafiji.com/" : "https://wyndhamhotels.com/wyndham-garden/nadi-fiji/wyndham-garden-wailoaloa-beach-fiji/rooms-rates"} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="text-gold hover:underline font-bold font-mono text-[10px] uppercase"
+                                >
+                                  View Website ↗
+                                </a>
+                              </td>
                             </tr>
                           </tbody>
                         </table>
@@ -6522,7 +6525,7 @@ export default function App() {
                         </div>
                         <div className="text-[11px] text-slate-600 font-serif space-y-1">
                           <p><strong>Guest SSID:</strong> {selectedCompany === 'ramada' ? "Ramada_Suites_Guest" : selectedCompany === 'wyndham' ? "Wyndham_Garden_Guest" : "CML_Corporate_Guest"}</p>
-                          <p><strong>Security Portal:</strong> Click-to-Connect Web Gate</p>
+                          <p><strong>Security Portal:</strong> 100Mbps Click-to-Connect Gate</p>
                           <p className="border-t border-slate-200/50 pt-1.5 mt-1.5"><strong>Staff SSID:</strong> CML_SECURE_VLAN</p>
                           <p><strong>Staff Password:</strong> <code className="bg-slate-200/60 px-1 font-mono rounded">CmlSecureWailo2026!</code></p>
                         </div>
@@ -6592,145 +6595,170 @@ export default function App() {
               </div>
             ) : activeTab === "revenue" ? (
               <div className="space-y-8 pb-32">
-                {/* Header Block */}
-                <div className={cn(
-                  "p-8 border relative overflow-hidden",
-                  selectedCompany === 'ramada' ? "bg-red-50/50 border-red-200/50" : 
-                  selectedCompany === 'wyndham' ? "bg-emerald-50/50 border-emerald-200/50" : 
-                  "bg-gold/5 border-gold/10"
-                )}>
-                  <div className="relative z-10 max-w-3xl">
-                    <div className={cn(
-                      "text-[9px] font-display uppercase tracking-[0.25em] font-black pb-2 border-b max-w-max mb-6",
-                      selectedCompany === 'ramada' ? "text-[#D11242] border-red-200" : 
-                      selectedCompany === 'wyndham' ? "text-[#0b5c4b] border-emerald-200" : 
-                      "text-gold border-gold/20"
-                    )}>
-                      {selectedCompany === 'ramada' ? "Ramada Suites" : 
-                       selectedCompany === 'wyndham' ? "Wyndham Garden" : 
-                       "Cove Management Limited"} • Yield Performance
-                    </div>
-                    <h2 className="text-4xl font-serif text-slate-900 italic tracking-tight font-light mb-4">
-                      Property Revenue Intelligence
-                    </h2>
-                    <p className="text-sm font-serif italic text-slate-600 max-w-xl leading-relaxed">
-                      Interactive sales trackers, channel yield distributions, historical room night metrics, and dynamic MTD billing.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Key Yield Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                  {[
-                    { label: "RevPar (Performance)", value: `$${selectedCompany === 'ramada' ? '215.20' : selectedCompany === 'wyndham' ? '184.50' : '198.80'}`, trend: "Target: $180.00", color: "text-slate-900" },
-                    { label: "ADR (Average Rate)", value: `$${selectedCompany === 'ramada' ? '280.00' : selectedCompany === 'wyndham' ? '230.00' : '255.00'}`, trend: "Dynamic BAR Active", color: "text-slate-900" },
-                    { label: "Avg Occupancy %", value: `${selectedCompany === 'ramada' ? '82.4%' : selectedCompany === 'wyndham' ? '76.8%' : '79.2%'}`, trend: "Target: 75.0%", color: "text-emerald-600 font-serif" },
-                    { label: "MTD Gross Yield", value: `$${selectedCompany === 'ramada' ? '142,500' : selectedCompany === 'wyndham' ? '118,900' : '129,400'}`, trend: "Ahead of schedule", color: "text-slate-900" }
-                  ].map((stat, idx) => (
-                    <div key={idx} className="bg-white border border-slate-100 p-6 shadow-sm">
-                      <p className="text-[9px] font-display uppercase tracking-widest text-slate-400 font-bold mb-1">{stat.label}</p>
-                      <p className={cn("text-2xl font-serif italic font-bold", stat.color)}>{stat.value}</p>
-                      <p className="text-[10px] text-slate-500 mt-1 font-mono">{stat.trend}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Recharts Yield Graph */}
-                <div className="bg-white border border-slate-100 p-6 shadow-sm">
-                  <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
-                    <div>
-                      <h3 className="text-xs font-display uppercase tracking-widest text-slate-800 font-extrabold mb-1">Weekly Yield Performance & Room Night Sales</h3>
-                      <p className="text-xs font-serif italic text-slate-500">Comparing ADR (Average Daily Rate) and Gross revenue distributions across Nadi market</p>
-                    </div>
-                  </div>
-                  <div className="h-80 w-full font-mono">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart
-                        data={[
-                          { day: "Mon", rev: 14200, adr: 220 },
-                          { day: "Tue", rev: 15800, adr: 235 },
-                          { day: "Wed", rev: 17200, adr: 240 },
-                          { day: "Thu", rev: 19100, adr: 250 },
-                          { day: "Fri", rev: 24500, adr: 280 },
-                          { day: "Sat", rev: 26800, adr: 295 },
-                          { day: "Sun", rev: 22400, adr: 260 }
-                        ]}
-                        margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-                      >
-                        <defs>
-                          <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor={selectedCompany === 'ramada' ? '#D11242' : '#0b5c4b'} stopOpacity={0.2}/>
-                            <stop offset="95%" stopColor={selectedCompany === 'ramada' ? '#D11242' : '#0b5c4b'} stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="day" stroke="#94a3b8" fontSize={11} fontStyle="italic" />
-                        <YAxis stroke="#94a3b8" fontSize={11} />
-                        <Tooltip />
-                        <Area type="monotone" dataKey="rev" stroke={selectedCompany === 'ramada' ? '#D11242' : '#0b5c4b'} strokeWidth={2} fillOpacity={1} fill="url(#colorRev)" name="Daily Gross Rev ($)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* Channel Breakdown Table */}
-                  <div className="bg-white border border-slate-100 p-6 shadow-sm">
-                    <h3 className="text-xs font-display uppercase tracking-widest text-slate-800 font-extrabold mb-4 border-b border-slate-50 pb-3">Channel Yield Matrix</h3>
-                    <table className="w-full text-xs font-sans text-slate-600">
-                      <thead>
-                        <tr className="border-b border-slate-100 text-[10px] font-display uppercase tracking-wider text-slate-400">
-                          <th className="py-2.5 text-left font-bold">Distribution Channel</th>
-                          <th className="py-2.5 text-center font-bold">Share %</th>
-                          <th className="py-2.5 text-right font-bold">Avg Yield</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[
-                          { channel: "Booking.com Partner Group", share: "38%", yield: `$${selectedCompany === 'ramada' ? '268.00' : '210.00'}` },
-                          { channel: "Expedia Web Network", share: "22%", yield: `$${selectedCompany === 'ramada' ? '274.00' : '215.00'}` },
-                          { channel: "Agoda Global Services", share: "14%", yield: `$${selectedCompany === 'ramada' ? '255.00' : '205.00'}` },
-                          { channel: "Direct Walk-ins & Web Booking", share: "16%", yield: `$${selectedCompany === 'ramada' ? '290.00' : '240.00'}` },
-                          { channel: "Corporate Contract Groups", share: "10%", yield: `$${selectedCompany === 'ramada' ? '220.00' : '185.00'}` }
-                        ].map((row, idx) => (
-                          <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50 transition-colors animate-fade-in">
-                            <td className="py-2.5 font-semibold text-slate-800">{row.channel}</td>
-                            <td className="py-2.5 text-center text-slate-600 font-mono">{row.share}</td>
-                            <td className="py-2.5 text-right text-slate-900 font-mono font-bold">{row.yield}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Channel Yield Chart representation */}
-                  <div className="bg-white border border-slate-100 p-6 shadow-sm flex flex-col justify-between">
-                    <div>
-                      <h3 className="text-xs font-display uppercase tracking-widest text-slate-800 font-extrabold mb-2 border-b border-slate-50 pb-3">OTA Channel Parity Alerts</h3>
-                      <p className="text-xs font-serif italic text-slate-500 mb-4">Daily automated scanning of Rate compliance across channels.</p>
-                      <div className="space-y-3">
-                        <div className="p-3 bg-red-50 border border-red-100 rounded-none flex items-center gap-3">
-                          <AlertTriangle className="text-red-500 shrink-0" size={16} />
-                          <div className="text-[11px] text-red-800 leading-normal font-serif">
-                            <strong>Expedia Discrepancy!</strong> Rates on Expedia are floating at $245, while direct BAR is restricted at $280. Parity breached.
+                {(() => {
+                  const isManagement = userRole === "Manager" || userRole === "Administrator" || userRole === "Super Admin" || userRole === "Group Controller" || userRole === "admin";
+                  return (
+                    <>
+                      {/* Header Block */}
+                      <div className={cn(
+                        "p-8 border relative overflow-hidden",
+                        selectedCompany === 'ramada' ? "bg-red-50/50 border-red-200/50" : 
+                        selectedCompany === 'wyndham' ? "bg-emerald-50/50 border-emerald-200/50" : 
+                        "bg-gold/5 border-gold/10"
+                      )}>
+                        <div className="relative z-10 max-w-3xl">
+                          <div className={cn(
+                            "text-[9px] font-display uppercase tracking-[0.25em] font-black pb-2 border-b max-w-max mb-6",
+                            selectedCompany === 'ramada' ? "text-[#D11242] border-red-200" : 
+                            selectedCompany === 'wyndham' ? "text-[#0b5c4b] border-emerald-200" : 
+                            "text-gold border-gold/20"
+                          )}>
+                            {selectedCompany === 'ramada' ? "Ramada Suites" : 
+                             selectedCompany === 'wyndham' ? "Wyndham Garden" : 
+                             "Cove Management Limited"} • Yield Performance
                           </div>
-                        </div>
-                        <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-none flex items-center gap-3">
-                          <CheckCircle className="text-emerald-500 shrink-0" size={16} />
-                          <div className="text-[11px] text-emerald-800 leading-normal font-serif">
-                            <strong>Booking.com Compliant.</strong> Rate synched perfectly at $280 via Siteminder OTA bridge.
-                          </div>
+                          <h2 className="text-4xl font-serif text-slate-900 italic tracking-tight font-light mb-4">
+                            Property Revenue Intelligence
+                          </h2>
+                          <p className="text-sm font-serif italic text-slate-600 max-w-xl leading-relaxed">
+                            Interactive sales trackers, channel yield distributions, historical room night metrics, and dynamic MTD billing.
+                          </p>
                         </div>
                       </div>
-                    </div>
-                    <button 
-                      onClick={() => navigateTo("revenue-mgmt")} 
-                      className="w-full text-center py-2.5 bg-black text-white hover:bg-gold text-[9px] font-display uppercase tracking-widest font-black transition-colors mt-6"
-                    >
-                      Access Rate Control Console
-                    </button>
-                  </div>
-                </div>
+
+                      {/* Key Yield Stats */}
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        {[
+                          { label: "RevPar (Performance)", value: isManagement ? `$${selectedCompany === 'ramada' ? '215.20' : selectedCompany === 'wyndham' ? '184.50' : '198.80'}` : "🔒 RESTRICTED", trend: isManagement ? "Target: $180.00" : "Management Clearance Required", color: isManagement ? "text-slate-900" : "text-amber-600 font-bold" },
+                          { label: "ADR (Average Rate)", value: isManagement ? `$${selectedCompany === 'ramada' ? '280.00' : selectedCompany === 'wyndham' ? '230.00' : '255.00'}` : "🔒 RESTRICTED", trend: isManagement ? "Dynamic BAR Active" : "Management Clearance Required", color: isManagement ? "text-slate-900" : "text-amber-600 font-bold" },
+                          { label: "Avg Occupancy %", value: `${selectedCompany === 'ramada' ? '82.4%' : selectedCompany === 'wyndham' ? '76.8%' : '79.2%'}`, trend: "Target: 75.0%", color: "text-emerald-600 font-serif" },
+                          { label: "MTD Gross Yield", value: isManagement ? `$${selectedCompany === 'ramada' ? '142,500' : selectedCompany === 'wyndham' ? '118,900' : '129,400'}` : "🔒 RESTRICTED", trend: isManagement ? "Ahead of schedule" : "Management Clearance Required", color: isManagement ? "text-slate-900" : "text-amber-600 font-bold" }
+                        ].map((stat, idx) => (
+                          <div key={idx} className="bg-white border border-slate-100 p-6 shadow-sm">
+                            <p className="text-[9px] font-display uppercase tracking-widest text-slate-400 font-bold mb-1">{stat.label}</p>
+                            <p className={cn("text-2xl font-serif italic font-bold", stat.color)}>{stat.value}</p>
+                            <p className="text-[10px] text-slate-500 mt-1 font-mono">{stat.trend}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Recharts Yield Graph */}
+                      {!isManagement ? (
+                        <div className="bg-amber-50/50 border border-amber-200/60 p-12 text-center rounded-lg">
+                          <Lock className="text-amber-500 mx-auto mb-4 animate-pulse" size={32} />
+                          <h3 className="text-sm font-display uppercase tracking-widest text-slate-800 font-black">Restricted Financial Analytics</h3>
+                          <p className="text-xs font-serif text-slate-500 italic mt-1">Detailed room-night yield distribution charts are restricted to authorized HODs and Corporate Controllers.</p>
+                        </div>
+                      ) : (
+                        <div className="bg-white border border-slate-100 p-6 shadow-sm">
+                          <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
+                            <div>
+                              <h3 className="text-xs font-display uppercase tracking-widest text-slate-800 font-extrabold mb-1">Weekly Yield Performance & Room Night Sales</h3>
+                              <p className="text-xs font-serif italic text-slate-500">Comparing ADR (Average Daily Rate) and Gross revenue distributions across Nadi market</p>
+                            </div>
+                          </div>
+                          <div className="h-80 w-full font-mono">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <AreaChart
+                                data={[
+                                  { day: "Mon", rev: 14200, adr: 220 },
+                                  { day: "Tue", rev: 15800, adr: 235 },
+                                  { day: "Wed", rev: 17200, adr: 240 },
+                                  { day: "Thu", rev: 19100, adr: 250 },
+                                  { day: "Fri", rev: 24500, adr: 280 },
+                                  { day: "Sat", rev: 26800, adr: 295 },
+                                  { day: "Sun", rev: 22400, adr: 260 }
+                                ]}
+                                margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                              >
+                                <defs>
+                                  <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor={selectedCompany === 'ramada' ? '#D11242' : '#0b5c4b'} stopOpacity={0.2}/>
+                                    <stop offset="95%" stopColor={selectedCompany === 'ramada' ? '#D11242' : '#0b5c4b'} stopOpacity={0}/>
+                                  </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="day" stroke="#94a3b8" fontSize={11} fontStyle="italic" />
+                                <YAxis stroke="#94a3b8" fontSize={11} />
+                                <Tooltip />
+                                <Area type="monotone" dataKey="rev" stroke={selectedCompany === 'ramada' ? '#D11242' : '#0b5c4b'} strokeWidth={2} fillOpacity={1} fill="url(#colorRev)" name="Daily Gross Rev ($)" />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* Channel Breakdown Table */}
+                        {!isManagement ? (
+                          <div className="bg-amber-50/50 border border-amber-200/60 p-12 text-center rounded-lg col-span-2">
+                            <Lock className="text-amber-500 mx-auto mb-4 animate-pulse" size={32} />
+                            <h3 className="text-sm font-display uppercase tracking-widest text-slate-800 font-black">Restricted Channel Matrix</h3>
+                            <p className="text-xs font-serif text-slate-500 italic mt-1">Siteminder/SynXis channel distributions are visible only to Corporate General Managers and Controllers.</p>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="bg-white border border-slate-100 p-6 shadow-sm">
+                              <h3 className="text-xs font-display uppercase tracking-widest text-slate-800 font-extrabold mb-4 border-b border-slate-50 pb-3">Channel Yield Matrix</h3>
+                              <table className="w-full text-xs font-sans text-slate-600">
+                                <thead>
+                                  <tr className="border-b border-slate-100 text-[10px] font-display uppercase tracking-wider text-slate-400">
+                                    <th className="py-2.5 text-left font-bold">Distribution Channel</th>
+                                    <th className="py-2.5 text-center font-bold">Share %</th>
+                                    <th className="py-2.5 text-right font-bold">Avg Yield</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {[
+                                    { channel: "Booking.com Partner Group", share: "38%", yield: `$${selectedCompany === 'ramada' ? '268.00' : '210.00'}` },
+                                    { channel: "Expedia Web Network", share: "22%", yield: `$${selectedCompany === 'ramada' ? '274.00' : '215.00'}` },
+                                    { channel: "Agoda Global Services", share: "14%", yield: `$${selectedCompany === 'ramada' ? '255.00' : '205.00'}` },
+                                    { channel: "Direct Walk-ins & Web Booking", share: "16%", yield: `$${selectedCompany === 'ramada' ? '290.00' : '240.00'}` },
+                                    { channel: "Corporate Contract Groups", share: "10%", yield: `$${selectedCompany === 'ramada' ? '220.00' : '185.00'}` }
+                                  ].map((row, idx) => (
+                                    <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50 transition-colors animate-fade-in">
+                                      <td className="py-2.5 font-semibold text-slate-800">{row.channel}</td>
+                                      <td className="py-2.5 text-center text-slate-600 font-mono">{row.share}</td>
+                                      <td className="py-2.5 text-right text-slate-900 font-mono font-bold">{row.yield}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </>
+                        )}
+
+                        {/* Channel Yield Chart representation */}
+                        <div className="bg-white border border-slate-100 p-6 shadow-sm flex flex-col justify-between">
+                          <div>
+                            <h3 className="text-xs font-display uppercase tracking-widest text-slate-800 font-extrabold mb-2 border-b border-slate-50 pb-3">OTA Channel Parity Alerts</h3>
+                            <p className="text-xs font-serif italic text-slate-500 mb-4">Daily automated scanning of Rate compliance across channels.</p>
+                            <div className="space-y-3">
+                              <div className="p-3 bg-red-50 border border-red-100 rounded-none flex items-center gap-3">
+                                <AlertTriangle className="text-red-500 shrink-0" size={16} />
+                                <div className="text-[11px] text-red-800 leading-normal font-serif">
+                                  <strong>Expedia Discrepancy!</strong> Rates on Expedia are floating at $245, while direct BAR is restricted at $280. Parity breached.
+                                </div>
+                              </div>
+                              <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-none flex items-center gap-3">
+                                <CheckCircle className="text-emerald-500 shrink-0" size={16} />
+                                <div className="text-[11px] text-emerald-800 leading-normal font-serif">
+                                  <strong>Booking.com Compliant.</strong> Rate synched perfectly at $280 via Siteminder OTA bridge.
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => navigateTo("revenue-mgmt")} 
+                            className="w-full text-center py-2.5 bg-black text-white hover:bg-gold text-[9px] font-display uppercase tracking-widest font-black transition-colors mt-6"
+                          >
+                            Access Rate Control Console
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             ) : activeTab === "revenue-mgmt" ? (
               <div className="space-y-8 pb-32">
@@ -7987,6 +8015,8 @@ export default function App() {
                   ))}
                 </div>
               </div>
+            ) : activeTab === "checklist" ? (
+              <WyndhamChecklist selectionProperty={selectedCompany || 'cml'} />
             ) : activeTab === "brand-kit" ? (
               <BrandKit companyId={selectedCompany || 'cml'} />
             ) : activeTab === "duty-roster" ? (

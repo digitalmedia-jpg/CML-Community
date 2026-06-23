@@ -603,6 +603,31 @@ if (!isSeeded) {
   }
 }
 
+// Ensure all EXPLICIT_CREDENTIALS profiles exist in MOCK_STORE under the 'users' collection
+EXPLICIT_CREDENTIALS.forEach(u => {
+  const key = `users/user_${u.username.toLowerCase().replace(/\./g, '_')}_${u.property}`;
+  const alreadyExists = Object.entries(MOCK_STORE).some(([k, item]) => 
+    k.startsWith("users/") && 
+    item && 
+    item.email?.toLowerCase() === u.email.toLowerCase() && 
+    (item.property || 'cml').toLowerCase() === u.property.toLowerCase()
+  );
+  if (!alreadyExists) {
+    MOCK_STORE[key] = {
+      email: u.email,
+      displayName: u.name,
+      role: (u.email === "digitalmedia@cml.com.fj" || u.email === "itmanager@cml.com.fj" || u.email === "graphics@cml.com.fj" || u.email?.toLowerCase() === "rohit@cml.com.fj") ? "Administrator" : "Staff",
+      property: u.property,
+      createdAt: new Date().toISOString(),
+      loginCount: 0
+    };
+  }
+});
+// Re-save mock store to make it persistent on startup
+try {
+  localStorage.setItem('cml_mock_db', JSON.stringify(MOCK_STORE));
+} catch (e) {}
+
 // 4. Initialization of REAL production-grade structures
 let firebaseApp: any = null;
 let productionDb: any = null;

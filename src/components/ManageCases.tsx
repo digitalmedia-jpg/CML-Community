@@ -49,6 +49,7 @@ interface CaseItem {
   status: "Active" | "Closed" | "Pending";
   description?: string;
   createdAt?: any;
+  department?: string;
 }
 
 export const ManageCases: React.FC = () => {
@@ -68,6 +69,7 @@ export const ManageCases: React.FC = () => {
   // Submit Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newServiceArea, setNewServiceArea] = useState<CaseItem["serviceArea"]>("MyRequest");
+  const [newDepartment, setNewDepartment] = useState("IT");
   const [newRequestType, setNewRequestType] = useState("");
   const [newRequestDetails, setNewRequestDetails] = useState("");
   const [newDescription, setNewDescription] = useState("");
@@ -278,6 +280,7 @@ export const ManageCases: React.FC = () => {
       requestType: newRequestType,
       requestDetails: newRequestDetails,
       status: "Active",
+      department: newDepartment,
       description: newDescription || "No additional logs provided."
     };
 
@@ -607,6 +610,13 @@ export const ManageCases: React.FC = () => {
                   </div>
                 </th>
                 <th 
+                  className="p-4 text-[10px] font-display uppercase tracking-widest text-slate-600 font-bold select-none transition-colors"
+                >
+                  <div className="flex items-center gap-1">
+                    Department
+                  </div>
+                </th>
+                <th 
                   onClick={() => toggleSort("requestType")}
                   className="p-4 text-[10px] font-display uppercase tracking-widest text-slate-600 font-bold cursor-pointer hover:bg-slate-100 select-none transition-colors"
                 >
@@ -654,6 +664,9 @@ export const ManageCases: React.FC = () => {
                     <td className="p-4 font-bold text-slate-800">
                       {item.serviceArea}
                     </td>
+                    <td className="p-4 text-slate-700 font-serif">
+                      {item.department || "IT"}
+                    </td>
                     <td className="p-4 text-slate-700">
                       {item.requestType}
                     </td>
@@ -682,7 +695,7 @@ export const ManageCases: React.FC = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="p-12 text-center text-slate-400 italic">
+                  <td colSpan={8} className="p-12 text-center text-slate-400 italic">
                     No cases match the selected search query or filters.
                   </td>
                 </tr>
@@ -841,6 +854,28 @@ export const ManageCases: React.FC = () => {
                       <option value="Digital Hub">Digital Hub</option>
                       <option value="HTCS">HTCS</option>
                       <option value="OSD">OSD</option>
+                    </select>
+                  </div>
+
+                  {/* Department */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-display uppercase tracking-widest text-slate-400">
+                      Department / Section *
+                    </label>
+                    <select
+                      value={newDepartment}
+                      onChange={(e) => setNewDepartment(e.target.value)}
+                      className="w-full bg-zinc-800 border border-white/10 p-2.5 text-white focus:ring-1 focus:ring-gold outline-none"
+                    >
+                      <option value="IT">IT</option>
+                      <option value="Engineering & Maintenance">Engineering & Maintenance</option>
+                      <option value="Front Office">Front Office</option>
+                      <option value="Housekeeping">Housekeeping</option>
+                      <option value="Food & Beverage">Food & Beverage</option>
+                      <option value="Sales & Marketing">Sales & Marketing</option>
+                      <option value="Human Resources">Human Resources</option>
+                      <option value="Finance & Accounts">Finance & Accounts</option>
+                      <option value="Executive Office">Executive Office</option>
                     </select>
                   </div>
 
