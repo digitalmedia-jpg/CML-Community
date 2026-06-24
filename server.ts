@@ -1294,7 +1294,7 @@ async function startServer() {
   const mockDbFilePath = path.join(process.cwd(), "mock_db_store.json");
   let serverMockDbStore: Record<string, any> = {};
   let sseClients: any[] = [];
-  const SERVER_VERSION = `v_${Date.now()}`;
+  const SERVER_VERSION = "v_1.2.0";
 
   class FirestoreRestSync {
     private projectId: string;
@@ -1350,9 +1350,10 @@ async function startServer() {
       return docId ? `${base}/${docId}?key=${this.apiKey}` : `${base}?key=${this.apiKey}`;
     }
 
-    async getMaster(): Promise<Record<string, any>> {
+    async getMaster(): Promise<Record<string, any> | null> {
       const candidates = this.getCandidateDatabaseIds();
       const sortedCandidates = [this.databaseId, ...candidates.filter(c => c !== this.databaseId)];
+      let anySuccessfulFetch = false;
 
       for (const dbId of sortedCandidates) {
         try {
@@ -1360,6 +1361,7 @@ async function startServer() {
           const listUrl = this.getUrl(undefined, dbId) + "&pageSize=300";
           const res = await fetch(listUrl);
           if (res.ok) {
+            anySuccessfulFetch = true;
             const data = await res.json();
             const combinedStore: Record<string, any> = {};
             if (data && Array.isArray(data.documents)) {
@@ -1384,6 +1386,7 @@ async function startServer() {
             }
           } else {
             if (res.status === 403 || res.status === 404) {
+              anySuccessfulFetch = true;
               console.log(`[MOCK_DB] Database '${dbId}' is unusable or unauthorized (${res.status}). Excluding from future sync attempts.`);
               this.unusableDatabaseIds.add(dbId);
             } else {
@@ -1399,6 +1402,7 @@ async function startServer() {
         try {
           const res = await fetch(fallbackUrl);
           if (res.ok) {
+            anySuccessfulFetch = true;
             console.log(`[MOCK_DB] Fallback: Successfully fetched single master_db from database '${dbId}'`);
             this.databaseId = dbId;
             const doc = await res.json();
@@ -1407,10 +1411,12 @@ async function startServer() {
             }
             return {};
           } else if (res.status === 404) {
+            anySuccessfulFetch = true;
             console.log(`[MOCK_DB] Fallback: master_db document not found in database '${dbId}'`);
             this.databaseId = dbId;
             return {};
           } else if (res.status === 403) {
+            anySuccessfulFetch = true;
             console.log(`[MOCK_DB] Fallback: master_db document returned 403 on database '${dbId}'. Excluding from future sync attempts.`);
             this.unusableDatabaseIds.add(dbId);
           }
@@ -1418,7 +1424,7 @@ async function startServer() {
           console.log(`[MOCK_DB] Fallback: Exception fetching master_db for '${dbId}':`, e.message || e);
         }
       }
-      return {};
+      return anySuccessfulFetch ? {} : null;
     }
 
     private sanitizeValue(val: any): any {
@@ -1467,6 +1473,9 @@ async function startServer() {
         
         // Save each chunk as a separate PATCH document
         for (const [chunkName, chunkData] of Object.entries(chunks)) {
+          // Add a small delay between chunk saves to stay safe within quotas
+          await new Promise(resolve => setTimeout(resolve, 250));
+
           const chunkString = JSON.stringify(chunkData);
           const patchUrl = this.getUrl(chunkName, dbId) + "&updateMask.fieldPaths=db_json";
           const body = {
@@ -1478,25 +1487,45 @@ async function startServer() {
             }
           };
 
-          try {
-            const res = await fetch(patchUrl, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(body)
-            });
+          let attempts = 0;
+          let delayMs = 1200;
+          let success = false;
 
-            if (!res.ok) {
-              dbSucceeded = false;
-              if (res.status === 403 || res.status === 404) {
+          while (attempts < 4 && !success) {
+            try {
+              const res = await fetch(patchUrl, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body)
+              });
+
+              if (res.ok) {
+                success = true;
+              } else if (res.status === 429) {
+                attempts++;
+                console.log(`[MOCK_DB] Received 429 for chunk '${chunkName}' on attempt ${attempts}. Backing off for ${delayMs}ms before retrying...`);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+                delayMs *= 2;
+              } else if (res.status === 403 || res.status === 404) {
+                dbSucceeded = false;
                 console.log(`[MOCK_DB] Database '${dbId}' is unusable or unauthorized on write (${res.status}). Excluding from future sync attempts.`);
                 this.unusableDatabaseIds.add(dbId);
+                success = true; // exit the retry loop, but set dbSucceeded = false
               } else {
+                dbSucceeded = false;
                 console.log(`[MOCK_DB] Failed to save chunk '${chunkName}' to database '${dbId}' (status ${res.status}).`);
+                success = true; // don't retry other non-429 errors
+              }
+            } catch (e: any) {
+              attempts++;
+              console.log(`[MOCK_DB] Exception writing chunk '${chunkName}' to '${dbId}' (attempt ${attempts}/4): ${e.message || e}`);
+              if (attempts < 4) {
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+                delayMs *= 2;
+              } else {
+                dbSucceeded = false;
               }
             }
-          } catch (e: any) {
-            dbSucceeded = false;
-            console.log(`[MOCK_DB] Exception writing chunk '${chunkName}' to '${dbId}': ${e.message || e}`);
           }
         }
 
@@ -1520,6 +1549,7 @@ async function startServer() {
   }
 
   let firestoreRestSync: FirestoreRestSync | null = null;
+  let isCloudHydrated = false;
 
   try {
     const configPath = path.join(process.cwd(), "firebase-applet-config.json");
@@ -1545,6 +1575,10 @@ async function startServer() {
   // Debounce saving the database to cloud to prevent rapid continuous write blasting
   let saveMasterTimeout: NodeJS.Timeout | null = null;
   const saveMasterCloudDebounced = () => {
+    if (!isCloudHydrated) {
+      console.log("[MOCK_DB] Guarding cloud save: cloud is not yet hydrated. Preventing overwrite of live cloud database.");
+      return;
+    }
     if (saveMasterTimeout) {
       clearTimeout(saveMasterTimeout);
     }
@@ -1580,16 +1614,25 @@ async function startServer() {
       try {
         console.log("[MOCK_DB] Hydrating database from live central Firestore cloud REST API...");
         const cloudState = await firestoreRestSync.getMaster();
-        if (Object.keys(cloudState).length > 0) {
-          serverMockDbStore = { ...serverMockDbStore, ...cloudState };
-          console.log(`[MOCK_DB] Fully synchronized and merged ${Object.keys(cloudState).length} records from central cloud Firestore database.`);
-          saveMockDbToDisk();
+        if (cloudState !== null) {
+          isCloudHydrated = true;
+          if (Object.keys(cloudState).length > 0) {
+            serverMockDbStore = { ...serverMockDbStore, ...cloudState };
+            console.log(`[MOCK_DB] Fully synchronized and merged ${Object.keys(cloudState).length} records from central cloud Firestore database.`);
+            saveMockDbToDisk();
+          } else {
+            console.log("[MOCK_DB] Live central database is new or empty. Keeping local pre-hydrate parameters.");
+          }
         } else {
-          console.log("[MOCK_DB] Live central database is new or empty. Keeping local pre-hydrate parameters.");
+          console.warn("[MOCK_DB] Cloud Firestore REST connection returned null (rate-limited or unreachable). Will retry hydration shortly...");
+          setTimeout(hydrateStore, 10000); // retry in 10s
         }
       } catch (err) {
         console.warn("[MOCK_DB] Cloud Firestore REST connection warning (continuing with container filesystem only):", err);
+        setTimeout(hydrateStore, 15000); // retry in 15s
       }
+    } else {
+      isCloudHydrated = true;
     }
   };
 
@@ -1602,6 +1645,7 @@ async function startServer() {
     try {
       const cloudState = await firestoreRestSync.getMaster();
       if (cloudState && Object.keys(cloudState).length > 0) {
+        isCloudHydrated = true;
         let changedKeys: Record<string, any> = {};
         let deletedKeys: string[] = [];
 
@@ -1646,7 +1690,7 @@ async function startServer() {
   };
 
   if (firestoreRestSync) {
-    setInterval(pollCloudDatabase, 12000);
+    setInterval(pollCloudDatabase, 45000); // 45 second polling interval to be kind on API quotas
   }
 
   // Server-Sent Events (SSE) Stream Endpoint
@@ -1668,6 +1712,56 @@ async function startServer() {
     req.on("close", () => {
       sseClients = sseClients.filter((client) => client !== res);
     });
+  });
+
+  app.get("/api/sync-cloud", async (req, res) => {
+    if (firestoreRestSync) {
+      try {
+        console.log("[MOCK_DB] Explicit client request: forcing cloud fetch and merge...");
+        const cloudState = await firestoreRestSync.getMaster();
+        if (cloudState !== null) {
+          isCloudHydrated = true;
+          if (Object.keys(cloudState).length > 0) {
+            let changedKeys: Record<string, any> = {};
+            let deletedKeys: string[] = [];
+
+            // Find differences
+            for (const [k, newVal] of Object.entries(cloudState)) {
+              const oldVal = serverMockDbStore[k];
+              if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+                changedKeys[k] = newVal;
+              }
+            }
+
+            for (const k of Object.keys(serverMockDbStore)) {
+              if (!(k in cloudState)) {
+                deletedKeys.push(k);
+              }
+            }
+
+            serverMockDbStore = { ...serverMockDbStore, ...cloudState };
+            saveMockDbToDisk();
+
+            if (Object.keys(changedKeys).length > 0 || deletedKeys.length > 0) {
+              // Broadcast to other clients
+              const broadcastPayload = JSON.stringify({
+                type: "update",
+                updates: changedKeys,
+                deletedKeys: deletedKeys
+              });
+              sseClients.forEach((client) => {
+                try {
+                  client.write(`data: ${broadcastPayload}\n\n`);
+                } catch (e) {}
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[MOCK_DB] Force cloud sync failed:", err);
+      }
+    }
+    res.json(serverMockDbStore);
   });
 
   app.get("/api/mock-db", async (req, res) => {

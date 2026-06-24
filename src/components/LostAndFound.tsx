@@ -880,12 +880,12 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "Found": return "bg-blue-500/10 text-blue-400 border-blue-500/20";
+      case "Found": return "bg-blue-50 text-blue-700 border-blue-200";
       case "Received at Office":
-      case "Secured in Office": return "bg-amber-500/10 text-amber-400 border-amber-500/20";
-      case "Claimed": return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
-      case "Disposed": return "bg-slate-500/10 text-slate-400 border-slate-500/20";
-      default: return "bg-slate-500/10 text-slate-400 border-slate-500/20";
+      case "Secured in Office": return "bg-amber-50 text-amber-700 border-amber-200";
+      case "Claimed": return "bg-emerald-50 text-emerald-700 border-emerald-200";
+      case "Disposed": return "bg-slate-100 text-slate-700 border-slate-200";
+      default: return "bg-slate-50 text-slate-600 border-slate-200";
     }
   };
 
@@ -894,8 +894,8 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h2 className="text-2xl font-serif italic text-white mb-2">Lost & Found Registry</h2>
-          <p className="text-[10px] font-display uppercase tracking-[0.2em] text-slate-500 font-bold">
+          <h2 className="text-3xl font-serif italic text-slate-900 mb-2">Lost & Found Registry</h2>
+          <p className="text-[10px] font-display uppercase tracking-[0.2em] text-gold font-bold">
             Property asset recovery and documentation system
           </p>
         </div>
@@ -903,7 +903,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
         <div className="flex items-center gap-3">
           <button 
             onClick={handleOpenAdd}
-            className="flex items-center gap-2 bg-gold hover:bg-gold-dark text-black px-4 py-2 text-[10px] font-display uppercase tracking-widest font-black transition-all"
+            className="flex items-center gap-2 bg-gold hover:bg-gold-dark text-black px-4 py-2 text-[10px] font-display uppercase tracking-widest font-black transition-all shadow-md cursor-pointer"
           >
             <Plus size={14} />
             Report Found Item
@@ -912,73 +912,81 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
       </div>
 
       {/* Controls */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-        <div className="relative group">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-gold transition-colors" size={16} />
-          <input 
-            type="text"
-            placeholder="Search items, locations..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 pl-10 pr-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none focus:border-gold/30 transition-all"
-          />
+      <div className="flex flex-col gap-5">
+        {/* Row 1: Search and Display Layout */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 justify-between">
+          <div className="relative group w-full sm:max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-gold transition-colors" size={16} />
+            <input 
+              type="text"
+              placeholder="Search items, locations..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-white border border-slate-200 pl-10 pr-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 outline-none focus:border-gold transition-all shadow-sm"
+            />
+          </div>
+
+          <div className="flex items-center justify-between sm:justify-end gap-3 sm:border-l sm:border-slate-100 sm:pl-4">
+            <span className="text-[9px] font-display uppercase tracking-widest text-slate-500 font-bold">Display Layout:</span>
+            <div className="flex items-center bg-slate-50 p-0.5 border border-slate-200 rounded-sm">
+              <button
+                onClick={() => setViewMode("grid")}
+                className={cn(
+                  "p-2 rounded-sm transition-all cursor-pointer",
+                  viewMode === "grid" ? "bg-white text-gold border border-slate-200/30 shadow-sm" : "text-slate-400 hover:text-slate-700"
+                )}
+                title="Grid Layout"
+              >
+                <LayoutGrid size={13} />
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                className={cn(
+                  "p-2 rounded-sm transition-all cursor-pointer",
+                  viewMode === "list" ? "bg-white text-gold border border-slate-200/30 shadow-sm" : "text-slate-400 hover:text-slate-700"
+                )}
+                title="Detailed List Layout"
+              >
+                <List size={13} />
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 bg-white/5 p-1 border border-white/10 overflow-x-auto no-scrollbar">
-          {([
-            { id: "All", label: "Active Items" },
-            { id: "Secured in Office", label: "Secured in Office" },
-            { id: "Claimed", label: "Dispatch Folder (Claimed)" },
-            { id: "Disposed", label: "Dispose Folder (Disposed)" },
-            { id: "Archived", label: "Archive Folder" }
-          ] as const).map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setFilter(tab.id)}
-              className={cn(
-                "whitespace-nowrap px-4 py-2 text-[9px] font-display uppercase tracking-widest font-bold transition-all",
-                filter === tab.id ? "bg-white/10 text-white shadow-sm" : "text-slate-500 hover:text-slate-300"
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center justify-start md:justify-end gap-3 md:border-l md:border-white/5 md:pl-4">
-          <span className="text-[9px] font-display uppercase tracking-widest text-slate-500 font-bold">Display Layout:</span>
-          <div className="flex items-center bg-white/5 p-0.5 border border-white/10 rounded-sm">
-            <button
-              onClick={() => setViewMode("grid")}
-              className={cn(
-                "p-2 rounded-sm transition-all cursor-pointer",
-                viewMode === "grid" ? "bg-white/10 text-gold shadow-sm" : "text-slate-500 hover:text-slate-300"
-              )}
-              title="Grid Layout"
-            >
-              <LayoutGrid size={13} />
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={cn(
-                "p-2 rounded-sm transition-all cursor-pointer",
-                viewMode === "list" ? "bg-white/10 text-gold shadow-sm" : "text-slate-500 hover:text-slate-300"
-              )}
-              title="Detailed List Layout"
-            >
-              <List size={13} />
-            </button>
+        {/* Row 2: Filter Tabs - Full width, horizontally scrollable on mobile with elegant buttons */}
+        <div className="bg-slate-50 p-1.5 border border-slate-200 rounded-sm overflow-x-auto scrollbar-thin">
+          <div className="flex items-center gap-1.5 min-w-max">
+            {([
+              { id: "All", label: "Active Items" },
+              { id: "Secured in Office", label: "Secured in Office" },
+              { id: "Claimed", label: "Dispatch Folder (Claimed)" },
+              { id: "Disposed", label: "Dispose Folder (Disposed)" },
+              { id: "Archived", label: "Archive Folder" }
+            ] as const).map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setFilter(tab.id)}
+                className={cn(
+                  "px-4 py-2.5 text-[9px] font-display uppercase tracking-widest font-bold transition-all cursor-pointer rounded-sm border",
+                  filter === tab.id 
+                    ? "bg-white text-gold border-gold/20 shadow-sm font-black" 
+                    : "bg-transparent text-slate-600 border-transparent hover:text-slate-900 hover:bg-slate-100"
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
       {/* Archive Folder Header Indicator */}
       {filter === "Archived" && (
-        <div className="p-4 bg-[#c5a02d]/10 border border-[#c5a02d]/25 text-sm text-slate-300 flex items-center gap-3">
-          <Package className="text-[#c5a02d]" size={20} />
+        <div className="p-4 bg-amber-50/70 border border-amber-200 text-sm text-slate-700 flex items-center gap-3 rounded-sm">
+          <Package className="text-amber-600" size={20} />
           <div>
-            <p className="font-semibold text-white uppercase tracking-wider text-[11px] font-display">Secure Archive Folder</p>
-            <p className="text-xs text-slate-400 mt-0.5">Historical overview of deleted records, claimed/dispatched items, and professional disposals with full signature tracking.</p>
+            <p className="font-semibold text-slate-900 uppercase tracking-wider text-[11px] font-display">Secure Archive Folder</p>
+            <p className="text-xs text-slate-600 mt-0.5">Historical overview of deleted records, claimed/dispatched items, and professional disposals with full signature tracking.</p>
           </div>
         </div>
       )}
@@ -1004,10 +1012,10 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-[#1a1a1a] border border-white/5 group hover:border-gold/20 transition-all flex flex-col h-full"
+                className="bg-white border border-slate-150 group hover:border-gold/30 hover:shadow-md transition-all flex flex-col h-full rounded-sm overflow-hidden"
               >
                 {/* Image Placeholder or Gallery */}
-                <div className="aspect-video bg-black/40 overflow-hidden relative group/img">
+                <div className="aspect-video bg-slate-50 overflow-hidden relative group/img">
                   {item.imageUrls && item.imageUrls.length > 0 ? (
                     <div 
                       className="flex w-full h-full cursor-zoom-in"
@@ -1035,7 +1043,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                       )}
                     </div>
                   ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-slate-700">
+                    <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-slate-400 bg-slate-50/50">
                       <ImageIcon size={32} />
                       <span className="text-[8px] font-display uppercase tracking-widest font-bold">No Image Secured</span>
                     </div>
@@ -1043,7 +1051,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                   
                   <div className="absolute top-4 left-4">
                     <span className={cn(
-                      "px-3 py-1 text-[8px] font-display uppercase tracking-[0.2em] font-black border backdrop-blur-md",
+                      "px-3 py-1 text-[8px] font-display uppercase tracking-[0.2em] font-black border backdrop-blur-md shadow-sm",
                       getStatusColor(item.status)
                     )}>
                       {item.status}
@@ -1054,7 +1062,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                     <div className="absolute top-4 right-4 flex gap-2">
                        <button 
                         onClick={() => handleEditClick(item)}
-                        className="w-8 h-8 bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-slate-400 hover:text-gold transition-all opacity-0 group-hover:opacity-100"
+                        className="w-8 h-8 bg-white/90 backdrop-blur-md border border-slate-200/50 flex items-center justify-center text-slate-500 hover:text-gold transition-all opacity-0 group-hover:opacity-100 shadow-sm"
                         title="Edit Entry"
                       >
                         <Edit2 size={14} />
@@ -1067,7 +1075,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                           }
                           setDeleteTargetId(item.id);
                         }}
-                        className="w-8 h-8 bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-slate-400 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                        className="w-8 h-8 bg-white/90 backdrop-blur-md border border-slate-200/50 flex items-center justify-center text-slate-500 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100 shadow-sm"
                         title="Delete Entry"
                       >
                         <Trash2 size={14} />
@@ -1079,37 +1087,37 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                 <div className="p-6 flex-1 flex flex-col">
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h3 className="text-white font-serif italic text-lg leading-tight mb-1 flex items-center flex-wrap gap-2">
+                      <h3 className="text-slate-900 font-serif italic text-lg leading-tight mb-1 flex items-center flex-wrap gap-2">
                         {item.itemName}
                         {item.isHighValue && (
                           <span 
                             title="Classified as High-Value"
-                            className="inline-flex items-center gap-1 bg-amber-500/15 text-amber-400 border border-amber-500/35 rounded-full px-2 py-0.5 text-[8px] font-display uppercase tracking-widest font-black leading-none"
+                            className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-700 border border-amber-500/20 rounded-full px-2 py-0.5 text-[8px] font-display uppercase tracking-widest font-black leading-none"
                           >
                             💎 High-Value
                           </span>
                         )}
                       </h3>
-                      <div className="flex items-center gap-2 text-gold opacity-60">
+                      <div className="flex items-center gap-2 text-gold">
                         <MapPin size={10} />
                         <span className="text-[9px] font-display uppercase tracking-widest font-bold">{item.locationFound}</span>
                       </div>
                     </div>
                   </div>
 
-                  <p className="text-slate-400 text-xs leading-relaxed mb-6 line-clamp-3">
+                  <p className="text-slate-600 text-xs leading-relaxed mb-6 line-clamp-3">
                     {item.description}
                   </p>
 
-                  <div className="mt-auto pt-4 border-t border-white/5 space-y-3">
+                  <div className="mt-auto pt-4 border-t border-slate-100 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <User size={12} className="text-slate-600" />
-                        <span className="text-[9px] text-slate-500 font-display uppercase tracking-widest">Found By: {item.staffName}</span>
+                        <User size={12} className="text-slate-400" />
+                        <span className="text-[9px] text-slate-600 font-display uppercase tracking-widest">Found By: <strong className="text-slate-800 font-semibold">{item.staffName}</strong></span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Calendar size={12} className="text-slate-600" />
-                        <span className="text-[9px] text-slate-500 font-display uppercase tracking-widest">
+                        <Calendar size={12} className="text-slate-400" />
+                        <span className="text-[9px] text-slate-600 font-display uppercase tracking-widest">
                           {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : 'Pending'}
                         </span>
                       </div>
@@ -1206,15 +1214,15 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                         )}
 
                         {item.isArchived && (
-                          <div className="mt-4 p-4 border border-slate-850 bg-white/[0.02] space-y-3">
-                            <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                              <span className="text-[10px] font-display uppercase tracking-widest font-black text-[#c5a02d]">
+                          <div className="mt-4 p-4 border border-amber-200 bg-amber-50/20 rounded-sm space-y-3">
+                            <div className="flex items-center justify-between border-b border-amber-200/50 pb-2">
+                              <span className="text-[10px] font-display uppercase tracking-widest font-black text-amber-800">
                                 Secure Archived Record
                               </span>
                               {isAdministrator && (
                                 <button 
                                   onClick={() => setRestoreTargetId(item.id)}
-                                  className="px-2 py-1 bg-[#c5a02d]/10 border border-[#c5a02d]/30 text-[#c5a02d] text-[8px] font-display uppercase tracking-widest font-bold hover:bg-[#c5a02d]/25 transition-all"
+                                  className="px-2 py-1 bg-amber-100 border border-amber-300 text-amber-800 text-[8px] font-display uppercase tracking-widest font-bold hover:bg-amber-200 transition-all cursor-pointer"
                                 >
                                   Restore Item
                                 </button>
@@ -1223,17 +1231,17 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                             <div className="grid grid-cols-2 gap-4 text-left">
                               <div>
                                 <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Archived By</p>
-                                <p className="text-[9px] text-slate-300 font-serif italic">{(item as any).archivedBy || "System Admin"}</p>
+                                <p className="text-[9px] text-slate-800 font-serif italic">{(item as any).archivedBy || "System Admin"}</p>
                               </div>
                               <div>
                                 <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Category/Reason</p>
-                                <p className="text-[9px] text-[#c5a02d] font-mono font-bold">{(item as any).archivedReason || (item.status === "Claimed" ? "Claimed / Dispatched" : "Disposed")}</p>
+                                <p className="text-[9px] text-amber-800 font-mono font-bold">{(item as any).archivedReason || (item.status === "Claimed" ? "Claimed / Dispatched" : "Disposed")}</p>
                               </div>
                             </div>
                             {(item as any).archivedAt && (
                               <div className="text-left">
                                 <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Archive Timestamp</p>
-                                <p className="text-[9px] text-slate-400">
+                                <p className="text-[9px] text-slate-700">
                                   {(item as any).archivedAt?.toDate ? (item as any).archivedAt.toDate().toLocaleString() : new Date((item as any).archivedAt).toLocaleString()}
                                 </p>
                               </div>
@@ -1242,21 +1250,21 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                         )}
 
                     {item.status === "Claimed" && item.dispatchDetails && (
-                       <div className="mt-4 pt-4 border-t border-white/5 space-y-3">
+                       <div className="mt-4 pt-4 border-t border-slate-200 space-y-3">
                           <div className="flex items-center justify-between">
-                             <p className="text-[10px] font-display uppercase tracking-widest text-emerald-400 font-black flex items-center gap-2">
-                               <CheckCircle size={14} /> Released to {item.dispatchDetails.guestName}
+                             <p className="text-[10px] font-display uppercase tracking-widest text-emerald-800 font-black flex items-center gap-2">
+                               <CheckCircle size={14} className="text-emerald-600" /> Released to {item.dispatchDetails.guestName}
                              </p>
                           </div>
                           
                           <div className="grid grid-cols-2 gap-4 text-left">
                              <div className="space-y-1">
                                 <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Dispatched By</p>
-                                <p className="text-[9px] font-serif italic text-slate-300">{(item.dispatchDetails as any).dispatchedBy}</p>
+                                <p className="text-[9px] font-serif italic text-slate-800">{(item.dispatchDetails as any).dispatchedBy}</p>
                              </div>
                              <div className="space-y-1">
                                 <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Release Date</p>
-                                <p className="text-[9px] font-serif italic text-slate-300">{(item.dispatchDetails as any).releaseDate}</p>
+                                <p className="text-[9px] font-serif italic text-slate-800">{(item.dispatchDetails as any).releaseDate}</p>
                              </div>
                           </div>
 
@@ -1264,11 +1272,11 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                              <div className="grid grid-cols-2 gap-4 text-left">
                                <div className="space-y-1">
                                   <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Email</p>
-                                  <p className="text-[8px] font-mono text-slate-300">{(item as any).dispatchDetails.guestEmail}</p>
+                                  <p className="text-[8px] font-mono text-slate-800">{(item as any).dispatchDetails.guestEmail}</p>
                                </div>
                                <div className="space-y-1">
                                   <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Phone</p>
-                                  <p className="text-[8px] text-slate-300">{(item as any).dispatchDetails.guestPhone || 'N/A'}</p>
+                                  <p className="text-[8px] text-slate-800">{(item as any).dispatchDetails.guestPhone || 'N/A'}</p>
                                </div>
                             </div>
                           )}
@@ -1276,7 +1284,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                           {(item as any).dispatchDetails?.notes && (
                              <div className="space-y-1 text-left">
                                 <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Handover Notes</p>
-                                <p className="text-[9px] font-serif italic text-slate-400 font-serif">"{(item as any).dispatchDetails.notes}"</p>
+                                <p className="text-[9px] font-serif italic text-slate-600">"{(item as any).dispatchDetails.notes}"</p>
                              </div>
                           )}
 
@@ -1284,14 +1292,14 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                             {(item as any).dispatchDetails?.signatureUrl && (
                                <div className="space-y-1 text-left">
                                   <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Guest Signature</p>
-                                  <img src={(item as any).dispatchDetails.signatureUrl} alt="Signature" className="h-10 object-contain bg-white border border-slate-100" />
+                                  <img src={(item as any).dispatchDetails.signatureUrl} alt="Signature" className="h-10 object-contain bg-white border border-slate-200" />
                                </div>
                             )}
 
                             {(item as any).dispatchDetails?.staffSignatureUrl && (
                                <div className="space-y-1 text-left">
                                   <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Staff Authorizer Signature</p>
-                                  <img src={(item as any).dispatchDetails.staffSignatureUrl} alt="Staff Signature" className="h-10 object-contain bg-white border border-slate-100" />
+                                  <img src={(item as any).dispatchDetails.staffSignatureUrl} alt="Staff Signature" className="h-10 object-contain bg-white border border-slate-200" />
                                 </div>
                             )}
                           </div>
@@ -1302,7 +1310,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                                  href={(item as any).dispatchDetails.idDocumentUrl} 
                                  target="_blank" 
                                  rel="noreferrer"
-                                 className="flex-1 py-1.5 bg-white/5 border border-white/10 text-[7px] font-display uppercase tracking-widest text-white text-center hover:bg-white/10"
+                                 className="flex-1 py-1.5 bg-slate-50 border border-slate-200 text-[7px] font-display uppercase tracking-widest text-slate-800 text-center hover:bg-slate-100"
                                >
                                  View ID Proof
                                </a>
@@ -1312,7 +1320,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                                  href={(item as any).dispatchDetails.recipientPhotoUrl} 
                                  target="_blank" 
                                  rel="noreferrer"
-                                 className="flex-1 py-1.5 bg-white/5 border border-white/10 text-[7px] font-display uppercase tracking-widest text-white text-center hover:bg-white/10"
+                                 className="flex-1 py-1.5 bg-slate-50 border border-slate-200 text-[7px] font-display uppercase tracking-widest text-slate-800 text-center hover:bg-slate-100"
                                >
                                  Recipient Photo
                                </a>
@@ -1322,46 +1330,46 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                     )}
 
                     {item.status === "Disposed" && item.disposalDetails && (
-                       <div className="mt-4 pt-4 border-t border-white/5 space-y-3">
+                       <div className="mt-4 pt-4 border-t border-slate-200 space-y-3">
                           <div className="flex items-center justify-between">
-                             <p className="text-[10px] font-display uppercase tracking-widest text-red-500 font-black flex items-center gap-2">
-                               <XCircle size={14} /> Item Professionally Disposed
+                             <p className="text-[10px] font-display uppercase tracking-widest text-red-700 font-black flex items-center gap-2">
+                               <XCircle size={14} className="text-red-600" /> Item Professionally Disposed
                              </p>
                           </div>
                           
                           <div className="grid grid-cols-2 gap-4 text-left">
                              <div className="space-y-1">
                                 <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Disposed By</p>
-                                <p className="text-[9px] font-serif italic text-slate-300">{item.disposalDetails.disposedBy}</p>
+                                <p className="text-[9px] font-serif italic text-slate-800">{item.disposalDetails.disposedBy}</p>
                              </div>
                              <div className="space-y-1">
                                 <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Witnessed By</p>
-                                <p className="text-[9px] font-serif italic text-slate-300">{item.disposalDetails.witnessName || "None"}</p>
+                                <p className="text-[9px] font-serif italic text-slate-800">{item.disposalDetails.witnessName || "None"}</p>
                              </div>
                           </div>
 
                           <div className="grid grid-cols-2 gap-4 text-left">
                              <div className="space-y-1">
                                 <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Reason</p>
-                                <p className="text-[9px] text-slate-300">{item.disposalDetails.reason}</p>
+                                <p className="text-[9px] text-slate-800">{item.disposalDetails.reason}</p>
                              </div>
                              <div className="space-y-1">
                                 <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Disposal Date</p>
-                                <p className="text-[9px] text-slate-300">{item.disposalDetails.disposedAt ? (item.disposalDetails.disposedAt.toDate ? item.disposalDetails.disposedAt.toDate().toLocaleDateString() : new Date(item.disposalDetails.disposedAt).toLocaleDateString()) : 'Pending'}</p>
+                                <p className="text-[9px] text-slate-800">{item.disposalDetails.disposedAt ? (item.disposalDetails.disposedAt.toDate ? item.disposalDetails.disposedAt.toDate().toLocaleDateString() : new Date(item.disposalDetails.disposedAt).toLocaleDateString()) : 'Pending'}</p>
                              </div>
                           </div>
 
                           {item.disposalDetails.notes && (
                              <div className="space-y-1 text-left">
                                 <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Protocol Notes</p>
-                                <p className="text-[9px] font-serif italic text-slate-400">"{item.disposalDetails.notes}"</p>
+                                <p className="text-[9px] font-serif italic text-slate-600">"{item.disposalDetails.notes}"</p>
                              </div>
                           )}
 
                           {item.disposalDetails.signatureUrl && (
                              <div className="space-y-1 text-left">
                                 <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold mb-1">Authorization Signature</p>
-                                <img src={item.disposalDetails.signatureUrl} alt="Signature" className="h-10 object-contain bg-white border border-slate-100" />
+                                <img src={item.disposalDetails.signatureUrl} alt="Signature" className="h-10 object-contain bg-white border border-slate-200" />
                              </div>
                           )}
                        </div>
@@ -1383,11 +1391,11 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 12 }}
-                className="bg-[#1a1a1a] border border-white/5 group hover:border-gold/20 transition-all flex flex-col h-auto overflow-hidden text-left"
+                className="bg-white border border-slate-150 group hover:border-gold/30 hover:shadow-md transition-all flex flex-col h-auto overflow-hidden text-left rounded-sm"
               >
                 <div className="flex flex-col md:flex-row">
                   {/* Photo Container */}
-                  <div className="w-full md:w-52 h-44 md:h-auto min-h-[176px] bg-black/40 overflow-hidden relative shrink-0">
+                  <div className="w-full md:w-52 h-44 md:h-auto min-h-[176px] bg-slate-50 overflow-hidden relative shrink-0">
                     {item.imageUrls && item.imageUrls.length > 0 ? (
                       <div 
                         className="w-full h-full cursor-zoom-in"
@@ -1404,7 +1412,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                         />
                       </div>
                     ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-slate-700 bg-zinc-900/40">
+                      <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-slate-400 bg-slate-50/50">
                         <ImageIcon size={28} />
                         <span className="text-[8px] font-display uppercase tracking-widest font-bold">No Image Secured</span>
                       </div>
@@ -1412,7 +1420,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                     
                     <div className="absolute top-4 left-4">
                       <span className={cn(
-                        "px-3 py-1 text-[8px] font-display uppercase tracking-[0.2em] font-black border backdrop-blur-md",
+                        "px-3 py-1 text-[8px] font-display uppercase tracking-[0.2em] font-black border backdrop-blur-md shadow-sm",
                         getStatusColor(item.status)
                       )}>
                         {item.status}
@@ -1420,10 +1428,10 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                     </div>
 
                     {isAdministrator && (
-                      <div className="absolute bottom-4 left-4 flex gap-2 bg-black/60 p-1 rounded backdrop-blur-md border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute bottom-4 left-4 flex gap-2 bg-white/95 p-1 rounded backdrop-blur-md border border-slate-200 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
                         <button 
                           onClick={() => handleEditClick(item)}
-                          className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-gold transition-all cursor-pointer"
+                          className="w-7 h-7 flex items-center justify-center text-slate-500 hover:text-gold transition-all cursor-pointer"
                           title="Edit Entry"
                         >
                           <Edit2 size={12} />
@@ -1436,7 +1444,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                             }
                             setDeleteTargetId(item.id);
                           }}
-                          className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-red-500 transition-all cursor-pointer"
+                          className="w-7 h-7 flex items-center justify-center text-slate-500 hover:text-red-500 transition-all cursor-pointer"
                           title="Delete Entry"
                         >
                           <Trash2 size={12} />
@@ -1450,36 +1458,36 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                     <div>
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
                         <div>
-                          <h3 className="text-white font-serif italic text-xl leading-snug flex items-center flex-wrap gap-2">
+                          <h3 className="text-slate-900 font-serif italic text-xl leading-snug flex items-center flex-wrap gap-2">
                             {item.itemName}
                             {item.isHighValue && (
                               <span 
                                 title="Classified as High-Value"
-                                className="inline-flex items-center gap-1 bg-amber-500/15 text-amber-400 border border-amber-500/35 rounded-full px-2 py-0.5 text-[8px] font-display uppercase tracking-widest font-black leading-none"
+                                className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-700 border border-amber-500/20 rounded-full px-2 py-0.5 text-[8px] font-display uppercase tracking-widest font-black leading-none"
                               >
                                 💎 High-Value
                               </span>
                             )}
                           </h3>
-                          <p className="text-slate-400 text-xs leading-relaxed mt-2 max-w-3xl">
+                          <p className="text-slate-600 text-xs leading-relaxed mt-2 max-w-3xl">
                             {item.description}
                           </p>
                         </div>
-                        <div className="flex items-center gap-2 text-gold shrink-0 self-start sm:self-auto bg-gold/5 border border-gold/15 px-3 py-1 rounded-sm">
+                        <div className="flex items-center gap-2 text-gold shrink-0 self-start sm:self-auto bg-gold/5 border border-gold/15 px-3 py-1 rounded-sm shadow-sm">
                           <MapPin size={11} />
                           <span className="text-[9px] font-display uppercase tracking-widest font-bold">{item.locationFound}</span>
                         </div>
                       </div>
 
                       {/* Info bar for lists */}
-                      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 py-3 border-y border-white/5 text-[9px] text-slate-500 font-display uppercase tracking-widest mb-4">
+                      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 py-3 border-y border-slate-150 text-[9px] text-slate-500 font-display uppercase tracking-widest mb-4">
                         <div className="flex items-center gap-2">
-                          <User size={12} className="text-slate-600" />
-                          <span>Found By: <strong className="text-slate-300 font-medium">{item.staffName}</strong></span>
+                          <User size={12} className="text-slate-400" />
+                          <span>Found By: <strong className="text-slate-800 font-semibold">{item.staffName}</strong></span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Calendar size={12} className="text-slate-600" />
-                          <span>Logged Date: <strong className="text-slate-300 font-medium font-sans">
+                          <Calendar size={12} className="text-slate-400" />
+                          <span>Logged Date: <strong className="text-slate-800 font-semibold font-sans">
                             {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : 'Pending'}
                           </strong></span>
                         </div>
@@ -1519,27 +1527,27 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
 
                       {/* Secured Storage Area */}
                       {(item.status === "Received at Office" || item.status === "Secured in Office") && !item.isArchived && (isAdmin || userRole === "Administrator" || userRole === "Manager" || userRole === "Audit" || userRole === "admin" || userRole === "Group Controller") && (
-                        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center bg-white/[0.02] border border-white/5 p-4 rounded-sm mt-2">
+                        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center bg-slate-50 border border-slate-200 p-4 rounded-sm mt-2">
                           {item.receivedDetails && (
                             <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4 text-left w-full">
                               <div>
                                 <p className="text-[7px] uppercase tracking-widest text-[#c5a02d] font-bold">Physical Storage</p>
-                                <p className="text-[10px] text-white font-medium font-sans">{item.receivedDetails.storageLocation}</p>
+                                <p className="text-[10px] text-slate-900 font-medium font-sans">{item.receivedDetails.storageLocation}</p>
                               </div>
                               {item.receivedDetails.storageKeyNumber && (
                                 <div>
                                   <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Cabinet/Bin No.</p>
-                                  <p className="text-[9px] text-slate-300 font-mono">{item.receivedDetails.storageKeyNumber}</p>
+                                  <p className="text-[9px] text-slate-800 font-mono">{item.receivedDetails.storageKeyNumber}</p>
                                 </div>
                               )}
                               <div>
                                 <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold font-sans">Receiver Badge</p>
-                                <p className="text-[9px] text-slate-300 uppercase tracking-widest font-mono font-bold text-[8px]">{item.receivedDetails.receivedBy} ({item.receivedDetails.department})</p>
+                                <p className="text-[9px] text-slate-800 uppercase tracking-widest font-mono font-bold text-[8px]">{item.receivedDetails.receivedBy} ({item.receivedDetails.department})</p>
                               </div>
                               {item.receivedDetails.signatureUrl && (
                                 <div>
                                   <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold mb-1">Receiver Signature</p>
-                                  <img src={item.receivedDetails.signatureUrl} alt="" className="h-6 object-contain bg-white border border-white/10" />
+                                  <img src={item.receivedDetails.signatureUrl} alt="" className="h-6 object-contain bg-white border border-slate-200" />
                                 </div>
                               )}
                             </div>
@@ -1548,16 +1556,16 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                           <div className="flex gap-2 shrink-0 w-full lg:w-auto">
                             <button 
                               onClick={() => setSelectedItemForDispatch(item)}
-                              className="flex-1 lg:flex-initial bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 py-2.5 px-4 text-[8px] font-display uppercase tracking-widest font-black hover:bg-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                              className="flex-1 lg:flex-initial bg-emerald-50 border border-emerald-300 text-emerald-800 py-2.5 px-4 text-[8px] font-display uppercase tracking-widest font-black hover:bg-emerald-100 transition-all flex items-center justify-center gap-2 cursor-pointer"
                             >
-                              <CheckCircle size={11} />
+                              <CheckCircle size={11} className="text-emerald-600" />
                               Dispatch
                             </button>
                             <button 
                               onClick={() => setSelectedItemForDispose(item)}
-                              className="flex-1 lg:flex-initial bg-slate-500/10 border border-slate-500/20 text-slate-400 py-2.5 px-4 text-[8px] font-display uppercase tracking-widest font-black hover:bg-slate-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                              className="flex-1 lg:flex-initial bg-slate-50 border border-slate-300 text-slate-700 py-2.5 px-4 text-[8px] font-display uppercase tracking-widest font-black hover:bg-slate-100 transition-all flex items-center justify-center gap-2 cursor-pointer"
                             >
-                              <XCircle size={11} />
+                              <XCircle size={11} className="text-slate-500" />
                               Dispose
                             </button>
                           </div>
@@ -1566,45 +1574,45 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
 
                       {/* Released / Claimed Area */}
                       {item.status === "Claimed" && item.dispatchDetails && (
-                        <div className="mt-2 p-4 bg-emerald-950/5 border border-emerald-900/10 rounded-sm space-y-3">
-                          <div className="flex items-center gap-2 border-b border-white/5 pb-2">
-                            <CheckCircle className="text-emerald-400 animate-pulse" size={13} />
-                            <span className="text-[10px] font-display uppercase tracking-widest text-emerald-400 font-black">
-                              Handed Over & Released to <strong className="text-white font-black">{item.dispatchDetails.guestName}</strong>
+                        <div className="mt-2 p-4 bg-emerald-50/20 border border-emerald-200 rounded-sm space-y-3">
+                          <div className="flex items-center gap-2 border-b border-emerald-100 pb-2">
+                            <CheckCircle className="text-emerald-700 animate-pulse" size={13} />
+                            <span className="text-[10px] font-display uppercase tracking-widest text-emerald-800 font-black">
+                              Handed Over & Released to <strong className="text-slate-900 font-black">{item.dispatchDetails.guestName}</strong>
                             </span>
                           </div>
 
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-left">
                             <div>
                               <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Rel. Authorized By</p>
-                              <p className="text-[9px] text-slate-300 font-serif italic">{(item.dispatchDetails as any).dispatchedBy}</p>
+                              <p className="text-[9px] text-slate-800 font-serif italic">{(item.dispatchDetails as any).dispatchedBy}</p>
                             </div>
                             <div>
                               <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Release Timestamp</p>
-                              <p className="text-[9px] text-slate-300 font-serif italic">{(item.dispatchDetails as any).releaseDate}</p>
+                              <p className="text-[9px] text-slate-800 font-serif italic">{(item.dispatchDetails as any).releaseDate}</p>
                             </div>
                             {item.dispatchDetails.guestEmail && (
                               <div className="col-span-2">
                                 <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Registered Contacts</p>
-                                <p className="text-[9px] text-slate-400">
+                                <p className="text-[9px] text-slate-700">
                                   {item.dispatchDetails.guestEmail} {item.dispatchDetails.guestPhone ? `| ${item.dispatchDetails.guestPhone}` : ""}
                                 </p>
                               </div>
                             )}
                           </div>
 
-                          <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-white/5">
+                          <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-200">
                             <div className="flex gap-4">
                               {item.dispatchDetails.signatureUrl && (
                                 <div className="space-y-0.5 text-left">
                                   <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Guest Signature</p>
-                                  <img src={item.dispatchDetails.signatureUrl} alt="" className="h-8 object-contain bg-white border border-white/10" />
+                                  <img src={item.dispatchDetails.signatureUrl} alt="" className="h-8 object-contain bg-white border border-slate-200" />
                                 </div>
                               )}
                               {item.dispatchDetails.staffSignatureUrl && (
                                 <div className="space-y-0.5 text-left">
                                   <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Agent Signature</p>
-                                  <img src={item.dispatchDetails.staffSignatureUrl} alt="" className="h-8 object-contain bg-white border border-white/10" />
+                                  <img src={item.dispatchDetails.staffSignatureUrl} alt="" className="h-8 object-contain bg-white border border-slate-200" />
                                 </div>
                               )}
                             </div>
@@ -1615,7 +1623,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                                   href={item.dispatchDetails.idDocumentUrl} 
                                   target="_blank" 
                                   rel="noreferrer"
-                                  className="py-1 px-3 bg-white/5 border border-white/10 text-[8px] font-display uppercase tracking-widest text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
+                                  className="py-1 px-3 bg-slate-50 border border-slate-200 text-[8px] font-display uppercase tracking-widest text-slate-800 hover:text-slate-950 hover:bg-slate-100 transition-colors"
                                 >
                                   ID File
                                 </a>
@@ -1625,7 +1633,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                                   href={item.dispatchDetails.recipientPhotoUrl} 
                                   target="_blank" 
                                   rel="noreferrer"
-                                  className="py-1 px-3 bg-white/5 border border-white/10 text-[8px] font-display uppercase tracking-widest text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
+                                  className="py-1 px-3 bg-slate-50 border border-slate-200 text-[8px] font-display uppercase tracking-widest text-slate-800 hover:text-slate-950 hover:bg-slate-100 transition-colors"
                                 >
                                   Recip Photo
                                 </a>
@@ -1637,10 +1645,10 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
 
                       {/* Professional Disposal Area */}
                       {item.status === "Disposed" && item.disposalDetails && (
-                        <div className="mt-2 p-4 bg-red-950/5 border border-red-900/10 rounded-sm space-y-3">
-                          <div className="flex items-center gap-2 border-b border-white/5 pb-2">
-                            <XCircle className="text-red-500" size={13} />
-                            <span className="text-[10px] font-display uppercase tracking-widest text-red-500 font-black font-sans">
+                        <div className="mt-2 p-4 bg-red-50/20 border border-red-200 rounded-sm space-y-3">
+                          <div className="flex items-center gap-2 border-b border-red-100 pb-2">
+                            <XCircle className="text-red-700" size={13} />
+                            <span className="text-[10px] font-display uppercase tracking-widest text-red-800 font-black font-sans">
                               Item Destroyed, Recycled, or Donated
                             </span>
                           </div>
@@ -1648,22 +1656,22 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-left">
                             <div>
                               <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Disposing Officer</p>
-                              <p className="text-[9px] text-slate-300 font-serif italic">{item.disposalDetails.disposedBy}</p>
+                              <p className="text-[9px] text-slate-800 font-serif italic">{item.disposalDetails.disposedBy}</p>
                             </div>
                             <div>
                               <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold font-sans">Witness Name</p>
-                              <p className="text-[9px] text-slate-300 font-serif italic">{item.disposalDetails.witnessName || "None"}</p>
+                              <p className="text-[9px] text-slate-800 font-serif italic">{item.disposalDetails.witnessName || "None"}</p>
                             </div>
                             <div className="col-span-2">
                               <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Disposal Protocol & Reason</p>
-                              <p className="text-[9px] text-slate-300 font-sans font-bold">{item.disposalDetails.reason}</p>
+                              <p className="text-[9px] text-slate-800 font-sans font-bold">{item.disposalDetails.reason}</p>
                             </div>
                           </div>
                           
                           {item.disposalDetails.notes && (
-                            <div className="p-2 border border-white/5 bg-white/[0.01]">
+                            <div className="p-2 border border-slate-200 bg-slate-50">
                               <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Disposal Action Notes</p>
-                              <p className="text-[9px] text-slate-400 italic">"{item.disposalDetails.notes}"</p>
+                              <p className="text-[9px] text-slate-600 italic">"{item.disposalDetails.notes}"</p>
                             </div>
                           )}
                         </div>
@@ -1671,20 +1679,20 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
 
                       {/* Secured Archive Area */}
                       {item.isArchived && (
-                        <div className="mt-2 p-4 bg-white/[0.01] border border-white/5 rounded-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div className="mt-2 p-4 bg-amber-50/20 border border-amber-200 rounded-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-left flex-1 w-full">
                             <div>
                               <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Authorised Archiver</p>
-                              <p className="text-[9px] text-slate-300 italic">{item.isArchived ? "Archived and Secured" : "Active"}</p>
+                              <p className="text-[9px] text-slate-800 italic">{item.isArchived ? "Archived and Secured" : "Active"}</p>
                             </div>
                             <div>
                               <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Process Category</p>
-                              <p className="text-[9px] text-[#c5a02d] font-mono font-bold">{(item as any).archivedReason || (item.status === "Claimed" ? "Claimed / Dispatched" : "Disposed")}</p>
+                              <p className="text-[9px] text-amber-800 font-mono font-bold">{(item as any).archivedReason || (item.status === "Claimed" ? "Claimed / Dispatched" : "Disposed")}</p>
                             </div>
                             {(item as any).archivedAt && (
                               <div>
                                 <p className="text-[7px] uppercase tracking-widest text-slate-500 font-bold">Closure Date</p>
-                                <p className="text-[9px] text-slate-400 font-sans">
+                                <p className="text-[9px] text-slate-700 font-sans">
                                   {(item as any).archivedAt?.toDate ? (item as any).archivedAt.toDate().toLocaleString() : new Date((item as any).archivedAt).toLocaleString()}
                                 </p>
                               </div>
@@ -1693,7 +1701,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                           {isAdministrator && (
                             <button 
                               onClick={() => setRestoreTargetId(item.id)}
-                              className="px-4 py-2 bg-[#c5a02d]/10 border border-[#c5a02d]/30 text-[#c5a02d] text-[8px] font-display uppercase tracking-widest font-black hover:bg-[#c5a02d]/20 transition-all shrink-0 w-full sm:w-auto cursor-pointer"
+                              className="px-4 py-2 bg-amber-100 border border-amber-300 text-amber-800 text-[8px] font-display uppercase tracking-widest font-black hover:bg-amber-200 transition-all shrink-0 w-full sm:w-auto cursor-pointer"
                             >
                               Restore Record
                             </button>

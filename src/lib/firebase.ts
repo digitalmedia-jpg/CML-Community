@@ -348,7 +348,7 @@ export function setupRealTimeSync() {
 export async function forceSyncNow() {
   try {
     console.log("[REAL_TIME_SYNC] Executing active manual sync query with server...");
-    const response = await fetch("/api/mock-db");
+    const response = await fetch("/api/sync-cloud");
     if (response.ok) {
       const dbData = await response.json();
       if (dbData && typeof dbData === "object") {
