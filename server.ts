@@ -1334,11 +1334,13 @@ async function startServer() {
       } catch (e) {
         console.warn("[MOCK_DB] Failed to read firebase.json for database candidates:", e);
       }
-      if (!candidates.includes("(default)")) {
-        candidates.push("(default)");
-      }
-      if (!candidates.includes("default")) {
-        candidates.push("default");
+      if (candidates.length === 0) {
+        if (!candidates.includes("(default)")) {
+          candidates.push("(default)");
+        }
+        if (!candidates.includes("default")) {
+          candidates.push("default");
+        }
       }
       const filtered = candidates.filter(c => !this.unusableDatabaseIds.has(c));
       return filtered.length > 0 ? filtered : ["(default)"];
@@ -1359,8 +1361,34 @@ async function startServer() {
         try {
           // 1. Try listing documents under hybrid_sandbox collection to merge chunks
           const listUrl = this.getUrl(undefined, dbId) + "&pageSize=300";
-          const res = await fetch(listUrl);
-          if (res.ok) {
+          
+          let res: Response | null = null;
+          let attempts = 0;
+          let delayMs = 1500;
+          let success = false;
+
+          while (attempts < 3 && !success) {
+            try {
+              res = await fetch(listUrl);
+              if (res.status === 429) {
+                attempts++;
+                console.log(`[MOCK_DB] Received 429 for listUrl on database '${dbId}', attempt ${attempts}/3. Backing off for ${delayMs}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+                delayMs *= 2;
+              } else {
+                success = true;
+              }
+            } catch (e: any) {
+              attempts++;
+              console.log(`[MOCK_DB] Exception fetching listUrl on database '${dbId}' (attempt ${attempts}/3): ${e.message || e}`);
+              if (attempts < 3) {
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+                delayMs *= 2;
+              }
+            }
+          }
+
+          if (res && res.ok) {
             anySuccessfulFetch = true;
             const data = await res.json();
             const combinedStore: Record<string, any> = {};
@@ -1385,12 +1413,13 @@ async function startServer() {
               return {};
             }
           } else {
-            if (res.status === 403 || res.status === 404) {
+            const status = res ? res.status : 0;
+            if (status === 400 || status === 403 || status === 404) {
               anySuccessfulFetch = true;
-              console.log(`[MOCK_DB] Database '${dbId}' is unusable or unauthorized (${res.status}). Excluding from future sync attempts.`);
+              console.log(`[MOCK_DB] Database '${dbId}' is unusable or unauthorized (${status}). Excluding from future sync attempts.`);
               this.unusableDatabaseIds.add(dbId);
             } else {
-              console.log(`[MOCK_DB] Collection listing failed for '${dbId}' (${res.status}), trying direct master_db fallback.`);
+              console.log(`[MOCK_DB] Database '${dbId}' listing status: ${status}. Checking direct master_db fallback.`);
             }
           }
         } catch (e: any) {
@@ -1400,24 +1429,49 @@ async function startServer() {
         // 2. Direct document single master_db fetch fallback
         const fallbackUrl = this.getUrl("master_db", dbId);
         try {
-          const res = await fetch(fallbackUrl);
-          if (res.ok) {
+          let fallbackRes: Response | null = null;
+          let fallbackAttempts = 0;
+          let fallbackDelayMs = 1500;
+          let fallbackSuccess = false;
+
+          while (fallbackAttempts < 3 && !fallbackSuccess) {
+            try {
+              fallbackRes = await fetch(fallbackUrl);
+              if (fallbackRes.status === 429) {
+                fallbackAttempts++;
+                console.log(`[MOCK_DB] Fallback: Received 429 for master_db on database '${dbId}', attempt ${fallbackAttempts}/3. Backing off for ${fallbackDelayMs}ms...`);
+                await new Promise(resolve => setTimeout(resolve, fallbackDelayMs));
+                fallbackDelayMs *= 2;
+              } else {
+                fallbackSuccess = true;
+              }
+            } catch (e: any) {
+              fallbackAttempts++;
+              console.log(`[MOCK_DB] Fallback: Exception fetching master_db for '${dbId}' (attempt ${fallbackAttempts}/3): ${e.message || e}`);
+              if (fallbackAttempts < 3) {
+                await new Promise(resolve => setTimeout(resolve, fallbackDelayMs));
+                fallbackDelayMs *= 2;
+              }
+            }
+          }
+
+          if (fallbackRes && fallbackRes.ok) {
             anySuccessfulFetch = true;
             console.log(`[MOCK_DB] Fallback: Successfully fetched single master_db from database '${dbId}'`);
             this.databaseId = dbId;
-            const doc = await res.json();
+            const doc = await fallbackRes.json();
             if (doc && doc.fields && doc.fields.db_json && doc.fields.db_json.stringValue) {
               return JSON.parse(doc.fields.db_json.stringValue);
             }
             return {};
-          } else if (res.status === 404) {
+          } else if (fallbackRes && fallbackRes.status === 404) {
             anySuccessfulFetch = true;
             console.log(`[MOCK_DB] Fallback: master_db document not found in database '${dbId}'`);
             this.databaseId = dbId;
             return {};
-          } else if (res.status === 403) {
+          } else if (fallbackRes && (fallbackRes.status === 400 || fallbackRes.status === 403)) {
             anySuccessfulFetch = true;
-            console.log(`[MOCK_DB] Fallback: master_db document returned 403 on database '${dbId}'. Excluding from future sync attempts.`);
+            console.log(`[MOCK_DB] Fallback: master_db document returned ${fallbackRes.status} on database '${dbId}'. Excluding from future sync attempts.`);
             this.unusableDatabaseIds.add(dbId);
           }
         } catch (e: any) {
@@ -1506,14 +1560,14 @@ async function startServer() {
                 console.log(`[MOCK_DB] Received 429 for chunk '${chunkName}' on attempt ${attempts}. Backing off for ${delayMs}ms before retrying...`);
                 await new Promise(resolve => setTimeout(resolve, delayMs));
                 delayMs *= 2;
-              } else if (res.status === 403 || res.status === 404) {
+              } else if (res.status === 400 || res.status === 403 || res.status === 404) {
                 dbSucceeded = false;
                 console.log(`[MOCK_DB] Database '${dbId}' is unusable or unauthorized on write (${res.status}). Excluding from future sync attempts.`);
                 this.unusableDatabaseIds.add(dbId);
                 success = true; // exit the retry loop, but set dbSucceeded = false
               } else {
                 dbSucceeded = false;
-                console.log(`[MOCK_DB] Failed to save chunk '${chunkName}' to database '${dbId}' (status ${res.status}).`);
+                console.log(`[MOCK_DB] Database '${dbId}' responded with status ${res.status} when writing chunk '${chunkName}'.`);
                 success = true; // don't retry other non-429 errors
               }
             } catch (e: any) {
