@@ -11,7 +11,7 @@ import {
   Shield,
   ActivitySquare
 } from "lucide-react";
-import { auth, db } from "../lib/firebase";
+import { auth, db, forceSyncNow } from "../lib/firebase";
 import { SyncEventLog } from "./SyncEventLog";
 
 interface SystemDiagnosticsProps {
@@ -48,8 +48,9 @@ export const SystemDiagnostics: React.FC<SystemDiagnosticsProps> = ({
   const activeMode = auth.getMode(); // 'real' or 'mock'
   const isUsingLiveFirebase = activeMode === "real" && !db._isMock;
   
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setIsRefreshing(true);
+    await forceSyncNow();
     if (onForceResync) {
       onForceResync();
     }

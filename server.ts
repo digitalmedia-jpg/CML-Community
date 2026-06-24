@@ -1293,12 +1293,15 @@ async function startServer() {
   // This bypasses Cloud Run GCP IAM permissions restrictions by making clean client-authenticated REST requests.
   const mockDbFilePath = path.join(process.cwd(), "mock_db_store.json");
   let serverMockDbStore: Record<string, any> = {};
+  let sseClients: any[] = [];
+  const SERVER_VERSION = `v_${Date.now()}`;
 
   class FirestoreRestSync {
     private projectId: string;
     private databaseId: string;
     private configDatabaseId: string | null = null;
     private apiKey: string;
+    private unusableDatabaseIds: Set<string> = new Set();
 
     constructor(config: any) {
       this.projectId = config.projectId;
@@ -1337,7 +1340,8 @@ async function startServer() {
       if (!candidates.includes("default")) {
         candidates.push("default");
       }
-      return candidates;
+      const filtered = candidates.filter(c => !this.unusableDatabaseIds.has(c));
+      return filtered.length > 0 ? filtered : ["(default)"];
     }
 
     private getUrl(docId?: string, forceDbId?: string) {
@@ -1379,10 +1383,15 @@ async function startServer() {
               return {};
             }
           } else {
-            console.warn(`[MOCK_DB] Collection listing failed for '${dbId}' (${res.status}), trying direct master_db fallback.`);
+            if (res.status === 403 || res.status === 404) {
+              console.log(`[MOCK_DB] Database '${dbId}' is unusable or unauthorized (${res.status}). Excluding from future sync attempts.`);
+              this.unusableDatabaseIds.add(dbId);
+            } else {
+              console.log(`[MOCK_DB] Collection listing failed for '${dbId}' (${res.status}), trying direct master_db fallback.`);
+            }
           }
         } catch (e: any) {
-          console.warn(`[MOCK_DB] Exception listing database '${dbId}':`, e.message || e);
+          console.log(`[MOCK_DB] Exception listing database '${dbId}':`, e.message || e);
         }
 
         // 2. Direct document single master_db fetch fallback
@@ -1401,9 +1410,12 @@ async function startServer() {
             console.log(`[MOCK_DB] Fallback: master_db document not found in database '${dbId}'`);
             this.databaseId = dbId;
             return {};
+          } else if (res.status === 403) {
+            console.log(`[MOCK_DB] Fallback: master_db document returned 403 on database '${dbId}'. Excluding from future sync attempts.`);
+            this.unusableDatabaseIds.add(dbId);
           }
         } catch (e: any) {
-          console.warn(`[MOCK_DB] Fallback: Exception fetching master_db for '${dbId}':`, e.message || e);
+          console.log(`[MOCK_DB] Fallback: Exception fetching master_db for '${dbId}':`, e.message || e);
         }
       }
       return {};
@@ -1475,7 +1487,12 @@ async function startServer() {
 
             if (!res.ok) {
               dbSucceeded = false;
-              console.log(`[MOCK_DB] Failed to save chunk '${chunkName}' to database '${dbId}' (status ${res.status}).`);
+              if (res.status === 403 || res.status === 404) {
+                console.log(`[MOCK_DB] Database '${dbId}' is unusable or unauthorized on write (${res.status}). Excluding from future sync attempts.`);
+                this.unusableDatabaseIds.add(dbId);
+              } else {
+                console.log(`[MOCK_DB] Failed to save chunk '${chunkName}' to database '${dbId}' (status ${res.status}).`);
+              }
             }
           } catch (e: any) {
             dbSucceeded = false;
@@ -1579,6 +1596,80 @@ async function startServer() {
   // Fire hydration shortly after start
   setTimeout(hydrateStore, 500);
 
+  // Background Cloud Poller to ensure multiple server containers stay perfectly in sync in real-time
+  const pollCloudDatabase = async () => {
+    if (!firestoreRestSync) return;
+    try {
+      const cloudState = await firestoreRestSync.getMaster();
+      if (cloudState && Object.keys(cloudState).length > 0) {
+        let changedKeys: Record<string, any> = {};
+        let deletedKeys: string[] = [];
+
+        // Check for new or modified keys
+        for (const [k, newVal] of Object.entries(cloudState)) {
+          const oldVal = serverMockDbStore[k];
+          if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+            changedKeys[k] = newVal;
+          }
+        }
+
+        // Check for deleted keys
+        for (const k of Object.keys(serverMockDbStore)) {
+          if (!(k in cloudState)) {
+            deletedKeys.push(k);
+          }
+        }
+
+        if (Object.keys(changedKeys).length > 0 || deletedKeys.length > 0) {
+          console.log(`[REAL_TIME_SYNC] Detected cloud changes: ${Object.keys(changedKeys).length} updated, ${deletedKeys.length} deleted.`);
+          serverMockDbStore = { ...cloudState };
+          saveMockDbToDisk();
+
+          // Broadcast to all active clients
+          const broadcastPayload = JSON.stringify({
+            type: "update",
+            updates: changedKeys,
+            deletedKeys: deletedKeys
+          });
+          sseClients.forEach((client) => {
+            try {
+              client.write(`data: ${broadcastPayload}\n\n`);
+            } catch (e) {
+              // ignore
+            }
+          });
+        }
+      }
+    } catch (err: any) {
+      // quiet logging
+    }
+  };
+
+  if (firestoreRestSync) {
+    setInterval(pollCloudDatabase, 12000);
+  }
+
+  // Server-Sent Events (SSE) Stream Endpoint
+  app.get("/api/sync-stream", (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+
+    // Send initial connected notification along with the server build version
+    const initPayload = JSON.stringify({
+      type: "connected",
+      serverVersion: SERVER_VERSION
+    });
+    res.write(`data: ${initPayload}\n\n`);
+
+    sseClients.push(res);
+
+    req.on("close", () => {
+      sseClients = sseClients.filter((client) => client !== res);
+    });
+  });
+
   app.get("/api/mock-db", async (req, res) => {
     // Read from backend's local cache directly (extremely fast, zero latency, zero Firestore REST quota cost)
     res.json(serverMockDbStore);
@@ -1607,6 +1698,20 @@ async function startServer() {
       if (firestoreRestSync) {
         saveMasterCloudDebounced();
       }
+
+      // Broadcast changes to all connected SSE clients instantly
+      const broadcastPayload = JSON.stringify({
+        type: "update",
+        updates: updates || {},
+        deletedKeys: deletedKeys || []
+      });
+      sseClients.forEach((client) => {
+        try {
+          client.write(`data: ${broadcastPayload}\n\n`);
+        } catch (e) {
+          // ignore dead client
+        }
+      });
     }
     
     res.json({ success: true, db: serverMockDbStore });

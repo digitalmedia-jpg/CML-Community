@@ -107,7 +107,8 @@ import {
   increment,
   arrayUnion,
   onAuthStateChanged,
-  User
+  User,
+  forceSyncNow
 } from "./lib/firebase";
 import { Forum } from "./components/Forum";
 import { UserManagement } from "./components/UserManagement";
@@ -1048,6 +1049,26 @@ export default function App() {
   };
 
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+
+  const handleManualSyncAll = async () => {
+    if (isSyncingAll) return;
+    setIsSyncingAll(true);
+    toastService.info("Synchronizing with group ledger...", "Group Sync");
+    
+    const success = await forceSyncNow();
+    
+    setTimeout(() => {
+      setIsSyncingAll(false);
+      setRefreshKey(prev => prev + 1);
+      if (success) {
+        toastService.success("Database synced in real-time across all terminals!", "Sync Complete");
+      } else {
+        toastService.error("Connection warning: local data cached, syncing automatically in background.", "Sync Warning");
+      }
+    }, 800);
+  };
+
   const [currentTime, setCurrentTime] = useState(new Date());
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
@@ -3432,6 +3453,26 @@ export default function App() {
             </div>
             
             <div className="flex items-center gap-1 md:gap-4">
+              {/* Real-time Group Sync Trigger */}
+              <button
+                id="global-header-sync-btn"
+                type="button"
+                onClick={handleManualSyncAll}
+                disabled={isSyncingAll}
+                className={cn(
+                  "p-1.5 md:p-2 border flex items-center justify-center rounded-sm transition-all duration-200 active:scale-95 shadow-sm cursor-pointer",
+                  isSyncingAll 
+                    ? "bg-slate-50 border-gold/40 text-gold" 
+                    : "bg-white border-slate-200 hover:border-gold text-slate-700 hover:text-gold"
+                )}
+                title="Force Sync with Group Ledger (Real-time)"
+              >
+                <RefreshCw size={14} className={cn("transition-transform duration-500", isSyncingAll && "animate-spin")} />
+                <span className="hidden sm:inline-block text-[9px] uppercase tracking-wider font-bold ml-1.5 font-sans">
+                  {isSyncingAll ? "Syncing..." : "Sync All"}
+                </span>
+              </button>
+
               <SystemDiagnostics 
                 complaintsCount={complaints?.length || 0}
                 complaintsError={complaintsError}

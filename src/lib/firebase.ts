@@ -271,16 +271,159 @@ export async function syncWithServerDirect(updates?: Record<string, any>, delete
   }
 }
 
+let sseConnection: EventSource | null = null;
+
+export function setupRealTimeSync() {
+  if (typeof window === 'undefined') return;
+  if (sseConnection) return;
+
+  console.log("[REAL_TIME_SYNC] Initializing real-time Server-Sent Events stream...");
+  const sse = new EventSource("/api/sync-stream");
+  sseConnection = sse;
+
+  sse.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.type === "connected") {
+        console.log(`[REAL_TIME_SYNC] Connected! Server version: ${data.serverVersion}`);
+        const savedVersion = localStorage.getItem('cml_server_version');
+        if (savedVersion && savedVersion !== data.serverVersion) {
+          console.log("[REAL_TIME_SYNC] New server build published! Auto-reloading client for real-time update...");
+          localStorage.setItem('cml_server_version', data.serverVersion);
+          window.location.reload();
+          return;
+        }
+        localStorage.setItem('cml_server_version', data.serverVersion);
+      } else if (data.type === "update") {
+        const { updates, deletedKeys } = data;
+        const changedKeys = new Set<string>();
+
+        if (updates && typeof updates === 'object') {
+          for (const [k, newVal] of Object.entries(updates)) {
+            const oldVal = MOCK_STORE[k];
+            if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+              MOCK_STORE[k] = newVal;
+              changedKeys.add(k);
+            }
+          }
+        }
+
+        if (Array.isArray(deletedKeys)) {
+          deletedKeys.forEach(k => {
+            if (k in MOCK_STORE) {
+              delete MOCK_STORE[k];
+              changedKeys.add(k);
+            }
+          });
+        }
+
+        if (changedKeys.size > 0) {
+          try {
+            localStorage.setItem('cml_mock_db', JSON.stringify(MOCK_STORE));
+          } catch (e) {}
+
+          changedKeys.forEach(k => {
+            triggerListeners(k);
+            const parts = k.split('/');
+            if (parts.length > 1) {
+              triggerListeners(parts.slice(0, -1).join('/'));
+            }
+          });
+          console.log(`[REAL_TIME_SYNC] Instantly applied ${changedKeys.size} live updates from other users!`);
+        }
+      }
+    } catch (err) {
+      console.error("[REAL_TIME_SYNC] Error in real-time stream processing:", err);
+    }
+  };
+
+  sse.onerror = () => {
+    console.warn("[REAL_TIME_SYNC] Connection interrupted. Reconnecting in 5s...");
+    sse.close();
+    sseConnection = null;
+    setTimeout(setupRealTimeSync, 5000);
+  };
+}
+
+export async function forceSyncNow() {
+  try {
+    console.log("[REAL_TIME_SYNC] Executing active manual sync query with server...");
+    const response = await fetch("/api/mock-db");
+    if (response.ok) {
+      const dbData = await response.json();
+      if (dbData && typeof dbData === "object") {
+        const changedKeys = new Set<string>();
+        
+        // 1. Update/insert keys that are different
+        for (const [k, newVal] of Object.entries(dbData)) {
+          const oldVal = MOCK_STORE[k];
+          if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+            MOCK_STORE[k] = newVal;
+            changedKeys.add(k);
+          }
+        }
+        
+        // 2. Clean up keys that were deleted from server
+        for (const k of Object.keys(MOCK_STORE)) {
+          if (!(k in dbData) && !k.startsWith('users/') && !k.startsWith('auth/')) {
+            delete MOCK_STORE[k];
+            changedKeys.add(k);
+          }
+        }
+        
+        if (changedKeys.size > 0) {
+          try {
+            localStorage.setItem('cml_mock_db', JSON.stringify(MOCK_STORE));
+          } catch (e) {}
+          
+          changedKeys.forEach(k => {
+            triggerListeners(k);
+            const parts = k.split('/');
+            if (parts.length > 1) {
+              triggerListeners(parts.slice(0, -1).join('/'));
+            }
+          });
+          console.log(`[REAL_TIME_SYNC] Instant manual sync successfully applied ${changedKeys.size} updates.`);
+        } else {
+          console.log("[REAL_TIME_SYNC] Database is already fully up-to-date with server.");
+        }
+      }
+    }
+    
+    // Also push any local pending updates to the server
+    await syncWithServerDirect(undefined, undefined, true);
+    return true;
+  } catch (err) {
+    console.error("[REAL_TIME_SYNC] Active force sync failed:", err);
+    return false;
+  }
+}
+
 if (typeof window !== 'undefined') {
   setTimeout(() => {
     syncWithServerDirect(undefined, undefined, true);
+    setupRealTimeSync();
+    // Keep a slower backup interval check
     setInterval(() => {
       syncWithServerDirect();
-    }, 15000); 
+    }, 45000); 
   }, 2000);
 
   window.addEventListener('online', () => {
     syncWithServerDirect(undefined, undefined, true);
+  });
+
+  // Listen for mobile/tablet screen wakes and tab switching
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      console.log("[REAL_TIME_SYNC] Tab became active (foreground). Triggering automatic wake-up sync...");
+      forceSyncNow();
+    }
+  });
+
+  window.addEventListener('focus', () => {
+    console.log("[REAL_TIME_SYNC] Window focused. Triggering automatic sync...");
+    forceSyncNow();
   });
 }
 
