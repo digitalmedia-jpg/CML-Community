@@ -123,6 +123,7 @@ import { DigitalFlipbook } from "./components/DigitalFlipbook";
 import { HRMS } from "./components/HRMS";
 import { RestaurantScanner } from "./components/RestaurantScanner";
 import { StaffMailer } from "./components/StaffMailer";
+import NewsletterSubscribers from "./components/NewsletterSubscribers";
 import { CanaryPortal } from "./components/CanaryPortal";
 import { BrandKit } from "./components/BrandKit";
 import { RamadaFormsSuite } from "./components/RamadaFormsSuite";
@@ -2593,6 +2594,7 @@ export default function App() {
       icon: TrendingUp,
       subItems: [
         { id: "dining-loyalty", label: "CML Rewards", icon: Award },
+        { id: "newsletter-subscribers", label: "Newsletter Subscribers", icon: Mail },
         { id: "cml-sales", label: "CML Sales", icon: TrendingUp, disabled: true },
         { id: "local-sales", label: "Local Sales", icon: Users, disabled: true },
         { id: "brand-kit", label: "Marketing Materials", icon: Gift, disabled: true },
@@ -8201,6 +8203,8 @@ export default function App() {
                   window.history.pushState({}, document.title, window.location.pathname);
                 }}
               />
+            ) : activeTab === "newsletter-subscribers" ? (
+              <NewsletterSubscribers companyId={selectedCompany || 'cml'} />
             ) : (activeTab === "restaurant-scanner" || activeTab.startsWith("dining-")) ? (
               <RestaurantScanner 
                 companyId={selectedCompany || 'cml'} 

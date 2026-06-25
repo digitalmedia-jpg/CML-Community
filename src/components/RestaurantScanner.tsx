@@ -94,6 +94,75 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
   const [visitLogSuccess, setVisitLogSuccess] = useState(false);
   const [isLogging, setIsLogging] = useState(false);
 
+  // Dynamic Membership Benefits State
+  const [benefits, setBenefits] = useState<string[]>([
+    "Priority Dining Reservations",
+    "$1 Spent = 10 Reward Points",
+    "Free Resort Day Pass at 7K Pts",
+    "Standard Room Upgrades",
+    "Welcome Drinks on Arrival",
+    "Elite Member Rates"
+  ]);
+  const [showBenefitsModal, setShowBenefitsModal] = useState(false);
+  const [editingBenefitsList, setEditingBenefitsList] = useState<string[]>([]);
+  const [newBenefitText, setNewBenefitText] = useState("");
+  const [isSavingBenefits, setIsSavingBenefits] = useState(false);
+
+  // Load benefits on change of companyId
+  useEffect(() => {
+    const fetchBenefits = async () => {
+      try {
+        const configDocRef = doc(db, `rewards-config-${companyId}`, "benefits");
+        const docSnap = await getDoc(configDocRef);
+        if (docSnap && typeof docSnap.exists === "function" && docSnap.exists()) {
+          const data = docSnap.data();
+          if (data && Array.isArray(data.list)) {
+            setBenefits(data.list);
+            return;
+          }
+        }
+        // Fallback to localStorage
+        const saved = localStorage.getItem(`cml_rewards_benefits_${companyId}`);
+        if (saved) {
+          setBenefits(JSON.parse(saved));
+        }
+      } catch (e) {
+        console.error("Error fetching rewards benefits configuration:", e);
+      }
+    };
+    fetchBenefits();
+  }, [companyId]);
+
+  const handleOpenBenefitsModal = () => {
+    setEditingBenefitsList([...benefits]);
+    setNewBenefitText("");
+    setShowBenefitsModal(true);
+  };
+
+  const handleSaveBenefits = async () => {
+    setIsSavingBenefits(true);
+    try {
+      const configDocRef = doc(db, `rewards-config-${companyId}`, "benefits");
+      await setDoc(configDocRef, { list: editingBenefitsList });
+      setBenefits(editingBenefitsList);
+      try {
+        localStorage.setItem(`cml_rewards_benefits_${companyId}`, JSON.stringify(editingBenefitsList));
+      } catch (e) {}
+      alert("Membership benefits list updated successfully!");
+      setShowBenefitsModal(false);
+    } catch (e) {
+      console.error("Failed to save benefits list:", e);
+      alert("Failed to save benefits on server. Local backup updated.");
+      setBenefits(editingBenefitsList);
+      try {
+        localStorage.setItem(`cml_rewards_benefits_${companyId}`, JSON.stringify(editingBenefitsList));
+      } catch (e) {}
+      setShowBenefitsModal(false);
+    } finally {
+      setIsSavingBenefits(false);
+    }
+  };
+
   // Load Guests from database
   const fetchGuests = async (autoSelectId?: string) => {
     try {
@@ -894,12 +963,9 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
                       </div>
 
                       <ul className="grid grid-cols-2 gap-y-1.5 gap-x-3 text-[8.5px] font-serif text-yellow-100/90 my-auto">
-                        <li className="flex items-center gap-1">✦ Priority Dining Reservations</li>
-                        <li className="flex items-center gap-1">✦ $1 Spent = 10 Reward Points</li>
-                        <li className="flex items-center gap-1">✦ Free Resort Day Pass at 7K Pts</li>
-                        <li className="flex items-center gap-1">✦ Standard Room Upgrades</li>
-                        <li className="flex items-center gap-1">✦ Welcome Drinks on Arrival</li>
-                        <li className="flex items-center gap-1">✦ Elite Member Rates</li>
+                        {benefits.map((benefit, idx) => (
+                          <li key={idx} className="flex items-center gap-1">✦ {benefit}</li>
+                        ))}
                       </ul>
 
                       <div className="border-t border-white/10 pt-2 flex justify-between items-end">
@@ -916,12 +982,20 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => setIsCardBack(!isCardBack)}
-                  className="text-[9px] uppercase tracking-wider bg-slate-900 hover:bg-[#C5A02D] text-white font-extrabold px-3 py-1 mt-1 transition-all"
-                >
-                  🔄 Flip Card Details
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsCardBack(!isCardBack)}
+                    className="text-[9px] uppercase tracking-wider bg-slate-900 hover:bg-[#C5A02D] text-white font-extrabold px-3 py-1 mt-1 transition-all"
+                  >
+                    🔄 Flip Card Details
+                  </button>
+                  <button
+                    onClick={handleOpenBenefitsModal}
+                    className="text-[9px] uppercase tracking-wider bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold px-3 py-1 mt-1 transition-all border border-slate-300 flex items-center gap-1"
+                  >
+                    ⚙️ Edit Benefits List
+                  </button>
+                </div>
               </div>
 
               {/* CORE DASHBOARD KPI COUNTERS */}
@@ -1235,6 +1309,124 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
                 </div>
               </form>
             </motion.div>
+          </div>
+        )}
+
+        {showBenefitsModal && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+            <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+              <div className="bg-slate-950 p-4 text-white flex justify-between items-center shrink-0">
+                <h3 className="font-semibold flex items-center gap-2 text-sm uppercase tracking-wider font-display">
+                  <AwardIcon size={16} className="text-amber-400" />
+                  Manage Membership Benefits List
+                </h3>
+                <button 
+                  onClick={() => setShowBenefitsModal(false)}
+                  className="text-slate-400 hover:text-white transition text-sm font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="p-5 overflow-y-auto space-y-6 flex-1">
+                {/* INSTRUCTIONAL TIP EXPLAINING HOW TO EDIT THE CODE TEMPLATE OR INTERFACE */}
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-lg text-xs space-y-2">
+                  <div className="font-bold flex items-center gap-1.5 uppercase tracking-wider">
+                    <Sparkles className="w-4 h-4 text-amber-600" />
+                    How to Edit Interface Styles & Templates
+                  </div>
+                  <p className="leading-relaxed">
+                    This admin setting manages benefits shown on the member cards dynamically in real-time. If you want to modify the hardcoded visual card template (colors, font styles, layouts, logos):
+                  </p>
+                  <ul className="list-disc pl-4 space-y-1 mt-1 leading-relaxed">
+                    <li>Open <code>src/components/RestaurantScanner.tsx</code> in your code editor.</li>
+                    <li>For <strong>Card Front Styling</strong>, navigate to around line 760 (containing the gradient background classes like <code>bg-gradient-to-br from-[#876a26]</code>).</li>
+                    <li>For <strong>Card Back Styling & Layouts</strong>, navigate to around line 885 to edit background gradients or typography weights.</li>
+                    <li>Update colors using Tailwind classes (e.g. <code>from-amber-500 to-amber-900</code>) to match your custom hotel brand assets!</li>
+                  </ul>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Active Card Benefits</label>
+                  
+                  {editingBenefitsList.length === 0 ? (
+                    <div className="text-center py-6 text-slate-400 text-xs italic border border-dashed rounded-lg border-slate-200">
+                      No benefits listed. Add a benefit below!
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-y-auto p-1 border rounded-lg border-slate-100 bg-slate-50">
+                      {editingBenefitsList.map((benefit, bIdx) => (
+                        <div key={bIdx} className="flex items-center gap-2 bg-white border border-slate-150 p-2 rounded shadow-sm">
+                          <input 
+                            type="text" 
+                            value={benefit}
+                            onChange={(e) => {
+                              const newList = [...editingBenefitsList];
+                              newList[bIdx] = e.target.value;
+                              setEditingBenefitsList(newList);
+                            }}
+                            className="flex-1 text-xs px-2 py-1 border border-slate-100 rounded focus:outline-none focus:border-indigo-500 text-slate-800"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newList = editingBenefitsList.filter((_, idx) => idx !== bIdx);
+                              setEditingBenefitsList(newList);
+                            }}
+                            className="text-red-500 hover:bg-red-50 p-1 rounded transition text-xs font-semibold"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Add New Benefit */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Add New Benefit</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Complimentary Spa Discount"
+                      value={newBenefitText}
+                      onChange={(e) => setNewBenefitText(e.target.value)}
+                      className="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 text-slate-800"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!newBenefitText.trim()) return;
+                        setEditingBenefitsList([...editingBenefitsList, newBenefitText.trim()]);
+                        setNewBenefitText("");
+                      }}
+                      className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg text-xs transition"
+                    >
+                      Add Item
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                <button 
+                  type="button" 
+                  onClick={() => setShowBenefitsModal(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-bold uppercase font-display text-slate-600 hover:bg-white transition"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  onClick={handleSaveBenefits}
+                  disabled={isSavingBenefits}
+                  className="px-5 py-2 bg-[#C5A02D] hover:bg-[#b08f23] text-slate-950 font-black rounded-lg text-xs uppercase font-display tracking-wider transition shadow-sm"
+                >
+                  {isSavingBenefits ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </AnimatePresence>

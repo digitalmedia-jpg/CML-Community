@@ -1874,6 +1874,56 @@ async function startServer() {
     res.json({ success: true, db: serverMockDbStore });
   });
 
+  app.post("/api/newsletter-ingest", async (req, res) => {
+    try {
+      await waitForHydration();
+      const { email, source, companyId } = req.body;
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ error: "Missing email parameter" });
+      }
+
+      const activeCompanyId = companyId || "cml";
+      const id = "sub_" + Math.random().toString(36).substring(2, 11);
+      const dbKey = `newsletter-subscribers-${activeCompanyId}/${id}`;
+      
+      const newSubscriber = {
+        id,
+        email: email.trim(),
+        source: source || "Newsletter Submission",
+        createdAt: new Date().toISOString(),
+        convertedToRewards: false,
+        companyId: activeCompanyId
+      };
+
+      serverMockDbStore[dbKey] = newSubscriber;
+      saveMockDbToDisk();
+      
+      if (firestoreRestSync) {
+        saveMasterCloudDebounced();
+      }
+
+      // Broadcast changes to all connected SSE clients instantly
+      const broadcastPayload = JSON.stringify({
+        type: "update",
+        updates: { [dbKey]: newSubscriber },
+        deletedKeys: []
+      });
+      sseClients.forEach((client) => {
+        try {
+          client.write(`data: ${broadcastPayload}\n\n`);
+        } catch (e) {
+          // ignore dead client
+        }
+      });
+
+      console.log(`[Newsletter Ingest] Registered subscriber: ${email} for company ${activeCompanyId}`);
+      res.json({ success: true, subscriber: newSubscriber });
+    } catch (err: any) {
+      console.error("[Newsletter Ingest Error]:", err.message || err);
+      res.status(500).json({ error: err.message || "Internal server error" });
+    }
+  });
+
   app.get("/api/kpis", (req, res) => {
     res.json({
       summary: {
