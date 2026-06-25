@@ -2618,7 +2618,7 @@ export default function App() {
       label: "Team & Training",
       icon: GraduationCap,
       subItems: [
-        { id: "checklist", label: "Checklist", icon: ClipboardCheck },
+        { id: "checklist", label: "Compliance Forms", icon: ClipboardCheck },
         { 
           id: "cml-university", 
           label: selectedCompany === 'ramada' ? "Ramada University" : selectedCompany === 'wyndham' ? "Wyndham Garden University" : "CML University", 

@@ -1415,7 +1415,6 @@ async function startServer() {
           } else {
             const status = res ? res.status : 0;
             if (status === 400 || status === 403 || status === 404) {
-              anySuccessfulFetch = true;
               console.log(`[MOCK_DB] Database '${dbId}' is unusable or unauthorized (${status}). Excluding from future sync attempts.`);
               this.unusableDatabaseIds.add(dbId);
             } else {
@@ -1470,7 +1469,6 @@ async function startServer() {
             this.databaseId = dbId;
             return {};
           } else if (fallbackRes && (fallbackRes.status === 400 || fallbackRes.status === 403)) {
-            anySuccessfulFetch = true;
             console.log(`[MOCK_DB] Fallback: master_db document returned ${fallbackRes.status} on database '${dbId}'. Excluding from future sync attempts.`);
             this.unusableDatabaseIds.add(dbId);
           }

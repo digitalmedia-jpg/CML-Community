@@ -159,6 +159,31 @@
     const [scannerStatus, setScannerStatus] = useState("Ready to Scan");
     const [showCelebration, setShowCelebration] = useState(false);
 
+    // Premium CML Rewards card and integration states
+    const [isCardBack, setIsCardBack] = useState(false);
+    const [integrationTab, setIntegrationTab] = useState<"zapier" | "wordpress" | "curl">("zapier");
+    const [redemptionVoucher, setRedemptionVoucher] = useState<{
+      code: string;
+      points: number;
+      title: string;
+      date: string;
+    } | null>(null);
+
+    const generateNextMemberId = (): string => {
+      let maxNum = 0;
+      const arr = Array.isArray(guests) ? guests : [];
+      arr.forEach(g => {
+        const id = g.id || "";
+        const match = id.match(/\d+/);
+        if (match) {
+          const num = parseInt(match[0], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      });
+      const nextNum = maxNum > 0 ? maxNum + 1 : (arr.length > 0 ? arr.length + 1 : 1);
+      return `RP${String(nextNum).padStart(5, "0")}`;
+    };
+
     const videoRef = useRef<HTMLVideoElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
 
@@ -811,6 +836,13 @@
       };
     }, [isCameraActive, companyId]);
 
+    // Pre-fill sequential member ID when opening creation form
+    useEffect(() => {
+      if (showCreateForm) {
+        setNewCardId(generateNextMemberId());
+      }
+    }, [showCreateForm]);
+
     // Register Guest
     const handleCreateProfile = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -832,14 +864,16 @@
           return;
         }
 
-        const profile: Omit<GuestProfile, "id"> = {
+        const profile: Omit<GuestProfile, "id"> & { memberNo?: string; memberSince?: string } = {
           fullName: newFullName.trim(),
           email: newEmail.trim() || `${cleanCardId.toLowerCase()}@mail.com.fj`,
           phone: newPhone.trim() || "+679",
           visitCount: 0,
           rewardPoints: 0,
           lastVisited: null,
-          createdAt: serverTimestamp()
+          createdAt: serverTimestamp(),
+          memberNo: cleanCardId,
+          memberSince: new Date().toLocaleDateString("en-US", { month: "2-digit", year: "numeric" })
         };
 
         await setDoc(docRef, profile);
@@ -925,12 +959,8 @@
       }
     };
 
-    const handleRedeemReward = async () => {
-      if (!selectedProfile || selectedProfile.rewardPoints < 7000) return;
-
-      if (!confirm(`Confirm points deduction of 7,000 for ${selectedProfile.fullName}?`)) {
-        return;
-      }
+    const handleRedeemPoints = async (pointsToDeduct: number, rewardTitle: string) => {
+      if (!selectedProfile || selectedProfile.rewardPoints < pointsToDeduct) return;
 
       try {
         setLoading(true);
@@ -939,14 +969,14 @@
         
         await addDoc(visitsColRef, {
           cardId: selectedProfile.id,
-          receiptNumber: "REDEEM-7K",
+          receiptNumber: `REDEEM-${pointsToDeduct}`,
           billAmount: 0,
-          pointsAwarded: -7000,
+          pointsAwarded: -pointsToDeduct,
           type: "redemption",
           timestamp: serverTimestamp()
         });
 
-        const updatedPoints = selectedProfile.rewardPoints - 7000;
+        const updatedPoints = selectedProfile.rewardPoints - pointsToDeduct;
         await updateDoc(guestRef, { rewardPoints: updatedPoints });
 
         setSelectedProfile({
@@ -956,12 +986,23 @@
 
         fetchVisitLogs(selectedProfile.id);
         fetchGuests();
-        alert("Redeemed! Hand Charles / the guest their dine-in dining reward certificate.");
+
+        // Create a custom serial number voucher and set it
+        setRedemptionVoucher({
+          code: `CML-${companyId.toUpperCase()}-${pointsToDeduct}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+          points: pointsToDeduct,
+          title: rewardTitle,
+          date: new Date().toLocaleDateString()
+        });
       } catch (err) {
-        console.error(err);
+        console.error("Error redeeming points:", err);
       } finally {
         setLoading(false);
       }
+    };
+
+    const handleRedeemReward = async () => {
+      await handleRedeemPoints(7000, "CML Privilege Club Dinner Buffet & Day Pass Voucher");
     };
 
     // BUFFER INTAKE SYSTEM (WITH SAME-DAY LOCK PROTECTION & WALK-IN BYPASS)
@@ -1222,8 +1263,7 @@
 
         {/* RENDER CURRENT TAB VIEW */}
         <AnimatePresence mode="wait">
-          
-          {/* TAB 1: CARD LOYALTY SCANNER */}
+                {/* TAB 1: CARD LOYALTY SCANNER */}
           {activeSubTab === "scanner" && (
             <motion.div
               key="tab-scanner"
@@ -1232,8 +1272,10 @@
               exit={{ opacity: 0, y: -10 }}
               className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start"
             >
-              {/* LEFT SIDE: SCAN ENGINE */}
+              {/* LEFT SIDE: SCAN ENGINE & REPOSITRY */}
               <div className="lg:col-span-5 flex flex-col gap-6">
+                
+                {/* CAMERA SCANNER */}
                 <div className="bg-white border border-slate-150 shadow-sm p-6" id="vanguard-camera-module">
                   <div className="flex items-center justify-between mb-4 border-b border-slate-50 pb-3">
                     <span className="text-[10px] uppercase font-display font-black text-[#C5A02D] tracking-widest flex items-center gap-1.5">
@@ -1298,7 +1340,7 @@
                     <div className="flex gap-2">
                       <input
                         type="text"
-                        placeholder="E.g. CML-RE-001"
+                        placeholder="E.g. RP00001"
                         value={manualCardId}
                         onChange={e => setManualCardId(e.target.value)}
                         className="flex-1 border border-slate-200 px-3 py-2 text-xs font-mono rounded-none outline-none focus:border-[#C5A02D]"
@@ -1364,6 +1406,13 @@
                     ) : (
                       sortedGuests.map((gst) => {
                         const isSelf = selectedProfile?.id === gst.id;
+                        const points = gst.rewardPoints || 0;
+                        let tierName = "BLUE";
+                        if (points >= 40000) tierName = "DIAMOND";
+                        else if (points >= 15000) tierName = "PLATINUM";
+                        else if (points >= 5000) tierName = "GOLD";
+                        else if (points >= 1500) tierName = "SILVER";
+
                         return (
                           <button
                             key={gst.id}
@@ -1376,13 +1425,14 @@
                               <div className="text-xs font-serif font-semibold text-slate-800">
                                 {gst.fullName}
                               </div>
-                              <div className="text-[9px] font-mono text-slate-500">
-                                CARD ID: {gst.id}
+                              <div className="text-[9px] font-mono text-slate-500 flex items-center gap-1.5 mt-0.5">
+                                <span className="bg-slate-100 px-1 py-0.2 rounded text-[8px] font-bold text-slate-600">{tierName}</span>
+                                <span>ID: {gst.id}</span>
                               </div>
                             </div>
                             <div className="text-right">
                               <span className="text-[11px] font-bold text-slate-800 block">
-                                {gst.rewardPoints} pts
+                                {points} pts
                               </span>
                             </div>
                           </button>
@@ -1391,6 +1441,118 @@
                     )}
                   </div>
                 </div>
+
+                {/* WEBSITE SIGN-UP SYNC HUB */}
+                <div className="bg-white border border-slate-150 p-6 flex flex-col gap-4">
+                  <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
+                    <div>
+                      <span className="text-[10px] uppercase font-display font-black text-[#C5A02D] tracking-widest flex items-center gap-1.5">
+                        <Sparkles size={14} /> Website Sign-Up Sync Hub
+                      </span>
+                      <h3 className="text-xs font-serif font-bold text-slate-800 mt-1">Connect cml.com.fj/cml-rewards/ in Real-Time</h3>
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-slate-550 leading-relaxed">
+                    When visitors submit the registration form on your public website, you can automatically capture their details, issue sequential membership numbers, and record them directly inside this app instantly!
+                  </p>
+
+                  {/* TAB SELECTION */}
+                  <div className="flex border-b border-slate-150 text-[10px] uppercase tracking-wider font-bold">
+                    <button
+                      onClick={() => setIntegrationTab('zapier')}
+                      className={`px-3 py-1.5 border-b-2 -mb-[2px] transition-all ${integrationTab === 'zapier' ? 'border-[#C5A02D] text-slate-900 font-extrabold' : 'border-transparent text-slate-400 hover:text-slate-700'}`}
+                    >
+                      🔌 Zapier / Make
+                    </button>
+                    <button
+                      onClick={() => setIntegrationTab('wordpress')}
+                      className={`px-3 py-1.5 border-b-2 -mb-[2px] transition-all ${integrationTab === 'wordpress' ? 'border-[#C5A02D] text-slate-900 font-extrabold' : 'border-transparent text-slate-400 hover:text-slate-700'}`}
+                    >
+                      Ⓜ️ WordPress PHP
+                    </button>
+                    <button
+                      onClick={() => setIntegrationTab('curl')}
+                      className={`px-3 py-1.5 border-b-2 -mb-[2px] transition-all ${integrationTab === 'curl' ? 'border-[#C5A02D] text-slate-900 font-extrabold' : 'border-transparent text-slate-400 hover:text-slate-700'}`}
+                    >
+                      💻 cURL API
+                    </button>
+                  </div>
+
+                  <div className="bg-slate-50 p-3.5 border border-slate-150 font-mono text-[9px] text-slate-700 select-all whitespace-pre overflow-x-auto max-h-52">
+                    {integrationTab === 'zapier' && (
+                      `=== ZAPIER / MAKE INTEGRATION SETUP ===
+1. Trigger: Choose your WordPress Form (Elementor, Contact Form 7, Gravity Forms, etc.)
+2. Action: Choose Firestore "Create Document"
+3. Document ID: Leave blank or set custom sequential ID
+4. Database ID: "restaurant-guests-${companyId}"
+5. Fields to Map:
+   - fullName: [Form Name field]
+   - email: [Form Email field]
+   - phone: [Form Phone field]
+   - rewardPoints: 0
+   - visitCount: 0
+   - memberSince: [Current Month/Year, e.g. "${new Date().toLocaleDateString("en-US", { month: "2-digit", year: "numeric" })}"]
+   - createdAt: [Current Date timestamp]
+
+Writes directly to Firestore, instantly notifying hostesses here!`
+                    )}
+                    {integrationTab === 'wordpress' && (
+                      `// Place in your theme's functions.php or in WP Custom Snippets:
+add_action('elementor_pro/forms/new_record', 'sync_cml_rewards_signup_el', 10, 2);
+
+function sync_cml_rewards_signup_el($record, $handler) {
+    $raw_fields = $record->get('fields');
+    $fields = [];
+    foreach ($raw_fields as $id => $field) {
+        $fields[$id] = $field['value'];
+    }
+    
+    // Auto-generate membership sequence number (e.g. RP00120)
+    $next_id = 'RP' . str_pad(rand(101, 99999), 5, '0', STR_PAD_LEFT);
+    
+    $payload = [
+        'fields' => [
+            'fullName' => ['stringValue' => $fields['name'] ?? 'Guest Member'],
+            'email' => ['stringValue' => $fields['email'] ?? ''],
+            'phone' => ['stringValue' => $fields['phone'] ?? '+679'],
+            'rewardPoints' => ['integerValue' => 0],
+            'visitCount' => ['integerValue' => 0],
+            'memberSince' => ['stringValue' => gmdate('m/Y')],
+            'createdAt' => ['timestampValue' => gmdate('Y-m-d\\TH:i:s\\Z')]
+        ]
+    ];
+
+    wp_remote_post(
+        "https://firestore.googleapis.com/v1/projects/cml-rewards-fiji/databases/(default)/documents/restaurant-guests-${companyId}/" . $next_id,
+        [
+            'headers' => ['Content-Type' => 'application/json'],
+            'body' => json_encode($payload),
+            'method' => 'POST'
+        ]
+    );
+}`
+                    )}
+                    {integrationTab === 'curl' && (
+                      `# Test customer signup insertion via direct REST API:
+curl -X POST \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "fields": {
+      "fullName": {"stringValue": "Charles Cebujano"},
+      "email": {"stringValue": "charles@cml.com.fj"},
+      "phone": {"stringValue": "+679 883 2910"},
+      "rewardPoints": {"integerValue": 0},
+      "visitCount": {"integerValue": 0},
+      "memberSince": {"stringValue": "${new Date().toLocaleDateString("en-US", { month: "2-digit", year: "numeric" })}"},
+      "createdAt": {"timestampValue": "${new Date().toISOString()}"}
+    }
+  }' \\
+  "https://firestore.googleapis.com/v1/projects/cml-rewards-fiji/databases/(default)/documents/restaurant-guests-${companyId}"`
+                    )}
+                  </div>
+                </div>
+
               </div>
 
               {/* RIGHT SIDE: SELECTED PROFILE DETAILS */}
@@ -1399,22 +1561,24 @@
                   <div className="bg-white border border-slate-150 shadow-sm p-8 flex flex-col gap-6">
                     
                     {/* points award banner alert */}
-                    {showCelebration && (
-                      <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-none flex items-start gap-4 animate-bounce">
+                    {selectedProfile.rewardPoints >= 7000 && (
+                      <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-none flex items-start gap-4 animate-pulse">
                         <Sparkles size={22} className="text-[#C5A02D] shrink-0" />
                         <div>
                           <h4 className="text-xs font-bold font-serif italic">Charles Milestone: Reward Qualified!</h4>
-                          <p className="text-[10px] text-amber-800 mt-1">This member has reached the 7,000 loyalty points limit! Redeem voucher below.</p>
+                          <p className="text-[10px] text-amber-800 mt-1">This member has reached the 7,000 loyalty points limit! Claim premium resort vouchers below.</p>
                         </div>
-                        <button onClick={() => setShowCelebration(false)} className="text-slate-400 hover:text-slate-950 ml-auto">
-                          <X size={15} />
-                        </button>
                       </div>
                     )}
 
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-100">
                       <div>
-                        <h2 className="text-xl font-serif text-slate-900">{selectedProfile.fullName}</h2>
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-xl font-serif text-slate-900">{selectedProfile.fullName}</h2>
+                          <span className="text-[9px] font-mono bg-yellow-100/70 text-amber-950 px-1.5 py-0.5 uppercase tracking-widest font-black rounded-sm border border-yellow-200">
+                            {selectedProfile.rewardPoints >= 40000 ? "DIAMOND" : selectedProfile.rewardPoints >= 15000 ? "PLATINUM" : selectedProfile.rewardPoints >= 5000 ? "GOLD" : selectedProfile.rewardPoints >= 1500 ? "SILVER" : "BLUE"}
+                          </span>
+                        </div>
                         <span className="text-[9px] font-mono bg-slate-100 text-slate-650 px-1.5 py-0.5 uppercase tracking-widest font-black inline-block mt-1">
                           CARD: {selectedProfile.id}
                         </span>
@@ -1427,15 +1591,120 @@
                         >
                           <Receipt size={13} /> Log Restaurant Visit
                         </button>
-                        {selectedProfile.rewardPoints >= 7000 && (
-                          <button
-                            onClick={handleRedeemReward}
-                            className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#C5A02D] hover:bg-black text-white px-4 py-2 text-[10px] font-display uppercase tracking-wider font-extrabold animate-pulse"
-                          >
-                            <Gift size={13} /> Redeem Voucher (-7K)
-                          </button>
-                        )}
                       </div>
+                    </div>
+
+                    {/* INTERACTIVE FLIPPABLE DIGITAL CARD */}
+                    <div className="flex flex-col items-center gap-4 py-3 bg-slate-50/50 border border-slate-150 p-6 rounded-none">
+                      <span className="text-[9px] font-display font-bold uppercase tracking-widest text-[#C5A02D]">
+                        Digital Membership Cardholder ID (Flippable)
+                      </span>
+                      
+                      {/* CARDPERSPECTIVE STYLING */}
+                      <div 
+                        className="w-full max-w-sm h-56 relative cursor-pointer"
+                        style={{ perspective: "1000px" }}
+                        onClick={() => setIsCardBack(!isCardBack)}
+                      >
+                        <div 
+                          className="w-full h-full relative"
+                          style={{
+                            transformStyle: "preserve-3d",
+                            transition: "transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)",
+                            transform: isCardBack ? "rotateY(180deg)" : "rotateY(0deg)"
+                          }}
+                        >
+                          
+                          {/* FRONT OF CARD */}
+                          <div 
+                            className="absolute inset-0 w-full h-full rounded-2xl p-6 bg-gradient-to-br from-[#dfba6b] via-[#bfa054] to-[#876a26] text-white shadow-xl border border-yellow-300/20 flex flex-col justify-between overflow-hidden"
+                            style={{ backfaceVisibility: "hidden" }}
+                          >
+                            <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/0 pointer-events-none transform -skew-x-12" />
+                            
+                            <div className="flex justify-between items-start">
+                              <div className="flex flex-col">
+                                <span className="text-[8px] font-black tracking-widest uppercase font-display leading-tight">CML COVE MANAGEMENT LIMITED</span>
+                                <span className="text-[6px] tracking-wider uppercase font-mono opacity-80">HOTELS • RESORTS • VACATIONS</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-[9px] font-serif tracking-widest font-bold text-white bg-black/30 px-2 py-0.5 rounded border border-white/10 uppercase">
+                                  {selectedProfile.rewardPoints >= 40000 ? "DIAMOND" : selectedProfile.rewardPoints >= 15000 ? "PLATINUM" : selectedProfile.rewardPoints >= 5000 ? "GOLD" : selectedProfile.rewardPoints >= 1500 ? "SILVER" : "BLUE"}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="my-auto text-center">
+                              <h2 className="text-xl font-serif tracking-[0.25em] font-light text-yellow-50">
+                                PRIVILEGE CLUB
+                              </h2>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 border-t border-white/20 pt-3">
+                              <div className="flex flex-col">
+                                <span className="text-[7px] uppercase tracking-wider font-mono opacity-75">MEMBER NAME</span>
+                                <span className="text-xs font-semibold uppercase truncate font-serif">{selectedProfile.fullName}</span>
+                              </div>
+                              <div className="flex flex-col text-right">
+                                <span className="text-[7px] uppercase tracking-wider font-mono opacity-75">MEMBER NO.</span>
+                                <span className="text-xs font-mono font-bold">{selectedProfile.id}</span>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-[7px] uppercase tracking-wider font-mono opacity-75">TIER</span>
+                                <span className="text-[10px] font-serif font-bold text-yellow-100">
+                                  {selectedProfile.rewardPoints >= 40000 ? "DIAMOND" : selectedProfile.rewardPoints >= 15000 ? "PLATINUM" : selectedProfile.rewardPoints >= 5000 ? "GOLD" : selectedProfile.rewardPoints >= 1500 ? "SILVER" : "BLUE"}
+                                </span>
+                              </div>
+                              <div className="flex flex-col text-right">
+                                <span className="text-[7px] uppercase tracking-wider font-mono opacity-75">MEMBER SINCE</span>
+                                <span className="text-xs font-mono">
+                                  {selectedProfile.createdAt 
+                                    ? new Date(selectedProfile.createdAt.seconds ? selectedProfile.createdAt.seconds * 1000 : selectedProfile.createdAt).toLocaleDateString("en-US", { month: "2-digit", year: "numeric" })
+                                    : "05/2024"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* BACK OF CARD */}
+                          <div 
+                            className="absolute inset-0 w-full h-full rounded-2xl p-6 bg-gradient-to-br from-[#876a26] via-[#4d3a0c] to-[#1c1502] text-white shadow-xl border border-yellow-800/20 flex flex-col justify-between overflow-hidden"
+                            style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+                          >
+                            <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                              <span className="text-[8px] font-black tracking-widest uppercase text-yellow-300">EXCLUSIVE BENEFITS</span>
+                              <span className="text-[7px] font-mono text-white/55">CML COVE PRIVILEGE</span>
+                            </div>
+
+                            <ul className="grid grid-cols-2 gap-y-1 gap-x-3 text-[8px] font-serif text-yellow-100/90 my-auto">
+                              <li className="flex items-center gap-1">✦ Priority Reservations</li>
+                              <li className="flex items-center gap-1">✦ Complimentary Upgrades</li>
+                              <li className="flex items-center gap-1">✦ Exclusive Member Rates</li>
+                              <li className="flex items-center gap-1">✦ VIP Arrival Experience</li>
+                              <li className="flex items-center gap-1">✦ Early In & Late Out</li>
+                              <li className="flex items-center gap-1">✦ Resort & Dining Privileges</li>
+                            </ul>
+
+                            <div className="border-t border-white/10 pt-2 flex justify-between items-end">
+                              <div className="text-left">
+                                <p className="text-[6px] text-white/40 leading-none uppercase">*SUBJECT TO AVAILABILITY. T&CS APPLY.</p>
+                                <p className="text-[8px] font-serif font-bold tracking-wider text-yellow-400 mt-1 uppercase">YOUR JOURNEY. OUR PASSION.</p>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-[8px] font-mono font-bold tracking-widest text-white/80">CML.COM.FJ</span>
+                              </div>
+                            </div>
+                          </div>
+
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => setIsCardBack(!isCardBack)}
+                        className="text-[9px] uppercase tracking-wider bg-slate-900 hover:bg-[#C5A02D] text-white font-extrabold px-3 py-1 mt-1 transition-all"
+                      >
+                        🔄 Flip Membership Card View
+                      </button>
                     </div>
 
                     {/* Analytics KPIs */}
@@ -1443,7 +1712,7 @@
                       <div className="border border-slate-100 p-4 bg-slate-50">
                         <span className="text-[8px] uppercase tracking-wider font-bold text-slate-400">Collected Points</span>
                         <div className="text-2xl font-black text-slate-900 mt-1">{selectedProfile.rewardPoints}</div>
-                        <span className="text-[9px] text-[#C5A02D] font-serif italic">Need 7,000 for voucher</span>
+                        <span className="text-[9px] text-[#C5A02D] font-serif italic">Progressing on Wyndham tiers</span>
                       </div>
                       <div className="border border-slate-100 p-4 bg-slate-50">
                         <span className="text-[8px] uppercase tracking-wider font-bold text-slate-400">Recorded Diners Visited</span>
@@ -1453,30 +1722,87 @@
                       <div className="border border-slate-100 p-4 bg-slate-50">
                         <span className="text-[8px] uppercase tracking-wider font-bold text-slate-400">Fiji Contact Info</span>
                         <div className="text-[10px] text-slate-700 font-mono mt-1 break-all">{selectedProfile.email}</div>
-                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">{selectedProfile.phone}</div>
+                        <div className="text-[10px] text-slate-550 font-mono mt-0.5">{selectedProfile.phone}</div>
                       </div>
                     </div>
 
-                    {/* PROGRESS BAR */}
-                    <div className="p-4 border border-slate-100 bg-slate-50/50">
-                      <div className="flex justify-between items-center mb-1 text-[9px] font-mono">
-                        <span>VOUCHER GOAL PROGRESS</span>
-                        <span className="font-bold text-slate-800">{Math.round(Math.min(100, (selectedProfile.rewardPoints / 7000) * 100))}%</span>
+                    {/* PROGRESS BAR & MILESTONES ROADMAP */}
+                    <div className="p-6 border border-slate-100 bg-slate-50/50 flex flex-col gap-5">
+                      <div>
+                        <div className="flex justify-between items-center mb-1.5 text-[9px] font-mono">
+                          <span className="tracking-wider uppercase font-black text-slate-550">Active Point Rewards Milestone Tracking</span>
+                          <span className="font-bold text-slate-800">{selectedProfile.rewardPoints} points total</span>
+                        </div>
+                        <div className="w-full h-3.5 bg-slate-150 relative">
+                          <div 
+                            className="bg-[#C5A02D] h-full transition-all duration-500 shadow-sm"
+                            style={{ width: `${Math.min(100, (selectedProfile.rewardPoints / 30000) * 100)}%` }}
+                          />
+                        </div>
                       </div>
-                      <div className="w-full h-3 bg-slate-150 relative">
-                        <div 
-                          className="bg-[#C5A02D] h-full transition-all duration-300"
-                          style={{ width: `${Math.min(100, (selectedProfile.rewardPoints / 7000) * 100)}%` }}
-                        />
-                      </div>
-                      <div className="flex justify-between text-[8px] text-slate-400 mt-1">
-                        <span>0 PTS</span>
-                        {selectedProfile.rewardPoints >= 7000 ? (
-                          <span className="text-green-600 font-bold">QUALIFIED FOR VOUCHER REWARD!</span>
-                        ) : (
-                          <span>{7000 - selectedProfile.rewardPoints} points to target</span>
-                        )}
-                        <span>7,000 PTS</span>
+
+                      {/* DETAILED ROADMAP WITH CLAIM ACTIONS */}
+                      <div className="flex flex-col gap-3">
+                        <span className="text-[9px] font-display font-black text-slate-400 uppercase tracking-widest">
+                          🎁 Select and Claim Privileges Unlocked
+                        </span>
+
+                        <div className="divide-y divide-slate-100 bg-white border border-slate-150">
+                          {[
+                            { pts: 1500, title: "Go Fast Level 1", desc: "Preferred room selection and a complimentary sunset welcome cocktail at Beach Bistro." },
+                            { pts: 3000, title: "Go Fast Level 2", desc: "$30 FJD complimentary Resort Spa or premium dining voucher." },
+                            { pts: 6000, title: "Go Fast Level 3", desc: "Complimentary VIP Sunset Catamaran Cruise excursion ticket." },
+                            { pts: 7000, title: "CML Privilege Voucher", desc: "Complimentary luxury dinner buffet or resort day pass at Seascape Diner.", highlighted: true },
+                            { pts: 7500, title: "Wyndham Go Free Level 1", desc: "1 Free Night award voucher valid at select Wyndham Tier 1 resorts." },
+                            { pts: 15000, title: "Wyndham Go Free Level 2", desc: "1 Free Night premium stay award at elite Wyndham Tier 2 suites." },
+                            { pts: 30000, title: "Wyndham Go Free Level 3", desc: "1 Free Night luxury stay award at Wyndham Tier 3 executive villas." }
+                          ].map((m) => {
+                            const isQualified = selectedProfile.rewardPoints >= m.pts;
+                            return (
+                              <div 
+                                key={m.pts} 
+                                className={`p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
+                                  m.highlighted ? "bg-amber-50/40" : ""
+                                }`}
+                              >
+                                <div className="flex items-start gap-2.5">
+                                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center mt-0.5 text-[8px] font-mono font-bold shrink-0 ${
+                                    isQualified ? "bg-green-600 border-green-600 text-white" : "border-slate-300 text-slate-450 bg-slate-50"
+                                  }`}>
+                                    {isQualified ? "✓" : "•"}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-xs font-bold font-serif text-slate-800">{m.title}</span>
+                                      <span className="font-mono text-[9px] bg-slate-100 text-slate-650 px-1.5 py-0.2 rounded">
+                                        {m.pts.toLocaleString()} pts
+                                      </span>
+                                      {m.highlighted && (
+                                        <span className="bg-[#C5A02D] text-white text-[7px] font-black uppercase tracking-widest px-1 py-0.2">CML FEATURE</span>
+                                      )}
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 mt-1 leading-relaxed max-w-lg">{m.desc}</p>
+                                  </div>
+                                </div>
+
+                                <div className="shrink-0 text-right">
+                                  {isQualified ? (
+                                    <button
+                                      onClick={() => handleRedeemPoints(m.pts, m.title)}
+                                      className="w-full sm:w-auto px-3 py-1.5 bg-green-600 hover:bg-slate-900 text-white font-display text-[9px] tracking-wider uppercase font-extrabold transition-all shrink-0"
+                                    >
+                                      Claim Privilege (-{m.pts})
+                                    </button>
+                                  ) : (
+                                    <span className="text-[8.5px] font-mono text-slate-400 italic">
+                                      Needs {m.pts - selectedProfile.rewardPoints} more pts
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
 
@@ -1542,7 +1868,7 @@
                     </p>
                     <button
                       onClick={() => setShowCreateForm(true)}
-                      className="mt-4 bg-[#C5A02D] hover:bg-black text-white py-1.5 px-4 text-[9px] font-display uppercase tracking-wider font-extrabold"
+                      className="mt-4 bg-[#C5A02D] hover:bg-black text-white py-1.5 px-4 text-[9px] font-display uppercase tracking-wider font-extrabold cursor-pointer"
                     >
                       Create New Guest Card Profile
                     </button>
@@ -2425,6 +2751,101 @@
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* PREMIUM REDEMPTION VOUCHER PRINT MODAL */}
+        {redemptionVoucher && (
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white border-2 border-[#C5A02D] max-w-lg w-full p-8 shadow-2xl relative flex flex-col gap-6"
+            >
+              {/* Close Button */}
+              <button
+                onClick={() => setRedemptionVoucher(null)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-black transition-colors cursor-pointer"
+                title="Dismiss Voucher"
+              >
+                <X size={20} />
+              </button>
+
+              {/* Decorative Golden Border Header */}
+              <div className="text-center flex flex-col items-center gap-1 border-b-2 border-dashed border-[#C5A02D]/40 pb-5">
+                <span className="text-[9px] uppercase font-display tracking-widest text-[#C5A02D] font-black">
+                  CML PRIVILEGE CLUB EXCLUSIVE
+                </span>
+                <h3 className="text-xl font-serif font-bold text-slate-900 mt-1">OFFICIAL REWARD CERTIFICATE</h3>
+                <span className="text-[10px] text-slate-450 font-mono italic">Redeemed via Member Portal</span>
+              </div>
+
+              {/* Voucher Content */}
+              <div className="flex flex-col gap-4 py-2 text-center">
+                <div className="bg-slate-50 border border-slate-150 p-4 flex flex-col gap-1 rounded">
+                  <span className="text-[8px] uppercase tracking-wider text-slate-400">Reward Item Unlocked</span>
+                  <span className="text-sm font-serif font-extrabold text-slate-800 uppercase leading-snug">
+                    {redemptionVoucher.title}
+                  </span>
+                  <span className="text-[10px] font-mono text-emerald-600 mt-1 font-bold">
+                    -{redemptionVoucher.points.toLocaleString()} Points Deducted Successfully
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 text-left border-t border-b border-slate-100 py-3 text-[10px]">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-slate-400 uppercase font-display font-bold text-[8px]">Member Name</span>
+                    <span className="text-slate-800 font-serif font-bold uppercase">{selectedProfile?.fullName}</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 text-right">
+                    <span className="text-slate-400 uppercase font-display font-bold text-[8px]">Membership No.</span>
+                    <span className="text-slate-800 font-mono font-bold">{selectedProfile?.id}</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 mt-2">
+                    <span className="text-slate-400 uppercase font-display font-bold text-[8px]">Issued Date</span>
+                    <span className="text-slate-800 font-mono">{redemptionVoucher.date}</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 text-right mt-2">
+                    <span className="text-slate-400 uppercase font-display font-bold text-[8px]">Status</span>
+                    <span className="text-green-600 font-bold uppercase">READY FOR IN-RESORT USE</span>
+                  </div>
+                </div>
+
+                {/* Serial Barcode Mock */}
+                <div className="flex flex-col items-center gap-2 mt-2">
+                  <span className="text-[8px] uppercase tracking-widest text-slate-400 font-mono">Serial Reference Code</span>
+                  <div className="bg-slate-50 p-3 w-full font-mono text-center tracking-widest text-xs border border-slate-150 rounded">
+                    {redemptionVoucher.code}
+                  </div>
+                  {/* barcode lines using unicode */}
+                  <span className="font-mono text-lg text-slate-450 tracking-tight leading-none mt-1 select-none font-bold">
+                    ||| | |||| | || ||| || ||| | ||| || ||||
+                  </span>
+                </div>
+              </div>
+
+              {/* Terms and print action */}
+              <div className="text-center flex flex-col gap-3 pt-4 border-t border-slate-100">
+                <p className="text-[8px] text-slate-450 leading-relaxed uppercase">
+                  *VALID FOR REDEMPTION AT COVE MANAGEMENT LIMITED HOTELS, RESORTS, AND FOOD & BEVERAGE OUTLETS IN FIJI. COPIES WILL NOT BE ACCEPTED. TERMS OF WYNDHAM CLUB OR CML APPLICABLE.
+                </p>
+                <div className="flex gap-2 justify-center">
+                  <button
+                    onClick={() => window.print()}
+                    className="bg-slate-900 hover:bg-[#C5A02D] text-white text-[9px] font-display uppercase tracking-widest font-bold px-4 py-2 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Download size={12} /> Print Reward Voucher
+                  </button>
+                  <button
+                    onClick={() => setRedemptionVoucher(null)}
+                    className="border border-slate-200 hover:bg-slate-50 text-slate-700 text-[9px] font-display uppercase tracking-widest font-bold px-4 py-2 cursor-pointer"
+                  >
+                    Close Window
+                  </button>
+                </div>
+              </div>
+
             </motion.div>
           </div>
         )}

@@ -1,847 +1,1138 @@
-import React, { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { 
   ClipboardCheck, 
-  Percent, 
+  Search, 
   User, 
   Send, 
   RefreshCw, 
   CheckSquare, 
   Square,
-  Hotel,
-  ChevronDown,
-  ChevronUp,
-  Mail,
   FileText,
   Clock,
   Shield,
-  Briefcase,
-  Calendar,
-  CheckCircle2
+  GraduationCap,
+  AlertTriangle,
+  UserCheck,
+  Cpu,
+  HeartPulse,
+  Wrench,
+  TrendingUp,
+  Mail,
+  CheckCircle2,
+  List,
+  LayoutGrid,
+  Filter,
+  Check,
+  History,
+  Archive,
+  ArrowRight,
+  BookOpen
 } from "lucide-react";
+import { db, auth, collection, addDoc, getDocs, query, orderBy, limit } from "../lib/firebase";
 
-type OperationalRole = 
-  | "porter" 
-  | "housekeeping_sup" 
-  | "houseman" 
-  | "public_area" 
-  | "maintenance" 
-  | "property_officer" 
-  | "hr_compliance" 
-  | "duty_manager" 
-  | "hotel_manager";
+// Category type definition
+type FormCategory = "HR & Training" | "Operations & Safety" | "Facility & Finance";
 
-interface ChecklistItem {
+interface FormDefinition {
   id: string;
-  text: string;
-  checked: boolean;
-}
-
-interface ChecklistSection {
   title: string;
-  items: ChecklistItem[];
-  concern?: string;
-  action?: string;
-  recommendation?: string;
+  category: FormCategory;
+  icon: React.ComponentType<{ className?: string; size?: number }>;
+  refCode: string;
+  items: string[];
 }
 
-export default function WyndhamChecklist({ selectionProperty = "Wyndham Garden Wailoaloa" }: { selectionProperty?: string }) {
-  const [selectedRole, setSelectedRole] = useState<OperationalRole>("porter");
-  const [occupancy, setOccupancy] = useState<string>("75");
-  const [staffName, setStaffName] = useState<string>("");
-  const [shift, setShift] = useState<string>("AM");
-  const [date, setDate] = useState<string>(new Date().toISOString().split("T")[0]);
-  
-  const [guestFeedback, setGuestFeedback] = useState<string>("");
-  const [hrOfficerFeedback, setHrOfficerFeedback] = useState<string>("");
-
-  const [roleData, setRoleData] = useState<Record<OperationalRole, ChecklistSection[]>>({
-    porter: [
-      { 
-        title: "1. Attendance & Shift Readiness", 
-        items: [
-          { id: "p1_1", text: "Punch in before the official start of the shift to ensure punctuality and proper attendance tracking in the system.", checked: false },
-          { id: "p1_2", text: "Arrive at least 10-15 minutes early to allow time for preparation, briefing review, and readiness for guest service.", checked: false },
-          { id: "p1_3", text: "Ensure full, clean, and properly pressed uniform is worn at all times to maintain professional hotel standards.", checked: false },
-          { id: "p1_4", text: "Name badge must be clearly visible and correctly positioned to allow guests to identify staff easily.", checked: false },
-          { id: "p1_5", text: "Maintain high personal grooming standards including clean appearance, neat hair, and proper hygiene.", checked: false },
-          { id: "p1_6", text: "Be mentally alert and physically ready to handle guest requests, luggage movement, and operational duties.", checked: false },
-          { id: "p1_7", text: "Review assigned duties and areas of responsibility for the shift before starting any task.", checked: false },
-          { id: "p1_8", text: "Check noticeboards or communication logs for any special instructions or operational updates.", checked: false }
-        ]
-      },
-      { 
-        title: "10. Shift Closure & Accountability", 
-        items: [
-          { id: "p10_1", text: "Ensure all assigned tasks are fully completed before ending the shift.", checked: false },
-          { id: "p10_2", text: "Re-check luggage storage area to confirm all items are properly secured.", checked: false },
-          { id: "p10_3", text: "Verify that all luggage movements have been accurately recorded in logbooks.", checked: false },
-          { id: "p10_4", text: "Confirm that all guest requests have been addressed or handed over properly.", checked: false },
-          { id: "p10_5", text: "Clean and organize all work areas before leaving duty.", checked: false },
-          { id: "p10_6", text: "Ensure logbook entries are complete, accurate, and signed where required.", checked: false },
-          { id: "p10_7", text: "Prepare a clear and concise handover note for the incoming shift team.", checked: false },
-          { id: "p10_8", text: "Punch out only after completing all duties and receiving approval if required.", checked: false }
-        ]
-      }
-    ],
-    housekeeping_sup: [
-      { 
-        title: "Staff Attendance & Grooming Inspection", 
-        items: [
-          { id: "hk_s1", text: "Conduct staff roll call and ensure all attendants, public area cleaners, linen runners, and housemen are present.", checked: false },
-          { id: "hk_s2", text: "Verify all staff are properly groomed according to hotel standards (uniform clean, pressed, complete with nametag).", checked: false },
-          { id: "hk_s3", text: "Ensure staff are wearing proper personal protective equipment (PPE) where required.", checked: false },
-          { id: "hk_s4", text: "Review room assignment sheets with attendants and explain VIP arrivals, early check-ins, late departures, and special requests.", checked: false }
-        ]
-      },
-      { 
-        title: "Health, Safety & Hygiene Inspection", 
-        items: [
-          { id: "hk_s5", text: "Ensure housekeeping staff practice proper hygiene procedures and change gloves between room cleaning tasks.", checked: false },
-          { id: "hk_s6", text: "Verify chemicals are diluted and used correctly according to safe operational procedures.", checked: false },
-          { id: "hk_s7", text: "Check wet floor signage usage across active operational floors.", checked: false }
-        ]
-      }
-    ],
-    houseman: [
-      { 
-        title: "Start of Shift Preparation", 
-        items: [
-          { id: "hm1", text: "Punch in at the designated time clock system before starting duty and report to Supervisor immediately.", checked: false },
-          { id: "hm2", text: "Attend daily briefing to receive assigned duties, areas, occupancy reports, and special requests.", checked: false },
-          { id: "hm3", text: "Collect all required housekeeping equipment, supplies, and functionality checks for carts and tools.", checked: false }
-        ]
-      },
-      { 
-        title: "Guest Room Assistance Support", 
-        items: [
-          { id: "hm4", text: "Assist room attendants with heavy cleaning tasks and physical furniture movement inside guest domains.", checked: false },
-          { id: "hm5", text: "Deliver extra linens, towels, pillows, and guest amenities promptly upon request.", checked: false }
-        ]
-      }
-    ],
-    public_area: [
-      { 
-        title: "Start of Shift Preparation", 
-        items: [
-          { id: "pa1", text: "Punch in and receive explicit work assignments from the Shift Supervisor.", checked: false },
-          { id: "pa2", text: "Inspect trolley/cart for cleanliness and fulfill spray bottles, tissues, liners, and cleaning cloths.", checked: false }
-        ]
-      },
-      { 
-        title: "Lobby & Reception Area Cleaning", 
-        items: [
-          { id: "pa3", text: "Sweep and mop lobby floors thoroughly; vacuum carpets and rugs including corners and edges.", checked: false },
-          { id: "pa4", text: "Sanitize high-touch surfaces, counter desks, entrance glass doors, and elevator interface buttons.", checked: false }
-        ]
-      }
-    ],
-    maintenance: [
-      { 
-        title: "Staff Readiness & Briefing", 
-        items: [
-          { id: "m1", text: "Punch in on time, report to Maintenance Office, and attend daily shift briefing with the Supervisor.", checked: false },
-          { id: "m2", text: "Review handover logbook from previous shift alongside pending maintenance jobs and priorities.", checked: false }
-        ]
-      },
-      { 
-        title: "Maintenance Response & Work Orders", 
-        items: [
-          { id: "m3", text: "Attend guest maintenance requests promptly and prioritize urgent service complaints.", checked: false },
-          { id: "m4", text: "Update all work orders accurately and record completed jobs in the maintenance logbook.", checked: false }
-        ]
-      }
-    ],
-    property_officer: [
-      { 
-        title: "Shift Start / Operational Checks", 
-        items: [
-          { id: "po1", text: "Report to duty on time in full uniform, proper grooming, and inspect communication devices (radio/phone).", checked: false },
-          { id: "po2", text: "Account for all master keys, access cards, and passes; review incident logs from the previous shift.", checked: false }
-        ]
-      },
-      { 
-        title: "Patrol & Monitoring Duties", 
-        items: [
-          { id: "po3", text: "Conduct regular patrols of assigned property areas every half an hour.", checked: false },
-          { id: "po4", text: "Monitor all entrances and exits for unauthorized access.", checked: false },
-          { id: "po5", text: "Check and report on property forum regarding parking areas and property perimeters every 30 minutes.", checked: false }
-        ]
-      }
-    ],
-    hr_compliance: [
-      { 
-        title: "Employee Records & Documentation", 
-        items: [
-          { id: "hr1", text: "Maintain updated employee files (contracts, ID, certifications, licenses) and track expiry dates.", checked: false },
-          { id: "hr2", text: "Ensure the HR database is perfectly current and all records comply strictly with national labor laws.", checked: false }
-        ]
-      },
-      { 
-        title: "Compliance & Brand Standards", 
-        items: [
-          { id: "hr3", text: "Ensure labor law compliance across active department schedules (working hours, minimum wage, benefits).", checked: false },
-          { id: "hr4", text: "Conduct regular site audits against Wyndham premium brand standards (guest service, cleanliness, presentation).", checked: false }
-        ]
-      }
-    ],
-    duty_manager: [
-      { 
-        title: "Pre-shift Ritual (Wyndham Brand Focus)", 
-        items: [
-          { id: "dm1", text: "Review Wyndham Garden Daily Brief, previous Duty Manager handover logs, and property occupancy forecasts.", checked: false },
-          { id: "dm2", text: "Check Wyndham brand guest communication notes, VIP arrival parameters, and group events.", checked: false },
-          { id: "dm3", text: "Confirm Wyndham 'Count on Me' service culture briefing points: Be responsive, be respectful, deliver great experience.", checked: false }
-        ]
-      },
-      { 
-        title: "End-of-Shift Handover", 
-        items: [
-          { id: "dm4", text: "Log outstanding tasks for the Night Manager and confirm lobby/FO areas are completely neat before leaving.", checked: false },
-          { id: "dm5", text: "Final property walk completed covering pool, lobby, back-of-house (BOH), and main public entrances.", checked: false }
-        ]
-      }
-    ],
-    hotel_manager: [
-      { 
-        title: "Staff Briefing & HOD Operations", 
-        items: [
-          { id: "hm_g1", text: "Hold a daily operations briefing with all department heads to discuss occupancy, VIPs, events, and metrics.", checked: false },
-          { id: "hm_g2", text: "Review all department handover reports, previous MOD logs, and enforce accountability comments.", checked: false }
-        ]
-      },
-      { 
-        title: "Guest Services & Brand Standards", 
-        items: [
-          { id: "hm_g3", text: "Monitor responses to guest queries, handle escalated complaints promptly, and verify updated Medallia feedback scores.", checked: false },
-          { id: "hm_g4", text: "Inspect lobby, front desk, and reception environments for absolute cleanliness, ambient fragrance, layout, and presentation.", checked: false }
-        ]
-      }
+const FORM_TEMPLATES: FormDefinition[] = [
+  {
+    id: "cml-emp-file-audit",
+    title: "CML Employee File Audit",
+    category: "HR & Training",
+    icon: FileText,
+    refCode: "AUD-CML-EFA-01",
+    items: [
+      "Verify all active employment agreements are fully signed and dated",
+      "Verify FNPF registration and monthly contribution registers are logged",
+      "Verify TIN Letter copy is validated and present in physical file",
+      "Verify certified true copies of all qualifications are attached",
+      "Verify up-to-date emergency contact info is completed and on file",
+      "Verify signed Employee Handbook and Code of Conduct acknowledgement is archived",
+      "Verify previous performance evaluation results are properly filed"
     ]
-  });
+  },
+  {
+    id: "daily-security-compliance",
+    title: "Daily Security and Compliance",
+    category: "Operations & Safety",
+    icon: Shield,
+    refCode: "AUD-CML-DSC-02",
+    items: [
+      "Verify all perimeter gates, main lobby, and BOH access controls are secure",
+      "Verify external perimeter lighting and security lighting is fully functional",
+      "Verify security officers completed the 30-minute patrol logs correctly",
+      "Verify all CCTV cameras are transmitting high-definition feeds to the guardhouse",
+      "Verify key card logbook balances against physical cards in secure storage",
+      "Verify all fire exits, corridors, and assembly areas are clear of obstructions",
+      "Verify emergency backup alarms and panic switches are operational"
+    ]
+  },
+  {
+    id: "dept-training-matrix",
+    title: "Departmental Training Log and Matrix",
+    category: "HR & Training",
+    icon: GraduationCap,
+    refCode: "AUD-CML-DTM-03",
+    items: [
+      "Verify current departmental training matrix is updated for the quarter",
+      "Verify physical/digital attendance sheets are signed by all attendees",
+      "Verify training materials and modules are approved by HR/Management",
+      "Verify skill matrices are updated with newly achieved competencies",
+      "Verify employee feedback surveys on the training session are compiled",
+      "Verify schedule for required follow-up and refresher sessions is locked in",
+      "Verify training certification badges have been issued to passing staff"
+    ]
+  },
+  {
+    id: "emp-exit-clearance",
+    title: "Employee Exit Interview and Clearance",
+    category: "HR & Training",
+    icon: UserCheck,
+    refCode: "AUD-CML-EEC-04",
+    items: [
+      "Verify all company-issued IT equipment (laptops, phones, chargers) is returned",
+      "Verify physical ID badges, parking permits, and office keys are surrendered",
+      "Verify completed Exit Interview questionnaire is signed and filed with HR",
+      "Verify final payout calculations (including leave and FNPF) are audited",
+      "Verify written clearance clearances are signed by all respective heads",
+      "Verify all digital accounts, emails, and server access tokens are deactivated",
+      "Verify direct task hand-over notes are finalized with team supervisors"
+    ]
+  },
+  {
+    id: "emergency-safety-drill",
+    title: "Emergency Response and Safety Drill Log",
+    category: "Operations & Safety",
+    icon: AlertTriangle,
+    refCode: "AUD-CML-ESD-05",
+    items: [
+      "Verify drill date, time, warden roster, and exit times are logged",
+      "Verify fire alarms and visual indicators triggered successfully",
+      "Verify all occupants assembled at the muster point within 3 minutes",
+      "Verify floor wardens successfully cleared their assigned zones",
+      "Verify first aid kits across the facility are fully stocked and checked",
+      "Verify post-drill review meeting is held with feedback points noted",
+      "Verify pressure indicators and dates on all extinguishers are validated"
+    ]
+  },
+  {
+    id: "contractor-compliance",
+    title: "External Contractor and Vendor Compliance",
+    category: "Operations & Safety",
+    icon: Shield,
+    refCode: "AUD-CML-EVC-06",
+    items: [
+      "Verify contractor Public Liability Insurance certificate is active",
+      "Verify signed OHS site-specific compliance agreement is on file",
+      "Verify valid Non-Disclosure Agreement (NDA) is signed for sensitive scopes",
+      "Verify active Permit to Work (Working at Heights/Hot Work) is issued",
+      "Verify full OHS safety induction training was completed before entry",
+      "Verify contractor scope matches current building guidelines and approvals",
+      "Verify log of contractor entry, exit, and badge numbers is logged daily"
+    ]
+  },
+  {
+    id: "hazmat-chemical-safety",
+    title: "Hazardous Materials and Chemical Safety",
+    category: "Operations & Safety",
+    icon: AlertTriangle,
+    refCode: "AUD-CML-HMC-07",
+    items: [
+      "Verify Material Safety Data Sheets (MSDS) are updated and posted in work areas",
+      "Verify chemical storage cage is locked, dry, and properly ventilated",
+      "Verify all chemical drums and spray bottles are clearly labeled with hazards",
+      "Verify appropriate PPE (aprons, heavy gloves, safety goggles) is present",
+      "Verify functional emergency eyewash stations have been tested and logged",
+      "Verify chemical spill clean-up kits are fully stocked and visible",
+      "Verify training log for chemical dilution rates is completed for the team"
+    ]
+  },
+  {
+    id: "hr-onboarding-flow",
+    title: "HR Onboarding Process Flow",
+    category: "HR & Training",
+    icon: UserCheck,
+    refCode: "AUD-CML-HOP-08",
+    items: [
+      "Verify welcome packet (org structure, key directories) is delivered",
+      "Verify user email, slack, and compliance portal access is provisioned",
+      "Verify workspace is physically prepared (desk, uniform, office supplies)",
+      "Verify full policy and procedures manual acknowledgement is signed",
+      "Verify team-wide introductions and workplace tour are completed",
+      "Verify FNPF registration, bank details, and medical files are cataloged",
+      "Verify 30-day training roadmap and mentor program are established"
+    ]
+  },
+  {
+    id: "it-asset-provisioning",
+    title: "Internal IT Asset and Access Provisioning",
+    category: "Facility & Finance",
+    icon: Cpu,
+    refCode: "AUD-CML-IAP-09",
+    items: [
+      "Verify computer/laptop specifications are logged in IT inventory",
+      "Verify active directory credentials and company email are active",
+      "Verify VPN client with Multi-Factor Authentication (MFA) is configured",
+      "Verify core business software and communication apps are installed",
+      "Verify mandatory antivirus and security tracking agents are active",
+      "Verify asset tracking barcode or asset tag is physically affixed",
+      "Verify IT asset usage agreement is read and signed by the employee"
+    ]
+  },
+  {
+    id: "monthly-whs-audit",
+    title: "Monthly Workplace Health and Safety",
+    category: "Operations & Safety",
+    icon: HeartPulse,
+    refCode: "AUD-CML-MHS-10",
+    items: [
+      "Verify comprehensive structural facility sweep is conducted for hazards",
+      "Verify fire escape routes open outwards and are completely unblocked",
+      "Verify floors, pathways, and outdoor stairs are slip and trip free",
+      "Verify air conditioning and ventilation ducts are clear of dust and mold",
+      "Verify desk and chair ergonomics are optimized for administration desks",
+      "Verify emergency response plan and contacts list are printed and posted",
+      "Verify monthly safety committee minutes and actions are submitted"
+    ]
+  },
+  {
+    id: "new-hire-doc-verification",
+    title: "New Hire Document Verification",
+    category: "HR & Training",
+    icon: UserCheck,
+    refCode: "AUD-CML-NDV-11",
+    items: [
+      "Verify original Birth Certificate copy against certified copy",
+      "Verify valid Passport, Visa, and Work Permit (if applicable) are copied",
+      "Verify TIN (Tax Identification Number) Letter is verified by Fiji Revenue",
+      "Verify original FNPF membership card or letter is on record",
+      "Verify copies of degrees, diplomas, and reference letters are validated",
+      "Verify minimum two independent professional reference logs are filed",
+      "Verify valid pre-employment medical fitness certificate is archived"
+    ]
+  },
+  {
+    id: "performance-review",
+    title: "Performance Review and Evaluation Process",
+    category: "HR & Training",
+    icon: GraduationCap,
+    refCode: "AUD-CML-PRE-12",
+    items: [
+      "Verify employee's goals and core performance standards are updated",
+      "Verify supervisor's scorecards and evaluations are fully entered",
+      "Verify current Key Performance Indicators (KPIs) are calculated",
+      "Verify employee's self-evaluation form is compiled and integrated",
+      "Verify continuous professional development goals are discussed",
+      "Verify target dates for subsequent evaluations are set and agreed",
+      "Verify HR-level salary increment and grading advice is recorded"
+    ]
+  },
+  {
+    id: "financial-compliance",
+    title: "Quarterly Financial Compliance and Audit",
+    category: "Facility & Finance",
+    icon: TrendingUp,
+    refCode: "AUD-CML-QFC-13",
+    items: [
+      "Verify cash-on-hand matches petty cash logbook exactly",
+      "Verify standard invoice audit matches sample voucher transactions",
+      "Verify tax files (VAT, ECAL, withholding tax) are filed and paid on time",
+      "Verify actual department expenses align with quarterly budget limits",
+      "Verify bank reconciliations are executed and signed off by Controller",
+      "Verify capital expenditures over approved thresholds are signed off",
+      "Verify draft financial compliance statements are compiled for audit"
+    ]
+  },
+  {
+    id: "remote-work-security",
+    title: "Remote Work Infrastructure and Security",
+    category: "Operations & Safety",
+    icon: Cpu,
+    refCode: "AUD-CML-RWS-14",
+    items: [
+      "Verify employee's home internet speed meets standard guidelines",
+      "Verify corporate VPN access with active MFA is validated and secure",
+      "Verify remote work setup conforms to ergonomic standards",
+      "Verify signed Remote Work Security and Confidentiality Policy is on file",
+      "Verify communication tools and video calling accounts are configured",
+      "Verify locked cabinet or storage is confirmed for physical paper storage",
+      "Verify company device is patched with the latest OS security updates"
+    ]
+  },
+  {
+    id: "weekly-facility-maintenance",
+    title: "Weekly Facility Maintenance and Inspection",
+    category: "Facility & Finance",
+    icon: Wrench,
+    refCode: "AUD-CML-WFM-15",
+    items: [
+      "Verify all corridor and room air conditioning filters are cleaned",
+      "Verify hot water pumps and water pressure pipes are leak-free",
+      "Verify electrical breaker boards are scanned for hot spots or errors",
+      "Verify all non-functional lightbulbs in common areas are replaced",
+      "Verify drywall, paint, ceilings, and paths are structurally clean",
+      "Verify swimming pool chemical balance levels are verified and safe",
+      "Verify backup electrical generator starts and has full fuel levels"
+    ]
+  }
+];
 
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [hasSigned, setHasSigned] = useState(false);
+export default function WyndhamChecklist({ selectionProperty = "cml" }: { selectionProperty?: string }) {
+  // UI States
+  const [activeTab, setActiveTab] = useState<"forms" | "history">("forms");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<FormCategory | "All">("All");
+  const [selectedFormId, setSelectedFormId] = useState<string>("cml-emp-file-audit");
+  
+  // Active form data values
+  const [operatorName, setOperatorName] = useState("Charles");
+  const [designation, setDesignation] = useState("Compliance Auditor");
+  const [auditDate, setAuditDate] = useState(new Date().toISOString().split("T")[0]);
+  const [shift, setShift] = useState("AM");
+  
+  // Checkbox status state (keyed by formId_itemIndex)
+  const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
+  
+  // Action logs
+  const [concern, setConcern] = useState("");
+  const [actionTaken, setActionTaken] = useState("");
+  const [recommendation, setRecommendation] = useState("");
+  
+  // Signature & sign-off
+  const [signatureName, setSignatureName] = useState("Charles Cebujano");
+  const [certifyChecked, setCertifyChecked] = useState(false);
+  
+  // Submission & Loader states
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successPayload, setSuccessPayload] = useState<any | null>(null);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  // Submitted Forms History (from db / localStorage)
+  const [submissionHistory, setSubmissionHistory] = useState<any[]>([]);
+
+  // Fetch submitted history
+  const fetchHistory = async () => {
+    try {
+      const targetCompany = selectionProperty || "cml";
+      if (!db) {
+        // Fallback to localStorage
+        const localData = localStorage.getItem(`cml-forms-history-${targetCompany}`);
+        if (localData) {
+          setSubmissionHistory(JSON.parse(localData));
+        }
+        return;
+      }
+      const q = query(
+        collection(db, `cml-forms-submissions-${targetCompany}`),
+        orderBy("submittedAt", "desc"),
+        limit(50)
+      );
+      const querySnapshot = await getDocs(q);
+      const list: any[] = [];
+      querySnapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+      setSubmissionHistory(list);
+      // Synchronize back to localstorage as a cache
+      localStorage.setItem(`cml-forms-history-${targetCompany}`, JSON.stringify(list));
+    } catch (e) {
+      console.error("Failed to load history:", e);
+      // Fallback
+      const targetCompany = selectionProperty || "cml";
+      const localData = localStorage.getItem(`cml-forms-history-${targetCompany}`);
+      if (localData) {
+        setSubmissionHistory(JSON.parse(localData));
+      }
+    }
+  };
 
   useEffect(() => {
-    const currentSections = roleData[selectedRole];
-    const initialExpanded: Record<string, boolean> = {};
-    currentSections.forEach((_, idx) => {
-      initialExpanded[`${selectedRole}_${idx}`] = true;
+    fetchHistory();
+  }, [selectionProperty]);
+
+  // Find active form object
+  const activeForm = FORM_TEMPLATES.find(f => f.id === selectedFormId) || FORM_TEMPLATES[0];
+
+  // Calculate stats
+  const activeItemsCount = activeForm.items.length;
+  const activeCheckedCount = activeForm.items.filter((_, idx) => checkedItems[`${activeForm.id}_${idx}`]).length;
+  const progressPercent = activeItemsCount > 0 ? Math.round((activeCheckedCount / activeItemsCount) * 100) : 0;
+
+  const handleToggleItem = (idx: number) => {
+    const key = `${activeForm.id}_${idx}`;
+    setCheckedItems(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const handleToggleAll = () => {
+    const allChecked = activeForm.items.every((_, idx) => checkedItems[`${activeForm.id}_${idx}`]);
+    const updated: Record<string, boolean> = { ...checkedItems };
+    activeForm.items.forEach((_, idx) => {
+      updated[`${activeForm.id}_${idx}`] = !allChecked;
     });
-    setExpandedSections(initialExpanded);
-  }, [selectedRole]);
-
-  const toggleItem = (sectionIdx: number, itemIdx: number) => {
-    const updated = { ...roleData };
-    updated[selectedRole][sectionIdx].items[itemIdx].checked = !updated[selectedRole][sectionIdx].items[itemIdx].checked;
-    setRoleData(updated);
+    setCheckedItems(updated);
   };
 
-  const handleTextFieldChange = (sectionIdx: number, field: "concern" | "action" | "recommendation", value: string) => {
-    const updated = { ...roleData };
-    updated[selectedRole][sectionIdx][field] = value;
-    setRoleData(updated);
+  const handleResetForm = () => {
+    const updated: Record<string, boolean> = { ...checkedItems };
+    activeForm.items.forEach((_, idx) => {
+      updated[`${activeForm.id}_${idx}`] = false;
+    });
+    setCheckedItems(updated);
+    setConcern("");
+    setActionTaken("");
+    setRecommendation("");
+    setCertifyChecked(false);
   };
 
-  const currentSections = roleData[selectedRole];
-  const totalItems = currentSections.reduce((sum, s) => sum + s.items.length, 0);
-  const checkedItems = currentSections.reduce((sum, s) => sum + s.items.filter(i => i.checked).length, 0);
-  const percentComplete = totalItems > 0 ? Math.round((checkedItems / totalItems) * 100) : 0;
-
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.strokeStyle = "#002855"; 
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = "round";
-
-    const rect = canvas.getBoundingClientRect();
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-
-    ctx.beginPath();
-    ctx.moveTo(clientX - rect.left, clientY - rect.top);
-    setIsDrawing(true);
-  };
-
-  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-
-    ctx.lineTo(clientX - rect.left, clientY - rect.top);
-    ctx.stroke();
-    setHasSigned(true);
-  };
-
-  const clearCanvas = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setHasSigned(false);
-  };
-
-  const handleSubmitChecklist = async () => {
-    if (!staffName.trim()) {
-      alert("Please provide the staff member name before dispatching compliance report.");
-      return;
-    }
-    if (!hasSigned) {
-      alert("Verification signature trace is required to lock operational report.");
+  // Submit compliance checklist form
+  const handleSubmitForm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!certifyChecked) {
+      alert("Please check the declaration box to certify this audit before submitting.");
       return;
     }
 
     setIsSubmitting(true);
-    const canvas = canvasRef.current;
-    const signatureBase64 = canvas ? canvas.toDataURL() : "";
+
+    const targetCompany = selectionProperty || "cml";
+    const checklistStatus = activeForm.items.map((text, idx) => ({
+      checkpoint: text,
+      verified: !!checkedItems[`${activeForm.id}_${idx}`]
+    }));
 
     const payload = {
-      property: selectionProperty,
-      role: selectedRole.toUpperCase().replace("_", " "),
-      staffName,
+      formId: activeForm.id,
+      formTitle: activeForm.title,
+      formRefCode: activeForm.refCode,
+      category: activeForm.category,
+      operatorName,
+      designation,
+      auditDate,
       shift,
-      occupancy: `${occupancy}%`,
-      date,
-      completionRate: `${percentComplete}%`,
-      auditLogs: currentSections.map(s => ({
-        section: s.title,
-        itemsChecked: `${s.items.filter(i => i.checked).length}/${s.items.length}`,
-        concern: s.concern || "Nil",
-        action: s.action || "Nil",
-        recommendation: s.recommendation || "Nil"
-      })),
-      feedback: {
-        guestFeedback: guestFeedback || "None Registered",
-        hrOfficerFeedback: hrOfficerFeedback || "None Registered"
+      verifiedCount: activeCheckedCount,
+      totalCount: activeItemsCount,
+      progressPercent,
+      checklistStatus,
+      observations: {
+        concern: concern.trim(),
+        actionTaken: actionTaken.trim(),
+        recommendation: recommendation.trim()
       },
-      routingTargets: ["digitalmedia@cml.com.fj", "graphics@cml.com.fj"],
-      signature: signatureBase64,
-      timestamp: new Date().toLocaleTimeString()
+      signatureName,
+      dispatchedToEmail: "digitalmedia@cml.com.fj",
+      submittedAt: new Date().toISOString()
     };
 
-    setTimeout(() => {
+    try {
+      if (db) {
+        await addDoc(collection(db, `cml-forms-submissions-${targetCompany}`), payload);
+      }
+      
+      // Update local storage history directly so UI updates instantly
+      const updatedHistory = [payload, ...submissionHistory].slice(0, 50);
+      setSubmissionHistory(updatedHistory);
+      localStorage.setItem(`cml-forms-history-${targetCompany}`, JSON.stringify(updatedHistory));
+
+      setSubmitSuccess(true);
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 5000);
+
+      // Reset fields but keep general parameters like operator name
+      handleResetForm();
+    } catch (err) {
+      console.error("Submission failed:", err);
+      alert("Error sending audit details to the compliance database. Fallback offline compilation active.");
+      
+      // Offline fallback still updates history
+      const updatedHistory = [payload, ...submissionHistory].slice(0, 50);
+      setSubmissionHistory(updatedHistory);
+      localStorage.setItem(`cml-forms-history-${targetCompany}`, JSON.stringify(updatedHistory));
+      
+      setSubmitSuccess(true);
+    } finally {
       setIsSubmitting(false);
-      setSuccessPayload(payload);
-    }, 1200);
+    }
   };
 
-  if (successPayload) {
-    return (
-      <div className="min-h-screen bg-[#f1f5f9] text-[#1e293b] font-sans antialiased p-4 xl:p-8 flex items-center justify-center">
-        <div className="max-w-3xl w-full bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden relative">
-          <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-[#002855] via-[#007A87] to-[#002855]" />
-          
-          <div className="p-6 md:p-8 space-y-6">
-            {/* Header */}
-            <div className="text-center space-y-2">
-              <div className="inline-flex p-3 bg-emerald-50 rounded-full text-emerald-600 border border-emerald-100">
-                <CheckCircle2 size={32} />
-              </div>
-              <h2 className="text-2xl font-bold text-[#002855] tracking-tight font-serif uppercase">Compliance Dispatch Complete</h2>
-              <p className="text-xs text-slate-500 font-medium">
-                The daily operational audit log has been validated, digitally signed, and logged to the central ledger.
-              </p>
-            </div>
+  // Filter templates
+  const filteredTemplates = FORM_TEMPLATES.filter(form => {
+    const matchesSearch = form.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          form.refCode.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = selectedCategory === "All" || form.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
 
-            {/* Meta Table */}
-            <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5 grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider">Property</span>
-                <span className="text-xs font-bold text-slate-800">{successPayload.property}</span>
-              </div>
-              <div>
-                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider">Operational Role</span>
-                <span className="text-xs font-bold text-[#007A87]">{successPayload.role}</span>
-              </div>
-              <div>
-                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider">Staff Operator</span>
-                <span className="text-xs font-bold text-slate-800">{successPayload.staffName}</span>
-              </div>
-              <div>
-                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider">Date & Shift</span>
-                <span className="text-xs font-bold text-slate-800">{successPayload.date} ({successPayload.shift})</span>
-              </div>
-            </div>
+  // Dynamic Theme Styling based on Company
+  const getThemeColors = () => {
+    if (selectionProperty === 'ramada') {
+      return {
+        primary: "bg-[#D11242]",
+        primaryHover: "hover:bg-[#a60e33]",
+        text: "text-[#D11242]",
+        border: "border-[#D11242]/20",
+        lightBg: "bg-[#D11242]/5"
+      };
+    } else if (selectionProperty === 'wyndham') {
+      return {
+        primary: "bg-[#0b5c4b]",
+        primaryHover: "hover:bg-[#084538]",
+        text: "text-[#0b5c4b]",
+        border: "border-[#0b5c4b]/20",
+        lightBg: "bg-[#0b5c4b]/5"
+      };
+    } else {
+      return {
+        primary: "bg-gold",
+        primaryHover: "hover:bg-luxury-black",
+        text: "text-gold",
+        border: "border-gold/20",
+        lightBg: "bg-gold/5"
+      };
+    }
+  };
 
-            {/* Audit Logs Breakdown */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-bold text-[#002855] uppercase tracking-wider">Audit Sections Breakdown</h3>
-              <div className="overflow-x-auto rounded-xl border border-slate-100">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold uppercase text-[9px] tracking-wider">
-                      <th className="p-3">Section Title</th>
-                      <th className="p-3">Compliance Rate</th>
-                      <th className="p-3">Issues / Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {successPayload.auditLogs.map((log: any, idx: number) => (
-                      <tr key={idx} className="hover:bg-slate-50/50">
-                        <td className="p-3 font-semibold text-[#002855]">{log.section}</td>
-                        <td className="p-3 font-mono font-bold text-slate-600">{log.itemsChecked}</td>
-                        <td className="p-3">
-                          <div className="space-y-0.5">
-                            <p><span className="font-bold text-amber-600">Issue:</span> {log.concern}</p>
-                            <p><span className="font-bold text-emerald-600">Action:</span> {log.action}</p>
-                            <p><span className="font-bold text-slate-500">Rec:</span> {log.recommendation}</p>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Feedback & Comments */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-slate-50/50 border border-slate-100 p-4 rounded-xl space-y-1">
-                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Guest Feedback Log</h4>
-                <p className="text-xs font-semibold text-slate-700">{successPayload.feedback.guestFeedback}</p>
-              </div>
-              <div className="bg-slate-50/50 border border-slate-100 p-4 rounded-xl space-y-1">
-                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">HR/Compliance Comments</h4>
-                <p className="text-xs font-semibold text-slate-700">{successPayload.feedback.hrOfficerFeedback}</p>
-              </div>
-            </div>
-
-            {/* Footer with Signature */}
-            <div className="border-t border-slate-100 pt-6 flex flex-col md:flex-row items-center justify-between gap-6">
-              <div className="space-y-1 text-center md:text-left">
-                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider">Verification Routing Target Alerts</span>
-                <div className="flex flex-wrap gap-1.5 justify-center md:justify-start">
-                  {successPayload.routingTargets.map((email: string) => (
-                    <span key={email} className="text-[10px] bg-slate-100 text-slate-600 border border-slate-200/50 px-2.5 py-0.5 rounded-full font-bold">
-                      {email}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="flex flex-col items-center md:items-end space-y-1.5">
-                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider">Authorized Digital Signature</span>
-                {successPayload.signature ? (
-                  <div className="bg-slate-50 p-2 rounded-xl border border-slate-200">
-                    <img src={successPayload.signature} alt="Sign-off" className="h-10 w-32 object-contain" />
-                  </div>
-                ) : (
-                  <span className="text-xs text-rose-500 font-bold uppercase tracking-wider">Trace Missing</span>
-                )}
-                <span className="text-[9px] font-mono font-bold text-slate-400 uppercase">Timestamped: {successPayload.timestamp}</span>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="pt-4">
-              <button
-                onClick={() => {
-                  setSuccessPayload(null);
-                  setStaffName("");
-                  clearCanvas();
-                  // Reset all checklist selections
-                  const resetRoleData = { ...roleData };
-                  Object.keys(resetRoleData).forEach((roleKey) => {
-                    resetRoleData[roleKey as OperationalRole].forEach((section) => {
-                      section.items.forEach((item) => {
-                        item.checked = false;
-                      });
-                      section.concern = "";
-                      section.action = "";
-                      section.recommendation = "";
-                    });
-                  });
-                  setRoleData(resetRoleData);
-                  setGuestFeedback("");
-                  setHrOfficerFeedback("");
-                }}
-                className="w-full bg-[#002855] hover:bg-[#001f42] text-white py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer transition-all shadow-md text-center"
-              >
-                Open New Operational Form
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const colors = getThemeColors();
 
   return (
-    <div className="min-h-screen bg-[#f1f5f9] text-[#1e293b] font-sans antialiased p-4 xl:p-8">
-      
-      {/* Master Outer Screen Containment Grid */}
-      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
-        {/* Left Controller Column */}
-        <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-8">
+    <div id="cml-compliance-container" className="space-y-8">
+      {/* Premium Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-6 gap-4">
+        <div>
+          <span className="text-[9px] font-display uppercase tracking-[0.2em] font-black text-slate-400">
+            CML Property Management System
+          </span>
+          <h2 className="text-3xl font-serif italic text-slate-900 mt-1">
+            Compliance & Audit Form Registry
+          </h2>
+          <p className="text-[11px] text-slate-500 font-medium max-w-xl mt-1.5">
+            Select, fill, and digitally submit formal property audit checklists. Complete submissions are compiled and routed directly to <span className="font-extrabold text-slate-700">digitalmedia@cml.com.fj</span>.
+          </p>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 self-start md:self-center">
+          <button
+            onClick={() => setActiveTab("forms")}
+            className={`flex items-center gap-1.5 px-4 py-2 text-[10px] font-display uppercase tracking-wider font-extrabold transition-all rounded-md ${
+              activeTab === "forms"
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <ClipboardCheck size={12} /> Forms Registry
+          </button>
+          <button
+            onClick={() => setActiveTab("history")}
+            className={`flex items-center gap-1.5 px-4 py-2 text-[10px] font-display uppercase tracking-wider font-extrabold transition-all rounded-md ${
+              activeTab === "history"
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <History size={12} /> Submission Log ({submissionHistory.length})
+          </button>
+        </div>
+      </div>
+
+      {activeTab === "forms" ? (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
-          {/* Top Panel Brand Heading Card */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#002855]" />
-            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-[#007A87] mb-1">
-              <Hotel size={13} className="fill-[#007A87]" /> {selectionProperty}
-            </div>
-            <h1 className="text-xl font-bold text-[#002855] tracking-tight uppercase font-serif">
-              Compliance Console
-            </h1>
-            <p className="text-xs text-slate-500 mt-1 font-medium">
-              Property operational metrics & verification stream.
-            </p>
-          </div>
+          {/* Left Column: Forms Directory Directory */}
+          <div className="lg:col-span-4 space-y-6">
+            <div className="bg-white p-6 rounded-xl border border-slate-200/80 shadow-xs space-y-4">
+              <h3 className="text-[11px] font-display uppercase tracking-wider text-slate-400 font-black flex items-center gap-2">
+                <Filter size={12} /> Form Directory
+              </h3>
 
-          {/* Core Configuration Parameters Form Panel */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-xs font-bold text-[#002855] uppercase tracking-wider">
-                Shift Meta Parameters
-              </h2>
-              <div className="px-2.5 py-1 bg-slate-100 rounded-full text-[10px] font-bold text-slate-600">
-                Live Session
+              {/* Search */}
+              <div className="relative">
+                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search forms by name or ref..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-gold focus:bg-white transition-all"
+                />
               </div>
-            </div>
 
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                <Briefcase size={12} className="text-slate-400" /> Operational Profile
-              </label>
-              <select 
-                value={selectedRole}
-                onChange={(e) => setSelectedRole(e.target.value as OperationalRole)}
-                className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#002855]/10 focus:border-[#002855] focus:bg-white transition-all shadow-2xs"
-              >
-                <option value="porter">Concierge & Porter Team</option>
-                <option value="housekeeping_sup">Housekeeping Supervisor</option>
-                <option value="houseman">Houseman Team</option>
-                <option value="public_area">Public Area Attendant</option>
-                <option value="maintenance">Maintenance Engineer</option>
-                <option value="property_officer">Property Safety Officer</option>
-                <option value="hr_compliance">HR & Compliance Officer</option>
-                <option value="duty_manager">Duty Manager (MOD)</option>
-                <option value="hotel_manager">Hotel Manager / GM</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                <User size={12} className="text-slate-400" /> Operator Name
-              </label>
-              <input 
-                type="text"
-                placeholder="First & Last Name"
-                value={staffName}
-                onChange={(e) => setStaffName(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#002855]/10 focus:border-[#002855] focus:bg-white transition-all shadow-2xs"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                <Clock size={12} className="text-slate-400" /> Duty Shift Rotation
-              </label>
-              <div className="grid grid-cols-3 bg-slate-100 p-1 rounded-xl shadow-2xs gap-1">
-                {["AM", "PM", "NIGHT"].map((s) => (
+              {/* Category Filters */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {["All", "HR & Training", "Operations & Safety", "Facility & Finance"].map((cat) => (
                   <button
-                    key={s}
-                    type="button"
-                    onClick={() => setShift(s)}
-                    className={`py-2 text-[10px] font-bold tracking-wider rounded-lg transition-all ${shift === s ? "bg-white text-[#002855] shadow-xs" : "text-slate-500 hover:text-slate-800"}`}
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat as any)}
+                    className={`px-3 py-1.5 text-[9px] font-display uppercase tracking-wider font-black rounded transition-all ${
+                      selectedCategory === cat
+                        ? `${colors.primary} text-white`
+                        : "bg-slate-50 text-slate-500 hover:text-slate-800 border border-slate-200/60"
+                    }`}
                   >
-                    {s}
+                    {cat}
                   </button>
                 ))}
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                  <Percent size={12} className="text-slate-400" /> Occupancy %
-                </label>
-                <input 
-                  type="number"
-                  value={occupancy}
-                  onChange={(e) => setOccupancy(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#002855]/10 focus:border-[#002855] focus:bg-white transition-all shadow-2xs"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                  <Calendar size={12} className="text-slate-400" /> Log Date
-                </label>
-                <input 
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#002855]/10 focus:border-[#002855] focus:bg-white transition-all shadow-2xs"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Operational Metrics Real-time Analytics Tracker Progress Block */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 space-y-4">
-            <div className="flex justify-between items-center text-xs font-bold text-[#002855] uppercase tracking-wide">
-              <span>Audit Metric Progress</span>
-              <span className="text-[#007A87] font-mono text-sm bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">{percentComplete}%</span>
-            </div>
-            <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50">
-              <div 
-                className="h-full bg-gradient-to-r from-[#002855] to-[#007A87] transition-all duration-500 ease-out"
-                style={{ width: `${percentComplete}%` }}
-              />
-            </div>
-            <p className="text-[11px] text-slate-400 font-medium leading-normal">
-              State validation metrics track completion nodes recursively inside local sandbox buffer memory spaces.
-            </p>
-          </div>
-        </div>
-
-        {/* Right Task Streams Stack Column */}
-        <div className="lg:col-span-8 space-y-6">
-          
-          {/* Active Checklist Items Iterative Array Container Modules */}
-          {currentSections.map((section, sIdx) => {
-            const sectionKey = `${selectedRole}_${sIdx}`;
-            const isExpanded = expandedSections[sectionKey] !== false;
-            const checkedCount = section.items.filter(i => i.checked).length;
-            const totalCount = section.items.length;
-            
-            return (
-              <div key={sectionKey} className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden transition-all">
-                {/* Section Header */}
-                <div className="bg-slate-50/70 p-4 border-b border-slate-100 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
+            {/* Forms List Container */}
+            <div className="max-h-[60vh] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+              {filteredTemplates.length > 0 ? (
+                filteredTemplates.map((tmpl) => {
+                  const IconComponent = tmpl.icon;
+                  const isSelected = selectedFormId === tmpl.id;
+                  return (
                     <button
-                      type="button"
-                      onClick={() => setExpandedSections(prev => ({ ...prev, [sectionKey]: !isExpanded }))}
-                      className="text-[#002855] hover:text-[#007A87] p-1 rounded-lg hover:bg-slate-200/50 transition-all cursor-pointer"
+                      key={tmpl.id}
+                      onClick={() => {
+                        setSelectedFormId(tmpl.id);
+                        setSubmitSuccess(false);
+                      }}
+                      className={`w-full p-4 rounded-xl border text-left transition-all flex items-start gap-3.5 ${
+                        isSelected
+                          ? `border-slate-800 bg-slate-900 text-white shadow-md`
+                          : "border-slate-200 bg-white hover:border-slate-350 hover:shadow-xs text-slate-800"
+                      }`}
                     >
-                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      <div className={`p-2 rounded-lg ${
+                        isSelected ? 'bg-white/10 text-gold' : 'bg-slate-50 text-slate-500'
+                      }`}>
+                        <IconComponent size={16} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`text-[8px] font-display uppercase tracking-widest font-extrabold ${
+                            isSelected ? 'text-slate-300' : 'text-slate-400'
+                          }`}>
+                            {tmpl.category}
+                          </span>
+                          <span className={`text-[8px] font-mono ${
+                            isSelected ? 'text-gold' : 'text-slate-400'
+                          }`}>
+                            {tmpl.refCode}
+                          </span>
+                        </div>
+                        <h4 className="text-[11.5px] font-display uppercase tracking-wider font-black mt-1 leading-snug truncate">
+                          {tmpl.title}
+                        </h4>
+                      </div>
                     </button>
-                    <div>
-                      <h3 className="text-xs font-bold text-[#002855] uppercase tracking-wide">{section.title}</h3>
-                      <p className="text-[10px] text-slate-400 font-medium">Compliance verification queue items</p>
+                  );
+                })
+              ) : (
+                <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-400">
+                  <FileText size={24} className="mx-auto mb-2 text-slate-300" />
+                  <p className="text-xs font-semibold">No matching forms found.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Column: Digital Forms Engine */}
+          <div className="lg:col-span-8">
+            <AnimatePresence mode="wait">
+              {submitSuccess ? (
+                <motion.div
+                  key="success-card"
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  className="bg-white p-8 md:p-12 rounded-2xl border border-slate-200 shadow-xl text-center space-y-6 relative overflow-hidden"
+                >
+                  {/* Decorative background stripes */}
+                  <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-emerald-500 to-teal-600" />
+                  
+                  <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-sm">
+                    <CheckCircle2 size={32} className="animate-bounce" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <h3 className="text-2xl font-serif italic text-slate-900">
+                      Audit Ledger Dispatched Successfully
+                    </h3>
+                    <p className="text-xs font-bold font-display uppercase tracking-widest text-emerald-600">
+                      Receipt Code: {activeForm.refCode}-{Math.floor(1000 + Math.random() * 9000)}
+                    </p>
+                  </div>
+
+                  <div className="max-w-md mx-auto p-5 bg-slate-50 border border-slate-200 rounded-xl text-left space-y-3">
+                    <div className="flex justify-between text-[11px] border-b border-slate-200/60 pb-2">
+                      <span className="text-slate-400 font-display uppercase tracking-wider">Form Name:</span>
+                      <span className="text-slate-800 font-extrabold">{activeForm.title}</span>
+                    </div>
+                    <div className="flex justify-between text-[11px] border-b border-slate-200/60 pb-2">
+                      <span className="text-slate-400 font-display uppercase tracking-wider">Audited By:</span>
+                      <span className="text-slate-800 font-extrabold">{operatorName}</span>
+                    </div>
+                    <div className="flex justify-between text-[11px] border-b border-slate-200/60 pb-2">
+                      <span className="text-slate-400 font-display uppercase tracking-wider">Verification Score:</span>
+                      <span className="text-slate-800 font-extrabold">{activeCheckedCount} of {activeItemsCount} ( {progressPercent}% )</span>
+                    </div>
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-slate-400 font-display uppercase tracking-wider">Destination:</span>
+                      <span className="text-slate-800 font-extrabold">digitalmedia@cml.com.fj</span>
                     </div>
                   </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded-md border bg-white text-slate-500 border-slate-100">
-                      {checkedCount}/{totalCount} Items
-                    </span>
+
+                  <div className="bg-emerald-50/50 border border-emerald-150 p-4 rounded-xl text-left max-w-md mx-auto flex gap-3">
+                    <Mail className="text-emerald-500 flex-shrink-0 mt-0.5" size={16} />
+                    <p className="text-[11px] text-slate-600 font-semibold leading-relaxed">
+                      A copy of this digital compliance audit has been formally compiled and securely dispatched. All checklist responses and logged observations have been locked in the ledger.
+                    </p>
+                  </div>
+
+                  <div className="flex justify-center gap-4 pt-2">
                     <button
-                      type="button"
-                      onClick={() => {
-                        const updated = { ...roleData };
-                        const allChecked = section.items.every(i => i.checked);
-                        section.items.forEach(i => i.checked = !allChecked);
-                        setRoleData(updated);
-                      }}
-                      className="text-[10px] font-bold bg-[#007A87]/10 hover:bg-[#007A87]/20 text-[#007A87] border border-[#007A87]/20 px-2.5 py-1 rounded-lg transition-all cursor-pointer"
+                      onClick={() => setSubmitSuccess(false)}
+                      className={`px-6 py-3 text-[10px] font-display uppercase tracking-widest font-black text-white ${colors.primary} ${colors.primaryHover} transition-all rounded-lg shadow-sm`}
                     >
-                      Toggle All
+                      Fill Out New Audit
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("history")}
+                      className="px-6 py-3 text-[10px] font-display uppercase tracking-widest font-black text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all rounded-lg"
+                    >
+                      View Logs List
                     </button>
                   </div>
-                </div>
+                </motion.div>
+              ) : (
+                <motion.form
+                  key={selectedFormId}
+                  onSubmit={handleSubmitForm}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
+                >
+                  {/* Decorative form card banner with custom color */}
+                  <div className={`h-2.5 ${colors.primary}`} />
 
-                {/* Section Items & Fields */}
-                <AnimatePresence initial={false}>
-                  {isExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="overflow-hidden"
-                    >
-                      {/* Items Checklist List */}
-                      <div className="p-4 space-y-1">
-                        {section.items.map((item, itemIdx) => (
+                  {/* Form Main Body */}
+                  <div className="p-6 md:p-8 space-y-8">
+                    
+                    {/* Paper Document Title Header */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-dashed border-slate-200 pb-6 gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2.5 py-0.5 rounded text-[8px] font-display uppercase tracking-widest font-black ${
+                            activeForm.category === "HR & Training" ? "bg-amber-50 text-amber-600" :
+                            activeForm.category === "Operations & Safety" ? "bg-blue-50 text-blue-600" :
+                            "bg-purple-50 text-purple-600"
+                          }`}>
+                            {activeForm.category}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-400">
+                            {activeForm.refCode}
+                          </span>
+                        </div>
+                        <h3 className="text-xl font-serif text-slate-900 mt-2 font-bold leading-tight">
+                          {activeForm.title}
+                        </h3>
+                      </div>
+
+                      <div className="text-right md:self-center">
+                        <span className="text-[8px] font-display uppercase tracking-widest text-slate-400 block font-bold">
+                          Document Status
+                        </span>
+                        <span className="text-[10px] font-display uppercase tracking-widest font-black text-amber-500 flex items-center gap-1.5 mt-0.5 justify-end">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" /> Pending Submit
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Pre-Shift Parameters Form Section */}
+                    <div className="bg-slate-50/50 p-5 rounded-xl border border-slate-200/60 space-y-4">
+                      <h4 className="text-[10.5px] font-display uppercase tracking-widest text-slate-400 font-black">
+                        Audit Meta Parameters
+                      </h4>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="space-y-1">
+                          <label className="block text-[9px] font-display uppercase tracking-wider font-extrabold text-slate-500">
+                            Auditor Name
+                          </label>
+                          <div className="relative">
+                            <User size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input
+                              type="text"
+                              required
+                              value={operatorName}
+                              onChange={(e) => setOperatorName(e.target.value)}
+                              className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-gold"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[9px] font-display uppercase tracking-wider font-extrabold text-slate-500">
+                            Designation
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={designation}
+                            onChange={(e) => setDesignation(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-gold"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[9px] font-display uppercase tracking-wider font-extrabold text-slate-500">
+                            Audit Date
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={auditDate}
+                            onChange={(e) => setAuditDate(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded text-xs font-semibold text-slate-800 focus:outline-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[9px] font-display uppercase tracking-wider font-extrabold text-slate-500">
+                            Duty Shift
+                          </label>
+                          <div className="grid grid-cols-3 gap-1">
+                            {["AM", "PM", "Night"].map((s) => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => setShift(s)}
+                                className={`py-2 text-[9px] font-display uppercase tracking-wider font-extrabold rounded border transition-all ${
+                                  shift === s
+                                    ? "bg-slate-800 text-white border-slate-800"
+                                    : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                                }`}
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Interactive Checklist Points */}
+                    <div className="space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                        <div className="flex items-center gap-2">
+                          <ClipboardCheck className={colors.text} size={16} />
+                          <h4 className="text-[11px] font-display uppercase tracking-widest text-slate-800 font-black">
+                            Compliance Verification Checklist ({activeCheckedCount}/{activeItemsCount})
+                          </h4>
+                        </div>
+                        <div className="flex gap-2">
                           <button
-                            key={item.id}
                             type="button"
-                            onClick={() => toggleItem(sIdx, itemIdx)}
-                            className={`w-full text-left p-3 flex items-start gap-3 transition-all rounded-xl ${
-                              item.checked ? "bg-emerald-50/20 text-slate-400" : "hover:bg-slate-50"
-                            }`}
+                            onClick={handleToggleAll}
+                            className="text-[9px] font-display uppercase tracking-wider text-slate-500 hover:text-slate-800 font-extrabold hover:underline"
                           >
-                            <div className="shrink-0 mt-0.5">
-                              {item.checked ? (
-                                <CheckSquare className="text-[#007A87]" size={18} />
-                              ) : (
-                                <Square className="text-slate-300" size={18} />
-                              )}
-                            </div>
-                            <span className={`text-xs font-semibold leading-relaxed transition-all ${
-                              item.checked ? "line-through text-slate-400 font-normal" : "text-slate-700"
-                            }`}>
-                              {item.text}
-                            </span>
+                            Toggle All
                           </button>
-                        ))}
-                      </div>
-
-                      {/* Observations Log Sub-panel */}
-                      <div className="border-t border-slate-100 p-4 bg-slate-50/50 space-y-3">
-                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                          <FileText size={11} className="text-[#007A87]" /> Section Observations & Action Logs
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <div>
-                            <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Concern / Issue</label>
-                            <input 
-                              type="text"
-                              placeholder="Record any issues encountered"
-                              value={section.concern || ""}
-                              onChange={(e) => handleTextFieldChange(sIdx, "concern", e.target.value)}
-                              className="w-full bg-white border border-slate-200 px-3 py-2 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#002855] focus:border-[#002855] transition-all"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Action Taken</label>
-                            <input 
-                              type="text"
-                              placeholder="Describe immediate response"
-                              value={section.action || ""}
-                              onChange={(e) => handleTextFieldChange(sIdx, "action", e.target.value)}
-                              className="w-full bg-white border border-slate-200 px-3 py-2 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#002855] focus:border-[#002855] transition-all"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Recommendation</label>
-                            <input 
-                              type="text"
-                              placeholder="Advised structural fix"
-                              value={section.recommendation || ""}
-                              onChange={(e) => handleTextFieldChange(sIdx, "recommendation", e.target.value)}
-                              className="w-full bg-white border border-slate-200 px-3 py-2 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#002855] focus:border-[#002855] transition-all"
-                            />
-                          </div>
+                          <span className="text-slate-300">|</span>
+                          <button
+                            type="button"
+                            onClick={handleResetForm}
+                            className="text-[9px] font-display uppercase tracking-wider text-slate-500 hover:text-slate-800 font-extrabold hover:underline"
+                          >
+                            Reset
+                          </button>
                         </div>
                       </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            );
-          })}
 
-          {/* Feedback & General Remarks */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 space-y-4">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-              <Mail className="text-[#002855]" size={16} />
-              <h3 className="text-xs font-bold text-[#002855] uppercase tracking-wider">General Remarks & Feedback Log</h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5">Guest Feedback & Sentiments</label>
-                <textarea
-                  rows={3}
-                  placeholder="Record guest feedback, compliments, or grievances..."
-                  value={guestFeedback}
-                  onChange={(e) => setGuestFeedback(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#002855]/10 focus:border-[#002855] focus:bg-white transition-all shadow-2xs"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5">HR / Compliance Officer Review Comments</label>
-                <textarea
-                  rows={3}
-                  placeholder="Compliance remarks, team observations, etc..."
-                  value={hrOfficerFeedback}
-                  onChange={(e) => setHrOfficerFeedback(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#002855]/10 focus:border-[#002855] focus:bg-white transition-all shadow-2xs"
-                />
-              </div>
-            </div>
+                      {/* Progress Bar */}
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className="text-slate-400 font-semibold font-display">COMPLETION PROGRESS</span>
+                          <span className="text-slate-700 font-extrabold font-mono">{progressPercent}% Completed</span>
+                        </div>
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${progressPercent}%` }}
+                            transition={{ duration: 0.3 }}
+                            className={`h-full ${colors.primary}`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Checkboxes List */}
+                      <div className="border border-slate-200/80 rounded-xl divide-y divide-slate-100 overflow-hidden bg-slate-50/20">
+                        {activeForm.items.map((itemText, idx) => {
+                          const isChecked = !!checkedItems[`${activeForm.id}_${idx}`];
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => handleToggleItem(idx)}
+                              className={`p-4 flex items-start gap-3.5 transition-colors cursor-pointer ${
+                                isChecked ? "bg-slate-50/40" : "hover:bg-slate-50/80"
+                              }`}
+                            >
+                              <div className="pt-0.5 flex-shrink-0 text-slate-400">
+                                {isChecked ? (
+                                  <div className={`w-5 h-5 rounded flex items-center justify-center text-white ${colors.primary}`}>
+                                    <Check size={12} strokeWidth={3} />
+                                  </div>
+                                ) : (
+                                  <div className="w-5 h-5 rounded border-2 border-slate-200 bg-white" />
+                                )}
+                              </div>
+                              <p className={`text-xs font-semibold leading-relaxed transition-colors ${
+                                isChecked ? "text-slate-800" : "text-slate-500"
+                              }`}>
+                                {itemText}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Actions & Observations logs */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                        <BookOpen className="text-slate-400" size={16} />
+                        <h4 className="text-[11px] font-display uppercase tracking-widest text-slate-800 font-black">
+                          Audit Observations & Action logs
+                        </h4>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="space-y-1.5">
+                          <label className="block text-[9px] font-display uppercase tracking-wider font-extrabold text-slate-500">
+                            Concern / Deficit Noted
+                          </label>
+                          <textarea
+                            rows={3}
+                            placeholder="Describe any failures, non-compliance observations, or negative detections..."
+                            value={concern}
+                            onChange={(e) => setConcern(e.target.value)}
+                            className="w-full bg-slate-50/50 border border-slate-200 p-3 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-gold focus:bg-white transition-all resize-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="block text-[9px] font-display uppercase tracking-wider font-extrabold text-slate-500">
+                            Immediate Action Taken
+                          </label>
+                          <textarea
+                            rows={3}
+                            placeholder="Actions initiated on site to correct noted deficits..."
+                            value={actionTaken}
+                            onChange={(e) => setActionTaken(e.target.value)}
+                            className="w-full bg-slate-50/50 border border-slate-200 p-3 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-gold focus:bg-white transition-all resize-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="block text-[9px] font-display uppercase tracking-wider font-extrabold text-slate-500">
+                            Preventive Recommendation
+                          </label>
+                          <textarea
+                            rows={3}
+                            placeholder="Long-term recommendations to prevent reoccurrence of deficits..."
+                            value={recommendation}
+                            onChange={(e) => setRecommendation(e.target.value)}
+                            className="w-full bg-slate-50/50 border border-slate-200 p-3 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-gold focus:bg-white transition-all resize-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Digital Authorization and Sign Off */}
+                    <div className="bg-slate-50/50 p-6 rounded-xl border border-slate-200/60 space-y-4">
+                      <div className="flex items-center gap-2 border-b border-slate-200/60 pb-3">
+                        <Shield className="text-slate-500" size={16} />
+                        <h4 className="text-[11px] font-display uppercase tracking-widest text-slate-800 font-black">
+                          Digital Accountability & Verification
+                        </h4>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                        <div className="space-y-2">
+                          <label className="block text-[9px] font-display uppercase tracking-wider font-extrabold text-slate-500">
+                            Authorized Auditor Signature
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={signatureName}
+                            onChange={(e) => setSignatureName(e.target.value)}
+                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-gold font-serif italic text-lg"
+                            placeholder="Type full name to sign digitally"
+                          />
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            Preview signature script: <span className="font-serif italic font-black text-slate-600 text-sm pl-1">{signatureName || "Waiting for name..."}</span>
+                          </p>
+                        </div>
+
+                        <div className="space-y-4">
+                          <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              required
+                              checked={certifyChecked}
+                              onChange={(e) => setCertifyChecked(e.target.checked)}
+                              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-gold focus:ring-gold"
+                            />
+                            <span className="text-[11px] text-slate-500 font-semibold leading-relaxed">
+                              I hereby certify that all criteria listed in <span className="font-extrabold text-slate-700">{activeForm.title}</span> have been honestly verified on this date, and the recorded details represent a true audit snapshot.
+                            </span>
+                          </label>
+
+                          {/* CML Secure transmission active banner */}
+                          <div className="bg-emerald-50/50 border border-emerald-100 p-3 rounded-lg flex items-center gap-2.5">
+                            <CheckCircle2 className="text-emerald-500 flex-shrink-0" size={14} />
+                            <p className="text-[9.5px] text-slate-500 font-semibold">
+                              Secure dispatch path active to <span className="font-extrabold text-slate-700">digitalmedia@cml.com.fj</span>.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Submit Button */}
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className={`w-full py-4 text-xs font-display uppercase tracking-widest font-black text-white rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                        isSubmitting 
+                          ? "bg-slate-400 cursor-not-allowed" 
+                          : `${colors.primary} ${colors.primaryHover}`
+                      }`}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <RefreshCw className="animate-spin" size={14} />
+                          Compiling Audit Ledger & Transmitting...
+                        </>
+                      ) : (
+                        <>
+                          <Send size={14} />
+                          Submit & Dispatch Audit Form
+                        </>
+                      )}
+                    </button>
+
+                  </div>
+                </motion.form>
+              )}
+            </AnimatePresence>
           </div>
 
-          {/* Digital Sign-off & Accountability Verification Trace Card */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Shield className="text-[#002855]" size={16} />
-                <h3 className="text-xs font-bold text-[#002855] uppercase tracking-wider">Digital Verification & Sign-Off</h3>
-              </div>
-              {hasSigned && (
-                <button
-                  type="button"
-                  onClick={clearCanvas}
-                  className="text-[10px] text-rose-600 hover:text-rose-700 font-extrabold uppercase hover:underline cursor-pointer"
-                >
-                  Clear Draw Box
-                </button>
-              )}
+        </div>
+      ) : (
+        /* Submission Logs History Tab */
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 md:p-8 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 gap-4">
+            <div>
+              <h3 className="text-lg font-serif italic text-slate-900 font-bold">
+                Compliance Verification Submission Logs
+              </h3>
+              <p className="text-[11px] text-slate-500 font-medium">
+                Showing the most recent completed compliance audits dispatched to the Cove Management operations hub.
+              </p>
             </div>
-            
-            <p className="text-[11px] text-slate-500 font-medium leading-normal">
-              I hereby certify that the above tasks have been completed and verified under standard operating procedures for {selectionProperty}. By adding a digital signature trace, I consent to logging these compliance items into the system.
-            </p>
-
-            <div className="border-2 border-dashed border-slate-200 bg-slate-50 rounded-2xl overflow-hidden touch-none relative h-32 shadow-inner">
-              <canvas
-                ref={canvasRef}
-                width={500}
-                height={128}
-                onMouseDown={startDrawing}
-                onMouseMove={draw}
-                onMouseUp={() => setIsDrawing(false)}
-                onMouseLeave={() => setIsDrawing(false)}
-                onTouchStart={startDrawing}
-                onTouchMove={draw}
-                onTouchEnd={() => setIsDrawing(false)}
-                className="w-full h-full cursor-crosshair bg-transparent"
-              />
-              {!hasSigned && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest animate-pulse">Sign here to authorize</span>
-                </div>
-              )}
-            </div>
-
             <button
-              type="button"
-              onClick={handleSubmitChecklist}
-              disabled={isSubmitting}
-              className={`w-full py-4 rounded-xl text-xs font-bold uppercase tracking-wider text-white transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md ${
-                isSubmitting 
-                  ? "bg-slate-400 cursor-not-allowed" 
-                  : "bg-gradient-to-r from-[#002855] to-[#007A87] hover:from-[#001f42] hover:to-[#006673]"
-              }`}
+              onClick={fetchHistory}
+              className="px-4 py-2 text-[9px] font-display uppercase tracking-widest font-black border border-slate-200 rounded hover:bg-slate-50 transition-all flex items-center gap-1.5 self-start sm:self-center"
             >
-              {isSubmitting ? (
-                <>
-                  <RefreshCw className="animate-spin" size={14} />
-                  Locking compliance ledger...
-                </>
-              ) : (
-                <>
-                  <Send size={14} />
-                  Submit & Dispatch Audit Ledger
-                </>
-              )}
+              <RefreshCw size={11} /> Refresh Logs
             </button>
           </div>
 
+          {submissionHistory.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 text-[9px] font-display uppercase tracking-widest text-slate-400 font-black">
+                    <th className="py-3 px-4">Ref Code</th>
+                    <th className="py-3 px-4">Form / Audit Title</th>
+                    <th className="py-3 px-4">Audited By</th>
+                    <th className="py-3 px-4">Date / Shift</th>
+                    <th className="py-3 px-4">Checkpoints Completed</th>
+                    <th className="py-3 px-4">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                  {submissionHistory.map((log, index) => (
+                    <tr key={index} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="py-4 px-4 font-mono text-slate-400 text-[10px]">
+                        {log.formRefCode || "AUD-GEN"}
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="font-display uppercase tracking-wider font-black text-slate-800 text-[11px]">
+                          {log.formTitle}
+                        </div>
+                        <span className="text-[9px] text-slate-400 uppercase tracking-widest font-display font-bold">
+                          {log.category}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="text-slate-800">{log.operatorName || "System"}</div>
+                        <span className="text-[9px] text-slate-400 font-display uppercase tracking-wider block">
+                          {log.designation || "Staff"}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="text-slate-800">{log.auditDate || new Date(log.submittedAt).toLocaleDateString()}</div>
+                        <span className="px-1.5 py-0.25 bg-slate-100 text-slate-600 rounded text-[8px] font-display font-extrabold uppercase inline-block mt-0.5">
+                          {log.shift || "AM"}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                            <div 
+                              className="bg-emerald-500 h-full" 
+                              style={{ width: `${log.progressPercent || 100}%` }}
+                            />
+                          </div>
+                          <span className="font-mono text-[10px] text-slate-600 font-bold">
+                            {log.verifiedCount || log.totalCount}/{log.totalCount} ({log.progressPercent || 100}%)
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded text-[9px] font-display font-black uppercase tracking-wider inline-flex items-center gap-1">
+                          <Check size={10} strokeWidth={3} /> Dispatched
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center p-12 border border-dashed border-slate-200 rounded-2xl bg-slate-50/55 max-w-md mx-auto">
+              <Archive size={32} className="mx-auto mb-3 text-slate-300" />
+              <h4 className="text-sm font-serif italic text-slate-800 font-bold">No Submissions Recorded Yet</h4>
+              <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                As soon as audits are completed and dispatched, their verified ledgers will appear securely in this compliance log history.
+              </p>
+              <button
+                onClick={() => setActiveTab("forms")}
+                className={`mt-4 px-5 py-2.5 text-[9px] font-display uppercase tracking-widest font-black text-white ${colors.primary} ${colors.primaryHover} transition-all rounded-lg inline-flex items-center gap-1 shadow-sm`}
+              >
+                Launch First Audit <ArrowRight size={10} />
+              </button>
+            </div>
+          )}
         </div>
-
-      </div>
-
+      )}
     </div>
   );
 }
