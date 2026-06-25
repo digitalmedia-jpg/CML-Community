@@ -1816,12 +1816,23 @@ async function startServer() {
     res.json(serverMockDbStore);
   });
 
+  const waitForHydration = async () => {
+    if (!firestoreRestSync || isCloudHydrated) return;
+    let attempts = 0;
+    while (!isCloudHydrated && attempts < 15) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      attempts++;
+    }
+  };
+
   app.get("/api/mock-db", async (req, res) => {
-    // Read from backend's local cache directly (extremely fast, zero latency, zero Firestore REST quota cost)
+    // Wait for central cloud database state to load first to prevent empty state wiping local storage
+    await waitForHydration();
     res.json(serverMockDbStore);
   });
 
   app.post("/api/mock-db", async (req, res) => {
+    await waitForHydration();
     const { updates, deletedKeys } = req.body;
     let mutated = false;
     

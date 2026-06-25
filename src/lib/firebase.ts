@@ -64,12 +64,21 @@ export class MockQuery {
 const safeObjectProxy = (target: any): any => {
   return new Proxy(target, {
     get: (obj, prop) => {
+      if (typeof prop === 'symbol') {
+        return obj[prop];
+      }
+      if (prop === 'then' || prop === 'toJSON' || prop === 'constructor' || prop === 'prototype') {
+        return obj[prop];
+      }
       if (prop in obj) {
         const val = obj[prop];
-        if (typeof val === 'object' && val !== null) return safeObjectProxy(val);
+        if (typeof val === 'object' && val !== null) {
+          if (val instanceof Date) return val;
+          return safeObjectProxy(val);
+        }
         return val;
       }
-      return safeObjectProxy({});
+      return undefined;
     }
   });
 };
