@@ -1297,10 +1297,10 @@ async function startServer() {
   const SERVER_VERSION = "v_1.2.0";
 
   class FirestoreRestSync {
-    private projectId: string;
-    private databaseId: string;
-    private configDatabaseId: string | null = null;
-    private apiKey: string;
+    public projectId: string;
+    public databaseId: string;
+    public configDatabaseId: string | null = null;
+    public apiKey: string;
     private unusableDatabaseIds: Set<string> = new Set();
 
     constructor(config: any) {
@@ -1585,6 +1585,13 @@ async function startServer() {
           console.log(`[MOCK_DB] Saved all database chunks to cloud database '${dbId}' successfully.`);
           this.databaseId = dbId;
           overallSuccess = true;
+          
+          // Populate previouslySyncedKeys with successfully saved keys
+          for (const key of Object.keys(db)) {
+            if (!(key.startsWith("flipbooks") || key.includes("/pages/") || key.includes("page"))) {
+              previouslySyncedKeys.add(key);
+            }
+          }
           break; // Saved successfully to primary candidate database, skip other candidates
         }
       }
@@ -1602,6 +1609,7 @@ async function startServer() {
 
   let firestoreRestSync: FirestoreRestSync | null = null;
   let isCloudHydrated = false;
+  let previouslySyncedKeys = new Set<string>();
 
   try {
     const configPath = path.join(process.cwd(), "firebase-applet-config.json");
@@ -1661,6 +1669,106 @@ async function startServer() {
       console.warn("[MOCK_DB] Disk load warning:", e);
     }
 
+    // Helper to fetch direct collections from Firestore to recover any missing items
+    const importDirectCollectionsFromFirestore = async () => {
+      if (!firestoreRestSync) return;
+      const companies = ["cml", "ramada", "wyndham", "radisson"];
+      const databaseId = firestoreRestSync.getDatabaseId();
+      
+      console.log("[MOCK_DB] Actively scanning live Firestore collections to restore any missing subscribers/guests...");
+      let mutated = false;
+      
+      for (const activeCompanyId of companies) {
+        // 1. Recover newsletter-subscribers
+        try {
+          const subCollection = `newsletter-subscribers-${activeCompanyId}`;
+          const url = `https://firestore.googleapis.com/v1/projects/${firestoreRestSync.projectId}/databases/${databaseId}/documents/${subCollection}?pageSize=100&key=${firestoreRestSync.apiKey}`;
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && Array.isArray(data.documents)) {
+              let restoredCount = 0;
+              for (const docObj of data.documents) {
+                const fields = docObj.fields || {};
+                const id = fields.id?.stringValue || docObj.name.split("/").pop();
+                const dbKey = `newsletter-subscribers-${activeCompanyId}/${id}`;
+                
+                if (!serverMockDbStore[dbKey]) {
+                  serverMockDbStore[dbKey] = {
+                    id,
+                    email: fields.email?.stringValue || "",
+                    source: fields.source?.stringValue || "Newsletter Submission",
+                    createdAt: fields.createdAt?.stringValue || new Date().toISOString(),
+                    convertedToRewards: fields.convertedToRewards?.booleanValue !== false,
+                    companyId: fields.companyId?.stringValue || activeCompanyId
+                  };
+                  previouslySyncedKeys.add(dbKey);
+                  restoredCount++;
+                  mutated = true;
+                }
+              }
+              if (restoredCount > 0) {
+                console.log(`[MOCK_DB_RECOVERY] Restored ${restoredCount} subscribers from Firestore collection '${subCollection}'`);
+              }
+            }
+          }
+        } catch (e) {
+          // silent warning
+        }
+
+        // 2. Recover restaurant-guests
+        try {
+          const guestCollection = `restaurant-guests-${activeCompanyId}`;
+          const url = `https://firestore.googleapis.com/v1/projects/${firestoreRestSync.projectId}/databases/${databaseId}/documents/${guestCollection}?pageSize=100&key=${firestoreRestSync.apiKey}`;
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && Array.isArray(data.documents)) {
+              let restoredCount = 0;
+              for (const docObj of data.documents) {
+                const fields = docObj.fields || {};
+                const id = fields.id?.stringValue || docObj.name.split("/").pop();
+                const dbKey = `restaurant-guests-${activeCompanyId}/${id}`;
+                
+                if (!serverMockDbStore[dbKey]) {
+                  serverMockDbStore[dbKey] = {
+                    id,
+                    fullName: fields.fullName?.stringValue || "",
+                    email: fields.email?.stringValue || "",
+                    phone: fields.phone?.stringValue || "+679",
+                    visitCount: parseInt(fields.visitCount?.integerValue || "1"),
+                    rewardPoints: parseInt(fields.rewardPoints?.integerValue || "100"),
+                    lastVisited: fields.lastVisited?.stringValue || new Date().toISOString(),
+                    createdAt: fields.createdAt?.stringValue || new Date().toISOString(),
+                    signUpSource: fields.signUpSource?.stringValue || "Website Newsletter Form",
+                    property: fields.property?.stringValue || (activeCompanyId === "ramada" ? "Ramada Suites Suva" : activeCompanyId === "wyndham" ? "Wyndham Resort Denarau" : "CML"),
+                    newsletterSubscribed: fields.newsletterSubscribed?.booleanValue !== false,
+                    status: fields.status?.stringValue || "Active",
+                    country: fields.country?.stringValue || "Fiji",
+                    zipCode: fields.zipCode?.stringValue || "",
+                    businessTraveler: fields.businessTraveler?.booleanValue || false
+                  };
+                  previouslySyncedKeys.add(dbKey);
+                  restoredCount++;
+                  mutated = true;
+                }
+              }
+              if (restoredCount > 0) {
+                console.log(`[MOCK_DB_RECOVERY] Restored ${restoredCount} guests from Firestore collection '${guestCollection}'`);
+              }
+            }
+          }
+        } catch (e) {
+          // silent warning
+        }
+      }
+
+      if (mutated) {
+        saveMockDbToDisk();
+        saveMasterCloudDebounced();
+      }
+    };
+
     // 2. Then merge from central cloud Firestore using REST
     if (firestoreRestSync) {
       try {
@@ -1668,6 +1776,13 @@ async function startServer() {
         const cloudState = await firestoreRestSync.getMaster();
         if (cloudState !== null) {
           isCloudHydrated = true;
+          
+          // Clear and populate previouslySyncedKeys
+          previouslySyncedKeys.clear();
+          for (const k of Object.keys(cloudState)) {
+            previouslySyncedKeys.add(k);
+          }
+
           if (Object.keys(cloudState).length > 0) {
             serverMockDbStore = { ...serverMockDbStore, ...cloudState };
             console.log(`[MOCK_DB] Fully synchronized and merged ${Object.keys(cloudState).length} records from central cloud Firestore database.`);
@@ -1675,6 +1790,9 @@ async function startServer() {
           } else {
             console.log("[MOCK_DB] Live central database is new or empty. Keeping local pre-hydrate parameters.");
           }
+
+          // Trigger recovery scan
+          await importDirectCollectionsFromFirestore();
         } else {
           console.warn("[MOCK_DB] Cloud Firestore REST connection returned null (rate-limited or unreachable). Will retry hydration shortly...");
           setTimeout(hydrateStore, 10000); // retry in 10s
@@ -1696,12 +1814,12 @@ async function startServer() {
     if (!firestoreRestSync) return;
     try {
       const cloudState = await firestoreRestSync.getMaster();
-      if (cloudState && Object.keys(cloudState).length > 0) {
+      if (cloudState) {
         isCloudHydrated = true;
         let changedKeys: Record<string, any> = {};
         let deletedKeys: string[] = [];
 
-        // Check for new or modified keys
+        // Check for new or modified keys from the cloud
         for (const [k, newVal] of Object.entries(cloudState)) {
           const oldVal = serverMockDbStore[k];
           if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
@@ -1709,16 +1827,30 @@ async function startServer() {
           }
         }
 
-        // Check for deleted keys
+        // Check for deleted keys: only if they WERE previously synced in the cloud but are now gone
         for (const k of Object.keys(serverMockDbStore)) {
-          if (!(k in cloudState)) {
+          if (!(k in cloudState) && previouslySyncedKeys.has(k)) {
             deletedKeys.push(k);
           }
         }
 
+        // Update previouslySyncedKeys to match the new cloudState
+        previouslySyncedKeys.clear();
+        for (const k of Object.keys(cloudState)) {
+          previouslySyncedKeys.add(k);
+        }
+
         if (Object.keys(changedKeys).length > 0 || deletedKeys.length > 0) {
           console.log(`[REAL_TIME_SYNC] Detected cloud changes: ${Object.keys(changedKeys).length} updated, ${deletedKeys.length} deleted.`);
-          serverMockDbStore = { ...cloudState };
+          
+          // Apply changes incrementally without destroying local-only or unsynced data!
+          for (const [k, val] of Object.entries(changedKeys)) {
+            serverMockDbStore[k] = val;
+          }
+          for (const k of deletedKeys) {
+            delete serverMockDbStore[k];
+          }
+          
           saveMockDbToDisk();
 
           // Broadcast to all active clients
@@ -1773,40 +1905,52 @@ async function startServer() {
         const cloudState = await firestoreRestSync.getMaster();
         if (cloudState !== null) {
           isCloudHydrated = true;
-          if (Object.keys(cloudState).length > 0) {
-            let changedKeys: Record<string, any> = {};
-            let deletedKeys: string[] = [];
+          let changedKeys: Record<string, any> = {};
+          let deletedKeys: string[] = [];
 
-            // Find differences
-            for (const [k, newVal] of Object.entries(cloudState)) {
-              const oldVal = serverMockDbStore[k];
-              if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
-                changedKeys[k] = newVal;
-              }
+          // Find differences
+          for (const [k, newVal] of Object.entries(cloudState)) {
+            const oldVal = serverMockDbStore[k];
+            if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+              changedKeys[k] = newVal;
             }
+          }
 
-            for (const k of Object.keys(serverMockDbStore)) {
-              if (!(k in cloudState)) {
-                deletedKeys.push(k);
-              }
+          // Check for deleted keys: only if they WERE previously synced in the cloud but are now gone
+          for (const k of Object.keys(serverMockDbStore)) {
+            if (!(k in cloudState) && previouslySyncedKeys.has(k)) {
+              deletedKeys.push(k);
             }
+          }
 
-            serverMockDbStore = { ...serverMockDbStore, ...cloudState };
-            saveMockDbToDisk();
+          // Update previouslySyncedKeys to match the new cloudState
+          previouslySyncedKeys.clear();
+          for (const k of Object.keys(cloudState)) {
+            previouslySyncedKeys.add(k);
+          }
 
-            if (Object.keys(changedKeys).length > 0 || deletedKeys.length > 0) {
-              // Broadcast to other clients
-              const broadcastPayload = JSON.stringify({
-                type: "update",
-                updates: changedKeys,
-                deletedKeys: deletedKeys
-              });
-              sseClients.forEach((client) => {
-                try {
-                  client.write(`data: ${broadcastPayload}\n\n`);
-                } catch (e) {}
-              });
-            }
+          // Apply changes incrementally without destroying local-only or unsynced data!
+          for (const [k, val] of Object.entries(changedKeys)) {
+            serverMockDbStore[k] = val;
+          }
+          for (const k of deletedKeys) {
+            delete serverMockDbStore[k];
+          }
+
+          saveMockDbToDisk();
+
+          if (Object.keys(changedKeys).length > 0 || deletedKeys.length > 0) {
+            // Broadcast to other clients
+            const broadcastPayload = JSON.stringify({
+              type: "update",
+              updates: changedKeys,
+              deletedKeys: deletedKeys
+            });
+            sseClients.forEach((client) => {
+              try {
+                client.write(`data: ${broadcastPayload}\n\n`);
+              } catch (e) {}
+            });
           }
         }
       } catch (err) {
@@ -2037,6 +2181,180 @@ async function startServer() {
       res.json({ success: true, subscriber: newSubscriber });
     } catch (err: any) {
       console.error("[Newsletter Ingest Error]:", err.message || err);
+      res.status(500).json({ error: err.message || "Internal server error" });
+    }
+  });
+
+  app.options("/api/rewards-ingest", (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.sendStatus(204);
+  });
+
+  app.post("/api/rewards-ingest", async (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    try {
+      await waitForHydration();
+      
+      const email = (req.body.email || req.body.guest_email || req.body.email_address || "").trim();
+      const rawFullName = (req.body.fullName || req.body.fullname || req.body.guest_name || req.body.name || "").trim();
+      const phone = (req.body.phone || req.body.phone_number || req.body.telephone || "").trim();
+      const companyId = (req.body.companyId || req.body.company_id || "cml").trim().toLowerCase();
+      const source = (req.body.source || req.body.signup_source || "WordPress Member Portal").trim();
+      const initialPoints = parseInt(req.body.points || req.body.rewardPoints || "100", 10) || 100;
+
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ error: "Missing email parameter" });
+      }
+
+      // Email address syntax validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: "Invalid email address format." });
+      }
+
+      const activeCompanyId = companyId || "cml";
+      
+      // Prevent duplicate members under the same property/company
+      const activeCompanyGuestsPrefix = `restaurant-guests-${activeCompanyId}/`;
+      let existingGuest: any = null;
+      for (const [key, val] of Object.entries(serverMockDbStore)) {
+        if (key.startsWith(activeCompanyGuestsPrefix)) {
+          const guest = val as any;
+          if (guest && guest.email && guest.email.toLowerCase() === email.toLowerCase()) {
+            existingGuest = guest;
+            break;
+          }
+        }
+      }
+
+      if (existingGuest) {
+        console.log(`[Rewards Ingest] Member ${email} already exists under ID ${existingGuest.id}. Returning existing profile.`);
+        return res.json({ 
+          success: true, 
+          guest: existingGuest, 
+          message: "Existing rewards member profile retrieved successfully.",
+          isDuplicate: true 
+        });
+      }
+      
+      const guestPrefix = activeCompanyId === "ramada" ? "RP" : activeCompanyId === "wyndham" ? "WG" : "CR";
+      const guestIdNum = Math.floor(10000 + Math.random() * 90000);
+      const guestCardId = `${guestPrefix}${guestIdNum}`;
+      
+      let fullName = rawFullName;
+      if (!fullName) {
+        const emailPrefix = email.split('@')[0];
+        fullName = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+      }
+
+      const dbKey = `restaurant-guests-${activeCompanyId}/${guestCardId}`;
+      
+      const newGuest = {
+        id: guestCardId,
+        fullName: fullName,
+        email: email.toLowerCase(),
+        phone: phone || "+679",
+        visitCount: 1,
+        rewardPoints: initialPoints,
+        lastVisited: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        signUpSource: source,
+        property: activeCompanyId === "ramada" ? "Ramada Suites Suva" : activeCompanyId === "wyndham" ? "Wyndham Resort Denarau" : "CML",
+        status: "Active",
+        newsletterSubscribed: true
+      };
+
+      serverMockDbStore[dbKey] = newGuest;
+      saveMockDbToDisk();
+      
+      if (firestoreRestSync) {
+        saveMasterCloudDebounced();
+      }
+
+      const broadcastPayload = JSON.stringify({
+        type: "update",
+        updates: { [dbKey]: newGuest },
+        deletedKeys: []
+      });
+      sseClients.forEach((client) => {
+        try {
+          client.write(`data: ${broadcastPayload}\n\n`);
+        } catch (e) {
+          // ignore
+        }
+      });
+
+      try {
+        const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+        if (fs.existsSync(configPath)) {
+          const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+          const apiKey = config.apiKey;
+          const projectId = config.projectId;
+          const databaseId = config.firestoreDatabaseId || "(default)";
+          
+          if (apiKey && projectId) {
+            const guestCollection = `restaurant-guests-${activeCompanyId}`;
+            const guestUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/${guestCollection}?documentId=${guestCardId}&key=${apiKey}`;
+
+            const guestFields: Record<string, any> = {
+              id: { stringValue: guestCardId },
+              fullName: { stringValue: fullName },
+              email: { stringValue: email.toLowerCase() },
+              phone: { stringValue: phone || "+679" },
+              visitCount: { integerValue: 1 },
+              rewardPoints: { integerValue: initialPoints },
+              lastVisited: { stringValue: new Date().toISOString() },
+              createdAt: { stringValue: new Date().toISOString() },
+              signUpSource: { stringValue: source },
+              property: { stringValue: activeCompanyId === "ramada" ? "Ramada Suites Suva" : activeCompanyId === "wyndham" ? "Wyndham Resort Denarau" : "CML" },
+              newsletterSubscribed: { booleanValue: true },
+              status: { stringValue: "Active" }
+            };
+
+            await fetch(guestUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ fields: guestFields })
+            }).then(r => {
+              if (r.ok) {
+                console.log(`[Firestore Rewards Ingest] Created guest profile ${guestCardId} for ${fullName}`);
+              } else {
+                r.text().then(t => console.error(`[Firestore Rewards Ingest Error]`, t));
+              }
+            }).catch(e => console.error(`[Firestore Rewards Ingest Fetch Error]`, e));
+
+            const visitId = "vis_" + Math.random().toString(36).substring(2, 11);
+            const visitUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/restaurant-guests-${activeCompanyId}/${guestCardId}/visits?documentId=${visitId}&key=${apiKey}`;
+            
+            const visitFields = {
+              cardId: { stringValue: guestCardId },
+              receiptNumber: { stringValue: "REWARDS-WELCOME-BONUS" },
+              billAmount: { doubleValue: 0.0 },
+              pointsAwarded: { integerValue: initialPoints },
+              type: { stringValue: "visit" },
+              timestamp: { stringValue: new Date().toISOString() }
+            };
+
+            await fetch(visitUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ fields: visitFields })
+            }).catch(e => console.error(`[Firestore Visit Log Error]`, e));
+          }
+        }
+      } catch (firestoreErr: any) {
+        console.error("[Firestore Rewards Ingest Direct Hook Exception]:", firestoreErr.message || firestoreErr);
+      }
+
+      console.log(`[Rewards Ingest] Registered member: ${email} with ID ${guestCardId}`);
+      res.json({ success: true, guest: newGuest });
+    } catch (err: any) {
+      console.error("[Rewards Ingest Error]:", err.message || err);
       res.status(500).json({ error: err.message || "Internal server error" });
     }
   });

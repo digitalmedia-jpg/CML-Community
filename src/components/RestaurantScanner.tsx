@@ -24,7 +24,10 @@ import {
   TrendingUp,
   Check,
   Award as AwardIcon,
-  Edit
+  Edit,
+  Copy,
+  Code,
+  Info
 } from "lucide-react";
 import { 
   db,
@@ -124,6 +127,20 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
   const [showRewardsConfigurator, setShowRewardsConfigurator] = useState(false);
   const [tiersConfig, setTiersConfig] = useState<any[]>([]);
 
+  // Gold Card Styling and Webhook Configurator States
+  const [selectedCardBg, setSelectedCardBg] = useState<string>("official");
+  const [selectedWebhookProperty, setSelectedWebhookProperty] = useState<string>("cml");
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const [activeMobileTab, setActiveMobileTab] = useState<"directory" | "account">("directory");
+  const [activeWebhookTab, setActiveWebhookTab] = useState<"wp" | "html" | "json">("wp");
+  
+  // Webhook Test Sandbox state
+  const [testName, setTestName] = useState("");
+  const [testEmail, setTestEmail] = useState("");
+  const [testPhone, setTestPhone] = useState("");
+  const [testStatus, setTestStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [testMessage, setTestMessage] = useState("");
+
   const fetchTiersConfig = async () => {
     try {
       const colRef = collection(db, `rewards-config-${companyId}-tiers`);
@@ -144,8 +161,19 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
     }
   };
 
-  // Capture pre-filled subscriber conversion info
+  // Capture pre-filled subscriber conversion info & preload critical assets
   useEffect(() => {
+    // Preload digital card backgrounds and transparent logo for instant, flicker-free rendering
+    const preloadAssets = [
+      "https://cml.com.fj/wp-content/uploads/2026/06/bg1.png",
+      "https://cml.com.fj/wp-content/uploads/2026/06/bg2.png",
+      "https://cml.com.fj/wp-content/uploads/2025/12/CML-Logo-White-BG-Landscape-e1780482084995.png"
+    ];
+    preloadAssets.forEach((src) => {
+      const img = new Image();
+      img.src = src;
+    });
+
     if (prefilledRewardsMember) {
       setNewFullName(prefilledRewardsMember.fullName);
       setNewEmail(prefilledRewardsMember.email);
@@ -512,6 +540,49 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
     }
   };
 
+  // Webhook Test Sandbox Ingestion Handler
+  const handleTestWebhookSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!testEmail) {
+      setTestStatus("error");
+      setTestMessage("Please provide at least a test email address.");
+      return;
+    }
+    
+    setTestStatus("loading");
+    setTestMessage("");
+    
+    try {
+      const response = await fetch("/api/rewards-ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: testEmail.trim(),
+          fullName: testName.trim(),
+          phone: testPhone.trim(),
+          companyId: selectedWebhookProperty,
+          source: "Rewards Webhook Sandbox Tester",
+          points: 100
+        })
+      });
+      
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setTestStatus("success");
+        setTestMessage(`Successfully registered! Generated Membership Card ID: ${data.guest?.id || "N/A"}. You can see them instantly in the directory above in real-time.`);
+        setTestEmail("");
+        setTestName("");
+        setTestPhone("");
+      } else {
+        setTestStatus("error");
+        setTestMessage(data.error || "Failed to ingest new rewards member. Please verify required fields.");
+      }
+    } catch (err: any) {
+      setTestStatus("error");
+      setTestMessage(err.message || "Network error. Please try again.");
+    }
+  };
+
   // Log Restaurant Visit & Award Points ($1 spent = 10 pts + 100 base)
   const handleLogVisit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -800,9 +871,43 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
         </div>
       </div>
 
+      {/* MOBILE RESPONSIVE TABS (Visible only on mobile screens) */}
+      <div className="flex lg:hidden w-full bg-slate-100 p-1 border border-slate-200 mb-4 rounded-xl" id="mobile-navigation-tabs">
+        <button 
+          type="button"
+          onClick={() => setActiveMobileTab('directory')}
+          className={`flex-1 flex items-center justify-center gap-2 text-center py-3 text-[10px] font-display font-black uppercase tracking-widest transition-all rounded-lg active:scale-[0.98] min-h-[44px] ${
+            activeMobileTab === 'directory' 
+              ? 'bg-slate-900 text-white shadow-sm' 
+              : 'text-slate-500 hover:text-slate-800 hover:bg-slate-55'
+          }`}
+        >
+          <Users size={14} className={activeMobileTab === 'directory' ? "text-[#C5A02D]" : "text-slate-400"} />
+          <span>1. Members ({sortedGuests.length})</span>
+        </button>
+        <button 
+          type="button"
+          onClick={() => setActiveMobileTab('account')}
+          className={`flex-1 flex items-center justify-center gap-2 text-center py-3 text-[10px] font-display font-black uppercase tracking-widest transition-all rounded-lg active:scale-[0.98] min-h-[44px] relative ${
+            activeMobileTab === 'account' 
+              ? 'bg-slate-900 text-white shadow-sm' 
+              : 'text-slate-500 hover:text-slate-800 hover:bg-slate-55'
+          }`}
+        >
+          <CreditCard size={14} className={activeMobileTab === 'account' ? "text-[#C5A02D]" : "text-slate-400"} />
+          <span>2. Card & Perks</span>
+          {selectedProfile && (
+            <span className="absolute top-1.5 right-3 flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#C5A02D]"></span>
+            </span>
+          )}
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* LEFT SIDE: DIRECT MEMBER REGISTRATION & SEARCHABLE DIRECTORY */}
-        <div className="lg:col-span-5 flex flex-col gap-6">
+        <div className={`lg:col-span-5 flex flex-col gap-6 ${activeMobileTab === 'directory' ? 'block' : 'hidden lg:flex'}`}>
           
           {/* 1. REWARDS MEMBER REGISTRATION FORM */}
           <div className="bg-white border border-slate-150 shadow-sm p-6">
@@ -949,7 +1054,10 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
                   return (
                     <button
                       key={gst.id}
-                      onClick={() => setSelectedProfile(gst)}
+                      onClick={() => {
+                        setSelectedProfile(gst);
+                        setActiveMobileTab("account");
+                      }}
                       className={`w-full text-left p-3.5 transition-all flex items-center justify-between border border-transparent ${
                         isSelected 
                           ? 'bg-[#C5A02D]/10 border-l-4 border-l-[#C5A02D] border-y-slate-100' 
@@ -985,7 +1093,7 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
         </div>
 
         {/* RIGHT SIDE: REWARDS MEMBER DASHBOARD & POINTS PROGRESS BAR */}
-        <div className="lg:col-span-7 flex flex-col gap-6">
+        <div className={`lg:col-span-7 flex flex-col gap-6 ${activeMobileTab === 'account' ? 'block' : 'hidden lg:flex'}`}>
           {selectedProfile ? (
             <div className="bg-white border border-slate-150 shadow-sm p-8 flex flex-col gap-6">
               
@@ -1043,7 +1151,7 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
                 </span>
                 
                 <div 
-                  className="w-full max-w-sm h-56 relative cursor-pointer"
+                  className="w-full max-w-sm aspect-[1.586/1] h-auto relative cursor-pointer select-none"
                   style={{ perspective: "1000px" }}
                   onClick={() => setIsCardBack(!isCardBack)}
                 >
@@ -1051,6 +1159,7 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
                     className="w-full h-full relative"
                     style={{
                       transformStyle: "preserve-3d",
+                      WebkitTransformStyle: "preserve-3d",
                       transition: "transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)",
                       transform: isCardBack ? "rotateY(180deg)" : "rotateY(0deg)"
                     }}
@@ -1058,94 +1167,215 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
                     
                     {/* CARD FRONT */}
                     <div 
-                      className="absolute inset-0 w-full h-full rounded-2xl p-6 bg-gradient-to-br from-[#dfba6b] via-[#bfa054] to-[#876a26] text-white shadow-xl border border-yellow-300/20 flex flex-col justify-between overflow-hidden"
-                      style={{ backfaceVisibility: "hidden" }}
+                      className="absolute inset-0 w-full h-full rounded-2xl p-5 md:p-6 text-white shadow-2xl border border-yellow-500/20 flex flex-col justify-between overflow-hidden bg-slate-900"
+                      style={{ 
+                        backfaceVisibility: "hidden",
+                        WebkitBackfaceVisibility: "hidden",
+                        willChange: "transform",
+                        backgroundImage: `url(${
+                          selectedCardBg === 'official'
+                            ? 'https://cml.com.fj/wp-content/uploads/2026/06/bg1.png'
+                            : selectedCardBg === 'wavy' 
+                            ? '/src/assets/images/regenerated_image_1778546992084.png' 
+                            : selectedCardBg === 'satin' 
+                            ? '/src/assets/images/regenerated_image_1778546396685.png' 
+                            : '/src/assets/images/regenerated_image_1780130822568.jpg'
+                        })`,
+                        backgroundSize: "cover",
+                        backgroundPosition: "center"
+                      }}
                     >
-                      <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/0 pointer-events-none transform -skew-x-12" />
+                      <div className="absolute inset-0 bg-black/5 pointer-events-none" />
                       
-                      <div className="flex justify-between items-start">
-                        <div className="flex flex-col">
-                          <span className="text-[8px] font-black tracking-widest uppercase font-display leading-tight">CML COVE MANAGEMENT LIMITED</span>
-                          <span className="text-[6px] tracking-wider uppercase font-mono opacity-80">FIJI PRIVILEGE CLUB</span>
+                      {/* Top Bar with CML white-landscape Logo and Current Tier */}
+                      <div className="flex justify-between items-start z-10 w-full">
+                        <div className="bg-white/10 backdrop-blur-sm rounded-lg px-2.5 py-1.5 shadow-sm max-w-[155px] flex items-center justify-center border border-white/15">
+                          <img 
+                            src="https://cml.com.fj/wp-content/uploads/2025/12/CML-Logo-White-BG-Landscape-e1780482084995.png" 
+                            alt="CML Logo" 
+                            className="h-6 md:h-7 w-auto object-contain filter drop-shadow-md" 
+                            referrerPolicy="no-referrer"
+                          />
                         </div>
                         <div className="text-right">
-                          <span className="text-[8px] font-serif tracking-widest font-black text-white bg-black/35 px-2 py-0.5 rounded border border-white/15 uppercase">
-                            {activeTier?.currentTier}
+                          <span className="text-[9px] md:text-[10px] font-serif tracking-[0.2em] font-extrabold text-amber-250 uppercase bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded border border-yellow-500/25 select-none" style={{ textShadow: "1px 1px 1.5px rgba(0,0,0,0.6)" }}>
+                            {activeTier?.currentTier || "BLUE"}
                           </span>
                         </div>
                       </div>
 
-                      <div className="my-auto text-center">
-                        <h2 className="text-lg md:text-xl font-serif tracking-[0.25em] font-light text-yellow-50">
-                          PRIVILEGE MEMBER
-                        </h2>
+                      {/* Middle Right "PRIVILEGE CLUB" styled classical serif layout */}
+                      <div className="absolute right-5 md:right-6 top-[37%] text-right select-none pointer-events-none z-10">
+                        <div 
+                          className="text-xs md:text-sm font-serif tracking-[0.25em] font-extrabold text-[#F5E6C4]" 
+                          style={{ textShadow: "1px 1.5px 3px rgba(0,0,0,0.85)" }}
+                        >
+                          PRIVILEGE
+                        </div>
+                        <div 
+                          className="text-lg md:text-xl font-serif tracking-[0.2em] font-black text-white mt-0.5" 
+                          style={{ textShadow: "1.5px 2px 4px rgba(0,0,0,0.9)" }}
+                        >
+                          CLUB
+                        </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 border-t border-white/20 pt-3">
+                      {/* Bottom-Left Cardholder & Membership Meta Grid */}
+                      <div className="mt-auto space-y-1 z-10">
                         <div className="flex flex-col">
-                          <span className="text-[6.5px] uppercase tracking-wider font-mono opacity-75">CARDHOLDER NAME</span>
-                          <span className="text-[11px] font-semibold uppercase truncate font-serif">{selectedProfile.fullName}</span>
-                        </div>
-                        <div className="flex flex-col text-right">
-                          <span className="text-[6.5px] uppercase tracking-wider font-mono opacity-75">MEMBERSHIP NO.</span>
-                          <span className="text-[11px] font-mono font-bold">{selectedProfile.id}</span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[6.5px] uppercase tracking-wider font-mono opacity-75">LOYALTY TIER</span>
-                          <span className="text-[9.5px] font-serif font-bold text-yellow-100">
-                            {activeTier?.currentTier} STATUS
+                          <span className="text-[6px] md:text-[6.5px] font-serif uppercase tracking-[0.15em] text-[#EAD09D] font-semibold" style={{ textShadow: "1px 1px 1px rgba(0,0,0,0.5)" }}>
+                            MEMBER NAME
+                          </span>
+                          <span 
+                            className="text-xs md:text-sm font-serif font-black text-white uppercase tracking-[0.08em] truncate max-w-[240px]"
+                            style={{ textShadow: "1.5px 1.5px 2px rgba(0,0,0,0.8)" }}
+                          >
+                            {selectedProfile.fullName}
                           </span>
                         </div>
-                        <div className="flex flex-col text-right">
-                          <span className="text-[6.5px] uppercase tracking-wider font-mono opacity-75">MEMBER SINCE</span>
-                          <span className="text-[11px] font-mono">
-                            {selectedProfile.createdAt 
-                              ? new Date(selectedProfile.createdAt.seconds ? selectedProfile.createdAt.seconds * 1000 : selectedProfile.createdAt).toLocaleDateString("en-US", { month: "2-digit", year: "numeric" })
-                              : "06/2026"}
-                          </span>
+
+                        {/* Details Grid Row */}
+                        <div className="flex items-center gap-2 md:gap-3 pt-1.5 border-t border-white/25 select-none">
+                          <div className="flex flex-col">
+                            <span className="text-[5px] md:text-[5.5px] font-serif uppercase tracking-wider text-[#EAD09D]" style={{ textShadow: "1px 1px 1px rgba(0,0,0,0.3)" }}>
+                              TIER
+                            </span>
+                            <span className="text-[8px] md:text-[9px] font-serif font-extrabold tracking-wider text-amber-200 uppercase" style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.5)" }}>
+                              {activeTier?.currentTier || "BLUE"}
+                            </span>
+                          </div>
+                          <div className="h-4 md:h-5 w-[1px] bg-[#EAD09D]/30" />
+                          <div className="flex flex-col">
+                            <span className="text-[5px] md:text-[5.5px] font-serif uppercase tracking-wider text-[#EAD09D]" style={{ textShadow: "1px 1px 1px rgba(0,0,0,0.3)" }}>
+                              MEMBER NO.
+                            </span>
+                            <span className="text-[8px] md:text-[9px] font-mono font-bold text-white tracking-wider" style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.5)" }}>
+                              {selectedProfile.id}
+                            </span>
+                          </div>
+                          <div className="h-4 md:h-5 w-[1px] bg-[#EAD09D]/30" />
+                          <div className="flex flex-col">
+                            <span className="text-[5px] md:text-[5.5px] font-serif uppercase tracking-wider text-[#EAD09D]" style={{ textShadow: "1px 1px 1px rgba(0,0,0,0.3)" }}>
+                              MEMBER SINCE
+                            </span>
+                            <span className="text-[8px] md:text-[9px] font-serif font-bold text-white tracking-wider" style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.5)" }}>
+                              {selectedProfile.createdAt 
+                                ? new Date(selectedProfile.createdAt.seconds ? selectedProfile.createdAt.seconds * 1000 : selectedProfile.createdAt).toLocaleDateString("en-US", { month: "2-digit", year: "numeric" })
+                                : "05/2024"}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
 
                     {/* CARD BACK */}
                     <div 
-                      className="absolute inset-0 w-full h-full rounded-2xl p-6 bg-gradient-to-br from-[#876a26] via-[#4d3a0c] to-[#1c1502] text-white shadow-xl border border-yellow-800/20 flex flex-col justify-between overflow-hidden"
-                      style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+                      className="absolute inset-0 w-full h-full rounded-2xl p-5 md:p-6 text-white shadow-2xl border border-yellow-800/30 flex flex-col justify-between overflow-hidden bg-slate-950"
+                      style={{ 
+                        backfaceVisibility: "hidden", 
+                        WebkitBackfaceVisibility: "hidden",
+                        willChange: "transform",
+                        transform: "rotateY(180deg)",
+                        backgroundImage: `linear-gradient(rgba(17, 12, 5, 0.55), rgba(28, 20, 8, 0.75)), url(${
+                          selectedCardBg === 'official'
+                            ? 'https://cml.com.fj/wp-content/uploads/2026/06/bg2.png'
+                            : selectedCardBg === 'wavy' 
+                            ? '/src/assets/images/regenerated_image_1778546992084.png' 
+                            : selectedCardBg === 'satin' 
+                            ? '/src/assets/images/regenerated_image_1778546396685.png' 
+                            : '/src/assets/images/regenerated_image_1780130822568.jpg'
+                        })`,
+                        backgroundSize: "cover",
+                        backgroundPosition: "center"
+                      }}
                     >
-                      <div className="flex justify-between items-center border-b border-white/10 pb-2">
-                        <span className="text-[8px] font-black tracking-widest uppercase text-yellow-300">EXCLUSIVE MEMBERSHIP BENEFITS</span>
-                        <span className="text-[7px] font-mono text-white/55">CML COVE PRIVILEGE</span>
+                      <div className="flex justify-between items-center border-b border-[#dfb55c]/25 pb-1.5">
+                        <span className="text-[7.5px] md:text-[8px] font-serif tracking-widest uppercase font-black text-amber-250">EXCLUSIVE MEMBER PRIVILEGES</span>
+                        <span className="text-[6.5px] md:text-[7px] font-mono text-amber-200/65">CML PRIVILEGE CLUB</span>
                       </div>
 
-                      <ul className="grid grid-cols-2 gap-y-1.5 gap-x-3 text-[8.5px] font-serif text-yellow-100/90 my-auto">
+                      <ul className="grid grid-cols-2 gap-y-1 md:gap-y-1.5 gap-x-2 md:gap-x-3 text-[8px] md:text-[8.5px] font-serif text-yellow-100/90 my-auto">
                         {activeTier && activeTier.benefits ? (
                           activeTier.benefits.split(/,|\n/).map((b: string) => b.trim()).filter(Boolean).map((benefit: string, idx: number) => (
-                            <li key={idx} className="flex items-start gap-1">
+                            <li key={idx} className="flex items-start gap-1 truncate max-w-full">
                               <span className="text-yellow-400 shrink-0">✦</span>
-                              <span>{benefit.replace(/^✦\s*/, "")}</span>
+                              <span className="truncate">{benefit.replace(/^✦\s*/, "")}</span>
                             </li>
                           ))
                         ) : (
                           benefits.map((benefit, idx) => (
-                            <li key={idx} className="flex items-start gap-1">
+                            <li key={idx} className="flex items-start gap-1 truncate max-w-full">
                               <span className="text-yellow-400 shrink-0">✦</span>
-                              <span>{benefit}</span>
+                              <span className="truncate">{benefit}</span>
                             </li>
                           ))
                         )}
                       </ul>
 
-                      <div className="border-t border-white/10 pt-2 flex justify-between items-end">
+                      <div className="border-t border-[#dfb55c]/25 pt-1.5 flex justify-between items-end">
                         <div className="text-left">
-                          <p className="text-[6px] text-white/40 leading-none uppercase">*SUBJECT TO AVAILABILITY. T&CS APPLY.</p>
-                          <p className="text-[8px] font-serif font-bold tracking-wider text-yellow-400 mt-1 uppercase">YOUR ISLAND JOURNEY. OUR PASSION.</p>
+                          <p className="text-[5.5px] md:text-[6px] text-amber-200/40 leading-none uppercase">*SUBJECT TO AVAILABILITY. T&CS APPLY.</p>
+                          <p className="text-[6.5px] md:text-[7px] font-serif font-black tracking-wider text-amber-200 mt-1 uppercase">YOUR ISLAND JOURNEY. OUR PASSION.</p>
                         </div>
                         <div className="text-right">
-                          <span className="text-[8.5px] font-mono font-bold tracking-widest text-white/80">CML.COM.FJ</span>
+                          <span className="text-[7.5px] md:text-[8px] font-mono font-bold tracking-widest text-amber-100/80">CML.COM.FJ</span>
                         </div>
                       </div>
                     </div>
 
+                  </div>
+                </div>
+
+                {/* BACKGROUND ACCENT PICKER */}
+                <div className="flex flex-wrap items-center justify-center gap-3 bg-amber-500/5 border border-amber-500/15 p-2 rounded-xl w-full max-w-sm animate-fade-in">
+                  <span className="text-[9px] font-display font-black uppercase tracking-wider text-[#C5A02D]">
+                    Card Design:
+                  </span>
+                  <div className="flex flex-wrap items-center justify-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCardBg('official')}
+                      className={`text-[8.5px] font-sans font-extrabold px-2 py-1 rounded transition-all ${
+                        selectedCardBg === 'official' 
+                          ? 'bg-[#C5A02D] text-slate-950 shadow-sm font-black ring-1 ring-amber-500/30' 
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Official Gold
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCardBg('wavy')}
+                      className={`text-[8.5px] font-sans font-extrabold px-2 py-1 rounded transition-all ${
+                        selectedCardBg === 'wavy' 
+                          ? 'bg-[#C5A02D] text-slate-950 shadow-sm' 
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Gold Waves
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCardBg('satin')}
+                      className={`text-[8.5px] font-sans font-extrabold px-2 py-1 rounded transition-all ${
+                        selectedCardBg === 'satin' 
+                          ? 'bg-[#C5A02D] text-slate-950 shadow-sm' 
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Satin Gold
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCardBg('silk')}
+                      className={`text-[8.5px] font-sans font-extrabold px-2 py-1 rounded transition-all ${
+                        selectedCardBg === 'silk' 
+                          ? 'bg-[#C5A02D] text-slate-950 shadow-sm' 
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Gold Silk
+                    </button>
                   </div>
                 </div>
 
@@ -1359,6 +1589,347 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
               </p>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* 4. SMART WEBHOOK & MEMBER PORTAL INTEGRATION CENTER */}
+      <div className="mt-12 bg-white border border-slate-200 shadow-sm overflow-hidden" id="rewards-webhook-integration-center">
+        <div className="bg-slate-900 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800">
+          <div>
+            <div className="flex items-center gap-2">
+              <Code className="text-[#C5A02D]" size={18} />
+              <h2 className="text-sm font-display font-black uppercase tracking-wider text-white">
+                Smart Webhook & Member Portal Configurator
+              </h2>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
+              Integrate external WordPress forms, booking engines, or landing pages directly to this CML Rewards Database & Member Portal in real-time.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[9px] font-mono font-bold uppercase text-[#C5A02D] bg-[#C5A02D]/10 px-2.5 py-1">
+              Active Ingest Endpoint: /api/rewards-ingest
+            </span>
+          </div>
+        </div>
+
+        <div className="p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          {/* LEFT SIDE: INSTRUCTIONS & INTEGRATION SNIPPETS */}
+          <div className="lg:col-span-7 flex flex-col gap-6">
+            
+            {/* INGEST ENDPOINT URL CONFIGURE */}
+            <div className="bg-slate-50 border border-slate-150 p-4">
+              <span className="text-[9px] font-display font-black text-slate-400 uppercase tracking-widest block mb-1">
+                Step 1: Your Webhook Target Ingestion URL
+              </span>
+              <p className="text-[10px] text-slate-550 leading-relaxed mb-3">
+                Select your target property to get the specialized endpoint or keep standard brand routing. Send a standard HTTP POST request to this URL.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                <div className="flex flex-col gap-1 shrink-0">
+                  <select 
+                    value={selectedWebhookProperty} 
+                    onChange={(e) => setSelectedWebhookProperty(e.target.value)}
+                    className="border border-slate-200 px-3 py-2 text-xs rounded-none bg-white outline-none focus:border-[#C5A02D] cursor-pointer"
+                  >
+                    <option value="cml">CML Privilege Program</option>
+                    <option value="ramada">Ramada Suites Suva</option>
+                    <option value="wyndham">Wyndham Resort Denarau</option>
+                  </select>
+                </div>
+                
+                <div className="flex-1 flex border border-slate-200 bg-white">
+                  <input 
+                    type="text" 
+                    readOnly 
+                    value={`${typeof window !== 'undefined' ? window.location.origin : 'https://cml-rewards-portal.run.app'}/api/rewards-ingest`}
+                    className="flex-1 px-3 py-2 text-[10.5px] font-mono text-slate-800 bg-transparent outline-none border-none select-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = `${typeof window !== 'undefined' ? window.location.origin : 'https://cml-rewards-portal.run.app'}/api/rewards-ingest`;
+                      navigator.clipboard.writeText(url);
+                      setCopiedWebhook(true);
+                      setTimeout(() => setCopiedWebhook(false), 2000);
+                    }}
+                    className="px-4 bg-slate-900 text-[#C5A02D] hover:bg-[#C5A02D] hover:text-slate-950 transition-colors text-[10px] uppercase font-display font-bold border-l border-slate-200 cursor-pointer flex items-center gap-1.5"
+                  >
+                    {copiedWebhook ? <Check size={11} /> : <Copy size={11} />}
+                    <span>{copiedWebhook ? "Copied!" : "Copy"}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* TABBED CODE SNIPPET VIEWER */}
+            <div className="border border-slate-200 flex flex-col">
+              <div className="bg-slate-100 flex border-b border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setActiveWebhookTab('wp')}
+                  className={`flex-1 text-center py-2.5 text-[9px] font-display font-black uppercase tracking-widest border-r border-slate-200 transition-all ${
+                    activeWebhookTab === 'wp' ? 'bg-white text-slate-900 border-b-2 border-b-[#C5A02D]' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                  }`}
+                >
+                  WordPress Hook
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveWebhookTab('html')}
+                  className={`flex-1 text-center py-2.5 text-[9px] font-display font-black uppercase tracking-widest border-r border-slate-200 transition-all ${
+                    activeWebhookTab === 'html' ? 'bg-white text-slate-900 border-b-2 border-b-[#C5A02D]' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                  }`}
+                >
+                  Vanilla HTML Form
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveWebhookTab('json')}
+                  className={`flex-1 text-center py-2.5 text-[9px] font-display font-black uppercase tracking-widest transition-all ${
+                    activeWebhookTab === 'json' ? 'bg-white text-slate-900 border-b-2 border-b-[#C5A02D]' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                  }`}
+                >
+                  JSON Schema
+                </button>
+              </div>
+
+              <div className="p-4 bg-slate-950 text-slate-200 font-mono text-[10.5px] leading-relaxed max-h-[340px] overflow-y-auto scrollbar-thin">
+                {activeWebhookTab === 'wp' && (
+                  <div>
+                    <span className="text-[9px] font-sans font-bold uppercase tracking-wider text-[#C5A02D] block mb-2">// Place this script inside your WordPress theme's functions.php file:</span>
+                    <pre className="text-emerald-400 whitespace-pre-wrap font-mono">
+{`add_action('wpcf7_mail_sent', 'sync_wordpress_to_cml_rewards');
+
+function sync_wordpress_to_cml_rewards($contact_form) {
+    $submission = WPCF7_Submission::get_instance();
+    if ($submission) {
+        $data = $submission->get_posted_data();
+        
+        // Extract fields matching your Contact Form 7 identifiers
+        $email = isset($data['your-email']) ? sanitize_email($data['your-email']) : '';
+        $name  = isset($data['your-name']) ? sanitize_text_field($data['your-name']) : '';
+        $phone = isset($data['your-phone']) ? sanitize_text_field($data['your-phone']) : '';
+
+        if (!empty($email)) {
+            $payload = array(
+                'email'     => $email,
+                'fullName'  => $name,
+                'phone'     => $phone,
+                'companyId' => '${selectedWebhookProperty}',
+                'source'    => 'WordPress Contact Form',
+                'points'    => 100 // 100 welcome registration points!
+            );
+
+            wp_remote_post('${typeof window !== 'undefined' ? window.location.origin : 'https://cml-rewards-portal.run.app'}/api/rewards-ingest', array(
+                'method'    => 'POST',
+                'headers'   => array('Content-Type' => 'application/json'),
+                'body'      => json_encode($payload),
+                'data_format' => 'body'
+            ));
+        }
+    }
+}`}
+                    </pre>
+                  </div>
+                )}
+
+                {activeWebhookTab === 'html' && (
+                  <div>
+                    <span className="text-[9px] font-sans font-bold uppercase tracking-wider text-[#C5A02D] block mb-2">// Copy-paste this lightweight, fully functional signup form into any custom HTML block:</span>
+                    <pre className="text-amber-300 whitespace-pre-wrap font-mono">
+{`<form id="cml-rewards-form" style="font-family: sans-serif; max-width: 320px; padding: 20px; border: 1px solid #ccc;">
+  <h3 style="margin-top:0;">Register for Privilege Club</h3>
+  
+  <label style="display:block; margin: 8px 0 4px;">Full Name</label>
+  <input type="text" id="guest_name" required style="width:100%; padding:6px; box-sizing:border-box;" />
+
+  <label style="display:block; margin: 8px 0 4px;">Email Address</label>
+  <input type="email" id="guest_email" required style="width:100%; padding:6px; box-sizing:border-box;" />
+
+  <label style="display:block; margin: 8px 0 4px;">Phone Number</label>
+  <input type="text" id="guest_phone" style="width:100%; padding:6px; box-sizing:border-box;" />
+
+  <button type="submit" style="margin-top:12px; width:100%; padding:8px; background:#C5A02D; color:#000; border:none; font-weight:bold; cursor:pointer;">
+    Join Privilege Program
+  </button>
+  
+  <p id="form-msg" style="margin-top:10px; font-size:12px; font-weight:bold;"></p>
+</form>
+
+<script>
+document.getElementById('cml-rewards-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msgEl = document.getElementById('form-msg');
+  msgEl.innerText = "Registering your card...";
+  
+  try {
+    const res = await fetch('${typeof window !== 'undefined' ? window.location.origin : 'https://cml-rewards-portal.run.app'}/api/rewards-ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: document.getElementById('guest_email').value,
+        fullName: document.getElementById('guest_name').value,
+        phone: document.getElementById('guest_phone').value,
+        companyId: '${selectedWebhookProperty}',
+        source: window.location.hostname || 'External Website'
+      })
+    });
+    
+    const data = await res.json();
+    if (res.ok && data.success) {
+      msgEl.style.color = "green";
+      msgEl.innerText = "Thank you for subscribing! Your Card ID is " + data.guest.id + ". Welcome to our Privilege Program!";
+      document.getElementById('cml-rewards-form').reset();
+    } else {
+      msgEl.style.color = "red";
+      msgEl.innerText = data.error || "Ingestion failed.";
+    }
+  } catch (err) {
+    msgEl.style.color = "red";
+    msgEl.innerText = "Network connection error.";
+  }
+});
+</script>`}
+                    </pre>
+                  </div>
+                )}
+
+                {activeWebhookTab === 'json' && (
+                  <div>
+                    <span className="text-[9px] font-sans font-bold uppercase tracking-wider text-[#C5A02D] block mb-2">// Payload Specifications (HTTP POST Request Body):</span>
+                    <pre className="text-cyan-300 whitespace-pre-wrap font-mono">
+{`{
+  "email": "charles@example.com",       // (Required) String. Unique identifier
+  "fullName": "Charles Fiji",           // (Optional) String. Primary cardholder display name
+  "phone": "+679 999 8888",             // (Optional) String. Contact phone number
+  "companyId": "${selectedWebhookProperty}",            // (Optional) String. Target database: "cml" | "ramada" | "wyndham"
+  "source": "WordPress Form Submitter", // (Optional) String. Tracks enrollment marketing channels
+  "points": 100                         // (Optional) Integer. Initial welcome loyalty points deposit
+}`}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            </div>
+
+          </div>
+
+          {/* RIGHT SIDE: INSTANT WEBHOOK SANDBOX TEST TOOL */}
+          <div className="lg:col-span-5 flex flex-col gap-4 bg-slate-50 border border-slate-200 p-6">
+            <div className="flex items-center gap-1.5 border-b border-slate-200 pb-3">
+              <Database size={15} className="text-[#C5A02D]" />
+              <h3 className="text-xs font-display font-black uppercase tracking-wider text-slate-900">
+                Instant Webhook Sandbox Tester
+              </h3>
+            </div>
+            
+            <p className="text-[10px] text-slate-550 leading-normal">
+              Test your webhook setup directly inside this sandbox. Type any test details below, click ingest, and watch them immediately load into your cloud database and display above!
+            </p>
+
+            <form onSubmit={handleTestWebhookSubmit} className="flex flex-col gap-4 mt-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] uppercase tracking-wider font-display font-black text-slate-450">
+                  Brand Destination
+                </label>
+                <div className="text-xs font-mono font-bold uppercase text-slate-700 bg-white border border-slate-200 px-3 py-2">
+                  {selectedWebhookProperty === 'ramada' ? "Ramada Suites Suva" : selectedWebhookProperty === 'wyndham' ? "Wyndham Resort Denarau" : "CML Privilege Program"}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] uppercase tracking-wider font-display font-black text-slate-450">
+                  Test Full Name
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-slate-400">
+                    <User size={12} />
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="E.g. Charles Fiji"
+                    value={testName}
+                    onChange={e => setTestName(e.target.value)}
+                    className="w-full bg-white border border-slate-200 pl-8 pr-3 py-2 text-xs rounded-none outline-none focus:border-[#C5A02D] transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] uppercase tracking-wider font-display font-black text-slate-450">
+                  Test Email Address
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-slate-400">
+                    <Mail size={12} />
+                  </span>
+                  <input
+                    type="email"
+                    required
+                    placeholder="E.g. charles@fiji.com"
+                    value={testEmail}
+                    onChange={e => setTestEmail(e.target.value)}
+                    className="w-full bg-white border border-slate-200 pl-8 pr-3 py-2 text-xs rounded-none outline-none focus:border-[#C5A02D] transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] uppercase tracking-wider font-display font-black text-slate-450">
+                  Test Phone Number
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-slate-400">
+                    <Phone size={12} />
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="E.g. +679 123 4567"
+                    value={testPhone}
+                    onChange={e => setTestPhone(e.target.value)}
+                    className="w-full bg-white border border-slate-200 pl-8 pr-3 py-2 text-xs rounded-none outline-none focus:border-[#C5A02D] transition-colors font-mono"
+                  />
+                </div>
+              </div>
+
+              {testStatus === 'error' && (
+                <div className="p-3 bg-red-50 border border-red-250 text-red-750 text-[10px] flex items-start gap-2 animate-fade-in leading-relaxed">
+                  <AlertCircle size={13} className="shrink-0 mt-0.5" />
+                  <span>{testMessage}</span>
+                </div>
+              )}
+
+              {testStatus === 'success' && (
+                <div className="p-3 bg-green-50 border border-green-250 text-green-800 text-[10px] flex items-start gap-2 animate-fade-in leading-relaxed">
+                  <CheckCircle size={13} className="shrink-0 mt-0.5" />
+                  <span>{testMessage}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={testStatus === 'loading'}
+                className="w-full bg-slate-900 hover:bg-[#C5A02D] text-white hover:text-slate-950 py-3 text-[10px] uppercase font-display font-black tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm"
+              >
+                {testStatus === 'loading' ? (
+                  <>
+                    <RefreshCw className="animate-spin" size={12} />
+                    <span>Ingesting Test Member...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={12} className="text-amber-400" />
+                    <span>Test Webhook Ingest Now!</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+
         </div>
       </div>
 
