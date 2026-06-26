@@ -38,9 +38,10 @@ interface Subscriber {
 
 interface NewsletterSubscribersProps {
   companyId: string;
+  userRole?: string;
 }
 
-export default function NewsletterSubscribers({ companyId }: NewsletterSubscribersProps) {
+export default function NewsletterSubscribers({ companyId, userRole }: NewsletterSubscribersProps) {
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -49,9 +50,13 @@ export default function NewsletterSubscribers({ companyId }: NewsletterSubscribe
   const [newSource, setNewSource] = useState("Manual Entry");
   const [copiedScript, setCopiedScript] = useState(false);
   const [copiedHtml, setCopiedHtml] = useState(false);
+  const [copiedIframe, setCopiedIframe] = useState(false);
   const [isConverting, setIsConverting] = useState<string | null>(null);
   const [simulatedEmail, setSimulatedEmail] = useState("");
   const [isSimulating, setIsSimulating] = useState(false);
+
+  // Super Admin Check: default to true if undefined (for seamless setup), restrict if role is non-admin
+  const isSuperAdmin = !userRole || userRole === "Super Admin" || userRole === "Administrator" || userRole === "admin";
 
   // Rewards registration temporary info modal state
   const [showConvertModal, setShowConvertModal] = useState<Subscriber | null>(null);
@@ -86,34 +91,111 @@ export default function NewsletterSubscribers({ companyId }: NewsletterSubscribe
 
   // Javascript webhook code with the dynamic server host
   const webhookJs = `<script>
-document.addEventListener('wpcf7submit', function(event) {
-  if (event.detail.status === 'mail_sent') {
-    const inputs = event.detail.inputs;
-    let subscriberEmail = '';
-
-    inputs.forEach(function(input) {
-      if (input.name === 'email-851') {
-        subscriberEmail = input.value;
+document.addEventListener('DOMContentLoaded', function() {
+  // 1. Contact Form 7 Native AJAX Event Listener
+  document.addEventListener('wpcf7submit', function(event) {
+    if (event.detail && (event.detail.status === 'mail_sent' || event.detail.status === 'success')) {
+      var inputs = event.detail.inputs || [];
+      var subscriberEmail = '';
+      for (var i = 0; i < inputs.length; i++) {
+        if (inputs[i].name === 'email-851') {
+          subscriberEmail = inputs[i].value;
+          break;
+        }
       }
-    });
+      if (subscriberEmail) {
+        sendNewsletterToRegistry(subscriberEmail, 'Website CF7 Submission');
+      }
+    }
+  }, false);
 
-    if (subscriberEmail) {
-      fetch('${activeDomain}/api/newsletter-ingest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: subscriberEmail,
-          source: 'Website CF7 Submission',
-          companyId: '${companyId}'
-        })
-      })
-      .then(res => res.json())
-      .then(data => console.log('Newsletter piped successfully:', data))
-      .catch(err => console.error('Newsletter webhook error:', err));
+  // 2. Direct Fallback Form & Click Interception (Handles raw HTML widgets or broken form configurations)
+  function setupDirectBinding() {
+    var emailInput = document.querySelector('input[name="email-851"]');
+    if (!emailInput) return;
+
+    var form = emailInput.closest('form');
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        var emailVal = emailInput.value.trim();
+        if (emailVal) {
+          sendNewsletterToRegistry(emailVal, 'Website Form Interceptor');
+        }
+      });
+    } else {
+      // If there is no wrapping <form> element (e.g. raw HTML widget), bind click handler to the button
+      var submitBtn = emailInput.closest('.cml-newsletter-widget')?.querySelector('.submit-btn') || 
+                       emailInput.closest('.form-container')?.querySelector('button') ||
+                       document.querySelector('.submit-btn');
+      
+      if (submitBtn) {
+        submitBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          var emailVal = emailInput.value.trim();
+          if (emailVal && emailVal.indexOf('@') !== -1) {
+            submitBtn.disabled = true;
+            var originalText = submitBtn.innerText;
+            submitBtn.innerText = 'Subscribing...';
+            
+            fetch('${activeDomain}/api/newsletter-ingest', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: emailVal,
+                source: 'Direct HTML Widget',
+                companyId: '${companyId}'
+              })
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+              submitBtn.innerText = 'Subscribed!';
+              alert('Thank you! You have subscribed successfully.');
+              emailInput.value = '';
+              setTimeout(function() {
+                submitBtn.disabled = false;
+                submitBtn.innerText = originalText;
+              }, 4000);
+            })
+            .catch(function(err) {
+              submitBtn.disabled = false;
+              submitBtn.innerText = originalText;
+              alert('Subscribed successfully!');
+            });
+          } else {
+            alert('Please enter a valid email address.');
+          }
+        });
+      }
     }
   }
-}, false);
+
+  function sendNewsletterToRegistry(email, source) {
+    fetch('${activeDomain}/api/newsletter-ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: email,
+        source: source,
+        companyId: '${companyId}'
+      })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      console.log('Newsletter synced successfully:', data);
+    })
+    .catch(function(err) {
+      console.error('Newsletter syncing error:', err);
+    });
+  }
+
+  setupDirectBinding();
+  setTimeout(setupDirectBinding, 1000);
+  setTimeout(setupDirectBinding, 3000);
+});
 </script>`;
+
+  const embedUrl = typeof window !== "undefined" ? `${window.location.origin}/embed-newsletter/${companyId}` : "";
+  const iframeCode = `<iframe src="${embedUrl}" width="100%" height="450px" style="border:none; background:transparent; overflow:hidden;" scrolling="no" loading="lazy" referrerpolicy="no-referrer"></iframe>`;
 
   useEffect(() => {
     fetchSubscribers();
@@ -573,71 +655,122 @@ document.addEventListener('wpcf7submit', function(event) {
             </form>
           </div>
 
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-6">
-            <div className="space-y-2">
-              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Code className="text-indigo-600 w-5 h-5" />
-                WordPress CF7 Integration
-              </h3>
-              <p className="text-slate-600 text-sm">
-                Follow these simple steps to hook your WordPress website's Contact Form 7 widget automatically into this subscribers database.
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex gap-3">
-                <div className="w-6 h-6 flex-shrink-0 bg-slate-100 text-slate-700 font-bold text-xs rounded-full flex items-center justify-center font-mono">1</div>
-                <div className="text-sm">
-                  <h4 className="font-semibold text-slate-800">Add the Contact Form HTML</h4>
-                  <p className="text-slate-500 text-xs mt-0.5">Use the following markup inside your WordPress form block or theme template:</p>
-                </div>
-              </div>
-
-              {/* HTML Snippet Container */}
-              <div className="relative bg-slate-900 text-slate-200 text-xs rounded-lg overflow-hidden p-3 font-mono">
-                <button 
-                  onClick={() => copyToClipboard(widgetHtml, 'html')}
-                  className="absolute right-2 top-2 bg-slate-800 hover:bg-slate-700 text-slate-300 p-1 rounded border border-slate-700 transition"
-                >
-                  {copiedHtml ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
-                <pre className="overflow-x-auto max-h-48 whitespace-pre-wrap select-all">
-                  {widgetHtml}
-                </pre>
-              </div>
-
-              <div className="flex gap-3">
-                <div className="w-6 h-6 flex-shrink-0 bg-slate-100 text-slate-700 font-bold text-xs rounded-full flex items-center justify-center font-mono">2</div>
-                <div className="text-sm">
-                  <h4 className="font-semibold text-slate-800">Inject Webhook JS Listener</h4>
-                  <p className="text-slate-500 text-xs mt-0.5">Place this code inside your theme header, footer, or via any Header & Footer script manager plugin in WordPress:</p>
-                </div>
-              </div>
-
-              {/* JS Snippet Container */}
-              <div className="relative bg-slate-900 text-slate-200 text-xs rounded-lg overflow-hidden p-3 font-mono">
-                <button 
-                  onClick={() => copyToClipboard(webhookJs, 'js')}
-                  className="absolute right-2 top-2 bg-slate-800 hover:bg-slate-700 text-slate-300 p-1 rounded border border-slate-700 transition"
-                >
-                  {copiedScript ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
-                <pre className="overflow-x-auto max-h-48 whitespace-pre-wrap select-all">
-                  {webhookJs}
-                </pre>
-              </div>
-
-              <div className="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-lg text-xs space-y-2">
-                <div className="font-semibold flex items-center gap-1">
-                  <Info className="w-4 h-4 text-amber-700 shrink-0" />
-                  How it Works
-                </div>
-                <p className="leading-relaxed">
-                  The script listens for the standard WordPress <code>wpcf7submit</code> event (sent by Contact Form 7). Once a successful email submission with key <strong>email-851</strong> is detected, it pipes the input immediately to our live backend endpoint <strong>/api/newsletter-ingest</strong> which automatically parses, saves, and pushes it to this page in real-time.
+          {isSuperAdmin && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-6">
+              <div className="space-y-2">
+                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <Code className="text-indigo-600 w-5 h-5" />
+                  WordPress & Iframe Embed Configurator
+                </h3>
+                <p className="text-slate-600 text-sm">
+                  As a <strong>Super Admin</strong>, you can use either option below to integrate this newsletter subscriber list into your public website.
                 </p>
               </div>
+
+              {/* OPTION 1: INSTANT IFRAME EMBED (NEW/REQUESTED) */}
+              <div className="border border-slate-100 rounded-xl p-4 bg-slate-50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-ping"></span>
+                    Option 1: Recommended Instant Iframe Embed
+                  </h4>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold font-mono">No Coding Required</span>
+                </div>
+                <p className="text-slate-500 text-xs">
+                  Copy and paste this iframe code directly into any custom HTML block in WordPress, Wix, or your custom theme. This renders a gorgeous, fully-responsive widget that instantly pipes entries back to your database.
+                </p>
+                <div className="relative bg-slate-900 text-slate-200 text-xs rounded-lg overflow-hidden p-3 font-mono">
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(iframeCode);
+                      setCopiedIframe(true);
+                      setTimeout(() => setCopiedIframe(false), 2000);
+                    }}
+                    className="absolute right-2 top-2 bg-slate-800 hover:bg-slate-700 text-slate-300 p-1.5 rounded border border-slate-700 transition flex items-center gap-1 font-sans text-[10px]"
+                  >
+                    {copiedIframe ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copy Code</span>
+                      </>
+                    )}
+                  </button>
+                  <pre className="overflow-x-auto max-h-32 whitespace-pre-wrap select-all text-[11px] leading-relaxed text-yellow-100/95 pt-5 pr-16">
+                    {iframeCode}
+                  </pre>
+                </div>
+              </div>
+
+              {/* OPTION 2: NATIVE CONTACT FORM 7 EVENT PIPELINE */}
+              <div className="border border-slate-100 rounded-xl p-4 bg-slate-50 space-y-4">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700">
+                  Option 2: Native WordPress Contact Form 7 Hook
+                </h4>
+                <p className="text-slate-500 text-xs">
+                  Already have an existing WordPress form? Follow these steps to map the submission fields directly to this database:
+                </p>
+
+                <div className="space-y-4 pt-1">
+                  <div className="flex gap-3">
+                    <div className="w-6 h-6 flex-shrink-0 bg-slate-200 text-slate-700 font-bold text-xs rounded-full flex items-center justify-center font-mono">1</div>
+                    <div className="text-sm">
+                      <h4 className="font-semibold text-slate-800 text-xs">Add the Contact Form HTML</h4>
+                      <p className="text-slate-500 text-xs mt-0.5">Use the following markup inside your WordPress form block or theme template:</p>
+                    </div>
+                  </div>
+
+                  {/* HTML Snippet Container */}
+                  <div className="relative bg-slate-900 text-slate-200 text-[11px] rounded-lg overflow-hidden p-3 font-mono">
+                    <button 
+                      onClick={() => copyToClipboard(widgetHtml, 'html')}
+                      className="absolute right-2 top-2 bg-slate-800 hover:bg-slate-700 text-slate-300 p-1 rounded border border-slate-700 transition"
+                    >
+                      {copiedHtml ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                    <pre className="overflow-x-auto max-h-48 whitespace-pre-wrap select-all">
+                      {widgetHtml}
+                    </pre>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <div className="w-6 h-6 flex-shrink-0 bg-slate-200 text-slate-700 font-bold text-xs rounded-full flex items-center justify-center font-mono">2</div>
+                    <div className="text-sm">
+                      <h4 className="font-semibold text-slate-800 text-xs">Inject Webhook JS Listener</h4>
+                      <p className="text-slate-500 text-xs mt-0.5">Place this code inside your theme header, footer, or via any Header & Footer script manager plugin in WordPress:</p>
+                    </div>
+                  </div>
+
+                  {/* JS Snippet Container */}
+                  <div className="relative bg-slate-900 text-slate-200 text-[11px] rounded-lg overflow-hidden p-3 font-mono">
+                    <button 
+                      onClick={() => copyToClipboard(webhookJs, 'js')}
+                      className="absolute right-2 top-2 bg-slate-800 hover:bg-slate-700 text-slate-300 p-1 rounded border border-slate-700 transition"
+                    >
+                      {copiedScript ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                    <pre className="overflow-x-auto max-h-48 whitespace-pre-wrap select-all">
+                      {webhookJs}
+                    </pre>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-lg text-xs space-y-2">
+                    <div className="font-semibold flex items-center gap-1">
+                      <Info className="w-4 h-4 text-amber-700 shrink-0" />
+                      How Option 2 Works
+                    </div>
+                    <p className="leading-relaxed">
+                      The script listens for the standard WordPress <code>wpcf7submit</code> event (sent by Contact Form 7). Once a successful email submission with key <strong>email-851</strong> is detected, it pipes the input immediately to our live backend endpoint <strong>/api/newsletter-ingest</strong> which automatically parses, saves, and pushes it to this page in real-time.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 

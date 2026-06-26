@@ -36,6 +36,7 @@ import {
   serverTimestamp 
 } from "../lib/firebase";
 import { motion, AnimatePresence } from "motion/react";
+import RewardsConfigurator from "./RewardsConfigurator";
 
 interface GuestProfile {
   id: string; // The Card ID (e.g. RP00001)
@@ -108,7 +109,30 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
   const [newBenefitText, setNewBenefitText] = useState("");
   const [isSavingBenefits, setIsSavingBenefits] = useState(false);
 
-  // Load benefits on change of companyId
+  const [showRewardsConfigurator, setShowRewardsConfigurator] = useState(false);
+  const [tiersConfig, setTiersConfig] = useState<any[]>([]);
+
+  const fetchTiersConfig = async () => {
+    try {
+      const colRef = collection(db, `rewards-config-${companyId}-tiers`);
+      const snapshot = await getDocs(colRef);
+      const list: any[] = [];
+      snapshot.docs.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+      if (list.length > 0) {
+        list.sort((a, b) => a.minPoints - b.minPoints);
+        setTiersConfig(list);
+      } else {
+        setTiersConfig([]);
+      }
+    } catch (e) {
+      console.error("Error loading tiers config:", e);
+      setTiersConfig([]);
+    }
+  };
+
+  // Load benefits and tiers on change of companyId
   useEffect(() => {
     const fetchBenefits = async () => {
       try {
@@ -131,6 +155,7 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
       }
     };
     fetchBenefits();
+    fetchTiersConfig();
   }, [companyId]);
 
   const handleOpenBenefitsModal = () => {
@@ -561,6 +586,44 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
 
   // Tier calculation helper
   const getTierDetails = (points: number) => {
+    if (tiersConfig && tiersConfig.length > 0) {
+      // Find the active tier: the tier with the highest minPoints that is <= points
+      let activeIndex = -1;
+      for (let i = 0; i < tiersConfig.length; i++) {
+        if (points >= tiersConfig[i].minPoints) {
+          activeIndex = i;
+        }
+      }
+
+      if (activeIndex !== -1) {
+        const active = tiersConfig[activeIndex];
+        const next = activeIndex < tiersConfig.length - 1 ? tiersConfig[activeIndex + 1] : null;
+        
+        let progressPercent = 100;
+        let pointsToNext = null;
+        let nextTierPoints = null;
+
+        if (next) {
+          nextTierPoints = next.minPoints;
+          const range = next.minPoints - active.minPoints;
+          progressPercent = range > 0 ? Math.min(100, Math.max(0, ((points - active.minPoints) / range) * 100)) : 100;
+          pointsToNext = next.minPoints - points;
+        }
+
+        return {
+          currentTier: active.name,
+          nextTier: next ? next.name : null,
+          nextTierPoints,
+          progressPercent,
+          pointsToNext,
+          color: active.color || "from-blue-400 to-indigo-500",
+          bg: active.bg || "bg-blue-500",
+          badgeColor: active.badgeColor || "bg-blue-100 text-blue-950 border-blue-200",
+          benefits: active.benefits || ""
+        };
+      }
+    }
+
     if (points >= 40000) {
       return {
         currentTier: "DIAMOND",
@@ -570,7 +633,8 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
         pointsToNext: null,
         color: "from-cyan-550 to-blue-600",
         bg: "bg-cyan-500",
-        badgeColor: "bg-cyan-100 text-cyan-950 border-cyan-200"
+        badgeColor: "bg-cyan-100 text-cyan-950 border-cyan-200",
+        benefits: "✦ VIP Butler Service, ✦ Executive Lounge Access, ✦ Presidential Airport Transfer"
       };
     } else if (points >= 15000) {
       const nextTierPoints = 40000;
@@ -583,7 +647,8 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
         pointsToNext: nextTierPoints - points,
         color: "from-purple-500 to-pink-600",
         bg: "bg-purple-600",
-        badgeColor: "bg-purple-100 text-purple-950 border-purple-200"
+        badgeColor: "bg-purple-100 text-purple-950 border-purple-200",
+        benefits: "✦ Free Resort Day Pass, ✦ Suite Upgrades, ✦ Early Check-in & Late Checkout"
       };
     } else if (points >= 5000) {
       const nextTierPoints = 15000;
@@ -596,7 +661,8 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
         pointsToNext: nextTierPoints - points,
         color: "from-amber-400 to-[#C5A02D]",
         bg: "bg-[#C5A02D]",
-        badgeColor: "bg-amber-100 text-amber-950 border-amber-200"
+        badgeColor: "bg-amber-100 text-amber-950 border-amber-200",
+        benefits: "✦ Standard Room Upgrades, ✦ Priority Reservations, ✦ 15% Spa Discount"
       };
     } else if (points >= 1500) {
       const nextTierPoints = 5000;
@@ -609,7 +675,8 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
         pointsToNext: nextTierPoints - points,
         color: "from-slate-400 to-slate-600",
         bg: "bg-slate-500",
-        badgeColor: "bg-slate-100 text-slate-950 border-slate-200"
+        badgeColor: "bg-slate-100 text-slate-950 border-slate-200",
+        benefits: "✦ Priority Dining Reservations, ✦ Elite Member Rates, ✦ Welcome Drink Upgrade"
       };
     } else {
       const nextTierPoints = 1500;
@@ -622,7 +689,8 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
         pointsToNext: nextTierPoints - points,
         color: "from-blue-400 to-indigo-500",
         bg: "bg-blue-500",
-        badgeColor: "bg-blue-100 text-blue-950 border-blue-200"
+        badgeColor: "bg-blue-100 text-blue-950 border-blue-200",
+        benefits: "✦ $1 Spent = 10 Reward Points, ✦ Welcome Drinks on Arrival, ✦ Elite Member Rates"
       };
     }
   };
@@ -963,9 +1031,21 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
                       </div>
 
                       <ul className="grid grid-cols-2 gap-y-1.5 gap-x-3 text-[8.5px] font-serif text-yellow-100/90 my-auto">
-                        {benefits.map((benefit, idx) => (
-                          <li key={idx} className="flex items-center gap-1">✦ {benefit}</li>
-                        ))}
+                        {activeTier && activeTier.benefits ? (
+                          activeTier.benefits.split(/,|\n/).map((b: string) => b.trim()).filter(Boolean).map((benefit: string, idx: number) => (
+                            <li key={idx} className="flex items-start gap-1">
+                              <span className="text-yellow-400 shrink-0">✦</span>
+                              <span>{benefit.replace(/^✦\s*/, "")}</span>
+                            </li>
+                          ))
+                        ) : (
+                          benefits.map((benefit, idx) => (
+                            <li key={idx} className="flex items-start gap-1">
+                              <span className="text-yellow-400 shrink-0">✦</span>
+                              <span>{benefit}</span>
+                            </li>
+                          ))
+                        )}
                       </ul>
 
                       <div className="border-t border-white/10 pt-2 flex justify-between items-end">
@@ -990,10 +1070,16 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
                     🔄 Flip Card Details
                   </button>
                   <button
+                    onClick={() => setShowRewardsConfigurator(true)}
+                    className="text-[9px] uppercase tracking-wider bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold px-3 py-1 mt-1 transition-all border border-indigo-200 flex items-center gap-1 shadow-sm"
+                  >
+                    ⚙️ Rewards Configurator
+                  </button>
+                  <button
                     onClick={handleOpenBenefitsModal}
                     className="text-[9px] uppercase tracking-wider bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold px-3 py-1 mt-1 transition-all border border-slate-300 flex items-center gap-1"
                   >
-                    ⚙️ Edit Benefits List
+                    📝 Edit Benefits List
                   </button>
                 </div>
               </div>
@@ -1424,6 +1510,45 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
                   className="px-5 py-2 bg-[#C5A02D] hover:bg-[#b08f23] text-slate-950 font-black rounded-lg text-xs uppercase font-display tracking-wider transition shadow-sm"
                 >
                   {isSavingBenefits ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showRewardsConfigurator && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh] my-8 animate-fade-in">
+              <div className="bg-slate-950 p-4 text-white flex justify-between items-center shrink-0">
+                <h3 className="font-semibold flex items-center gap-2 text-sm uppercase tracking-wider font-display text-amber-400">
+                  <AwardIcon size={16} className="text-amber-400 font-bold" />
+                  Rewards & Loyalty Tier Configurator Panel
+                </h3>
+                <button 
+                  onClick={() => setShowRewardsConfigurator(false)}
+                  className="text-slate-400 hover:text-white transition text-sm font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="p-6 overflow-y-auto flex-1 bg-slate-50">
+                <RewardsConfigurator 
+                  companyId={companyId} 
+                  onClose={() => setShowRewardsConfigurator(false)} 
+                  onConfigUpdated={() => {
+                    fetchTiersConfig();
+                  }}
+                />
+              </div>
+
+              <div className="p-4 bg-slate-100 border-t border-slate-200 flex justify-end shrink-0">
+                <button 
+                  type="button" 
+                  onClick={() => setShowRewardsConfigurator(false)}
+                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-[#C5A02D] font-extrabold rounded-lg text-xs uppercase tracking-wider transition shadow-sm"
+                >
+                  Close Configurator
                 </button>
               </div>
             </div>

@@ -140,6 +140,7 @@ import { GoogleAIPlanMan } from "./components/GoogleAIPlanMan";
 import { SopBatchUploadModal } from "./components/SopBatchUploadModal";
 import { ImageLightboxModal } from "./components/ImageLightboxModal";
 import { AdminDashboard } from "./components/AdminDashboard";
+import { PublicNewsletterWidget } from "./components/PublicNewsletterWidget";
 
 // Mock data for the chart
 const chartData = [
@@ -2712,6 +2713,19 @@ export default function App() {
         cardId={downloadCardId} 
         companyId={downloadCardCompany} 
       />
+    );
+  }
+
+  // Support clean path routing (/embed-newsletter/COMPANY_ID) or search query ?embed=newsletter
+  let embedNewsletterCompany = publicUrlParams.get("company") || "cml";
+  let isEmbedNewsletter = publicUrlParams.get("embed") === "newsletter" || pathParts[0] === "embed-newsletter" || pathParts[0] === "newsletter-widget";
+  if ((pathParts[0] === "embed-newsletter" || pathParts[0] === "newsletter-widget") && pathParts.length >= 2) {
+    embedNewsletterCompany = pathParts[1];
+  }
+
+  if (isEmbedNewsletter) {
+    return (
+      <PublicNewsletterWidget companyId={embedNewsletterCompany} />
     );
   }
 
@@ -8204,7 +8218,7 @@ export default function App() {
                 }}
               />
             ) : activeTab === "newsletter-subscribers" ? (
-              <NewsletterSubscribers companyId={selectedCompany || 'cml'} />
+              <NewsletterSubscribers companyId={selectedCompany || 'cml'} userRole={userRole || undefined} />
             ) : (activeTab === "restaurant-scanner" || activeTab.startsWith("dining-")) ? (
               <RestaurantScanner 
                 companyId={selectedCompany || 'cml'} 
