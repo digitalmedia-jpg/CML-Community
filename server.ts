@@ -1874,7 +1874,19 @@ async function startServer() {
     res.json({ success: true, db: serverMockDbStore });
   });
 
+  app.options("/api/newsletter-ingest", (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.sendStatus(204);
+  });
+
   app.post("/api/newsletter-ingest", async (req, res) => {
+    // Add CORS headers to allow submissions from any external website domain
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
     try {
       await waitForHydration();
       const { email, source, companyId, firstName, lastName, phone, phoneType, country, zipCode, businessTraveler, marketingOptIn, joinRewards } = req.body;
@@ -1891,7 +1903,7 @@ async function startServer() {
         email: email.trim().toLowerCase(),
         source: source || "Newsletter Submission",
         createdAt: new Date().toISOString(),
-        convertedToRewards: !!(firstName || lastName || joinRewards),
+        convertedToRewards: true, // Auto-enrolled by default!
         companyId: activeCompanyId
       };
 
@@ -1935,7 +1947,7 @@ async function startServer() {
               email: { stringValue: email.trim().toLowerCase() },
               source: { stringValue: source || "Newsletter Submission" },
               createdAt: { stringValue: new Date().toISOString() },
-              convertedToRewards: { booleanValue: !!(firstName || lastName || joinRewards) },
+              convertedToRewards: { booleanValue: true },
               companyId: { stringValue: activeCompanyId }
             };
 
@@ -1951,44 +1963,70 @@ async function startServer() {
               }
             }).catch(e => console.error(`[Firestore Ingest Direct Fetch Error]`, e));
 
-            // 2. If it's a rewards enrollment (or contains first/last name), sync to restaurant-guests
-            if (firstName || lastName || joinRewards) {
-              const guestPrefix = activeCompanyId === "ramada" ? "RP" : activeCompanyId === "wyndham" ? "WG" : "CR";
-              const guestIdNum = Math.floor(10000 + Math.random() * 90000);
-              const guestCardId = `${guestPrefix}${guestIdNum}`;
-              const guestCollection = `restaurant-guests-${activeCompanyId}`;
-              const guestUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/${guestCollection}?documentId=${guestCardId}&key=${apiKey}`;
+            // 2. Automatically sync to restaurant-guests (Rewards Members)
+            const guestPrefix = activeCompanyId === "ramada" ? "RP" : activeCompanyId === "wyndham" ? "WG" : "CR";
+            const guestIdNum = Math.floor(10000 + Math.random() * 90000);
+            const guestCardId = `${guestPrefix}${guestIdNum}`;
+            const guestCollection = `restaurant-guests-${activeCompanyId}`;
+            const guestUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/${guestCollection}?documentId=${guestCardId}&key=${apiKey}`;
 
-              let fullName = `${firstName || ""} ${lastName || ""}`.trim();
-              if (!fullName) {
-                // generate a friendly display name from email
-                const emailPrefix = email.split('@')[0];
-                fullName = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
-              }
-
-              const guestFields: Record<string, any> = {
-                id: { stringValue: guestCardId },
-                fullName: { stringValue: fullName },
-                email: { stringValue: email.trim().toLowerCase() },
-                phone: { stringValue: phone || "+679" },
-                visitCount: { integerValue: 0 },
-                rewardPoints: { integerValue: 100 }, // 100 welcome/rewards registration points
-                lastVisited: { nullValue: null },
-                createdAt: { stringValue: new Date().toISOString() }
-              };
-
-              await fetch(guestUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ fields: guestFields })
-              }).then(r => {
-                if (r.ok) {
-                  console.log(`[Firestore Ingest Direct] Created guest profile ${guestCardId} for ${fullName}`);
-                } else {
-                  r.text().then(t => console.error(`[Firestore Ingest Direct Guest Error]`, t));
-                }
-              }).catch(e => console.error(`[Firestore Ingest Direct Guest Fetch Error]`, e));
+            let fullName = `${firstName || ""} ${lastName || ""}`.trim();
+            if (!fullName) {
+              // generate a friendly display name from email
+              const emailPrefix = email.split('@')[0];
+              fullName = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
             }
+
+            const guestFields: Record<string, any> = {
+              id: { stringValue: guestCardId },
+              fullName: { stringValue: fullName },
+              email: { stringValue: email.trim().toLowerCase() },
+              phone: { stringValue: phone || "+679" },
+              visitCount: { integerValue: 1 },
+              rewardPoints: { integerValue: 100 }, // 100 welcome/rewards registration points
+              lastVisited: { stringValue: new Date().toISOString() },
+              createdAt: { stringValue: new Date().toISOString() },
+              
+              // Extra Member Details (stored on the profile info, not displayed on the card ID)
+              signUpSource: { stringValue: source || "Website Newsletter Form" },
+              property: { stringValue: activeCompanyId === "ramada" ? "Ramada Suites Suva" : activeCompanyId === "wyndham" ? "Wyndham Resort Denarau" : "CML" },
+              newsletterSubscribed: { booleanValue: true },
+              status: { stringValue: "Active" },
+              country: { stringValue: country || "Fiji" },
+              zipCode: { stringValue: zipCode || "" },
+              businessTraveler: { booleanValue: !!businessTraveler }
+            };
+
+            await fetch(guestUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ fields: guestFields })
+            }).then(r => {
+              if (r.ok) {
+                console.log(`[Firestore Ingest Direct] Created guest profile ${guestCardId} for ${fullName}`);
+              } else {
+                r.text().then(t => console.error(`[Firestore Ingest Direct Guest Error]`, t));
+              }
+            }).catch(e => console.error(`[Firestore Ingest Direct Guest Fetch Error]`, e));
+
+            // 3. Create a matching initial visit/bonus deposit log under subcollection `visits` in Firestore
+            const visitId = "vis_" + Math.random().toString(36).substring(2, 11);
+            const visitUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/restaurant-guests-${activeCompanyId}/${guestCardId}/visits?documentId=${visitId}&key=${apiKey}`;
+            
+            const visitFields = {
+              cardId: { stringValue: guestCardId },
+              receiptNumber: { stringValue: "NEWSLETTER-WELCOME" },
+              billAmount: { doubleValue: 0.0 },
+              pointsAwarded: { integerValue: 100 },
+              type: { stringValue: "visit" },
+              timestamp: { stringValue: new Date().toISOString() }
+            };
+
+            await fetch(visitUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ fields: visitFields })
+            }).catch(e => console.error(`[Firestore Visit Log Error]`, e));
           }
         }
       } catch (firestoreErr: any) {
