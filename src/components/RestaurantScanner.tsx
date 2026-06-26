@@ -1182,18 +1182,20 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
                             : '/src/assets/images/regenerated_image_1780130822568.jpg'
                         })`,
                         backgroundSize: "cover",
-                        backgroundPosition: "center"
+                        backgroundPosition: "center center",
+                        backgroundRepeat: "no-repeat"
                       }}
                     >
                       <div className="absolute inset-0 bg-black/5 pointer-events-none" />
                       
                       {/* Top Bar with CML white-landscape Logo and Current Tier */}
                       <div className="flex justify-between items-start z-10 w-full">
-                        <div className="bg-white/10 backdrop-blur-sm rounded-lg px-2.5 py-1.5 shadow-sm max-w-[155px] flex items-center justify-center border border-white/15">
+                        <div className="bg-white/90 backdrop-blur-sm rounded-lg px-2.5 py-1.5 shadow-sm max-w-[155px] flex items-center justify-center border border-white/20">
                           <img 
                             src="https://cml.com.fj/wp-content/uploads/2025/12/CML-Logo-White-BG-Landscape-e1780482084995.png" 
                             alt="CML Logo" 
                             className="h-6 md:h-7 w-auto object-contain filter drop-shadow-md" 
+                            style={{ mixBlendMode: "multiply" }}
                             referrerPolicy="no-referrer"
                           />
                         </div>
@@ -1286,7 +1288,8 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
                             : '/src/assets/images/regenerated_image_1780130822568.jpg'
                         })`,
                         backgroundSize: "cover",
-                        backgroundPosition: "center"
+                        backgroundPosition: "center center",
+                        backgroundRepeat: "no-repeat"
                       }}
                     >
                       <div className="flex justify-between items-center border-b border-[#dfb55c]/25 pb-1.5">

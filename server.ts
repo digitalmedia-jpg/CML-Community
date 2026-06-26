@@ -1984,6 +1984,17 @@ async function startServer() {
 
   if (firestoreRestSync) {
     setInterval(pollCloudDatabase, 45000); // 45 second polling interval to be kind on API quotas
+    // Continuously and automatically run the Deep Cloud Recovery Scan every 20 seconds to keep memory store fully synchronized with live collections!
+    setInterval(async () => {
+      if (triggerActiveRecoveryScan) {
+        try {
+          console.log("[BACKGROUND_RECOVERY] Running automated periodic background recovery scan to recover newly registered profiles, complaints, and lost-and-found items...");
+          await triggerActiveRecoveryScan();
+        } catch (e) {
+          console.error("[BACKGROUND_RECOVERY] Background recovery scan failed:", e);
+        }
+      }
+    }, 20000);
   }
 
   // Server-Sent Events (SSE) Stream Endpoint

@@ -3492,17 +3492,8 @@ export default function App() {
               disabled={isRefreshingSession}
               className="bg-white text-red-600 px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm hover:bg-slate-100 transition-colors flex items-center gap-1 cursor-pointer"
             >
-              {isRefreshingSession ? (
-                <>
-                  <RefreshCw size={12} className="animate-spin" />
-                  Refreshing...
-                </>
-              ) : (
-                <>
-                  <RefreshCw size={12} />
-                  Refresh Session
-                </>
-              )}
+              <RefreshCw size={12} className={cn("shrink-0", isRefreshingSession && "animate-smooth-spin")} />
+              <span>{isRefreshingSession ? "Refreshing..." : "Refresh Session"}</span>
             </button>
           </div>
         )}
@@ -3638,13 +3629,16 @@ export default function App() {
                   <button
                     onClick={handleRefreshSession}
                     disabled={isRefreshingSession}
-                    className={cn(
-                      "p-1 rounded-full ml-1 hover:bg-slate-100 text-slate-500 hover:text-gold transition-colors cursor-pointer",
-                      isRefreshingSession && "animate-spin text-gold"
-                    )}
+                    className="p-1 rounded-full ml-1 hover:bg-slate-100 text-slate-500 hover:text-gold transition-colors cursor-pointer flex items-center justify-center"
                     title="Refresh Firebase Session Handshake (1-Click)"
                   >
-                    <RefreshCw size={11} />
+                    <RefreshCw 
+                      size={11} 
+                      className={cn(
+                        "transition-all duration-1000",
+                        isRefreshingSession ? "animate-smooth-spin text-gold" : ""
+                      )} 
+                    />
                   </button>
                 </div>
               )}
