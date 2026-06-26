@@ -1089,6 +1089,61 @@ export default function App() {
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  const [sessionExpirationTime, setSessionExpirationTime] = useState<number | null>(null);
+  const [sessionRemainingSeconds, setSessionRemainingSeconds] = useState<number | null>(null);
+  const [isRefreshingSession, setIsRefreshingSession] = useState(false);
+
+  const checkTokenExpiration = async (userToCheck = currentUser) => {
+    if (!userToCheck) {
+      setSessionExpirationTime(null);
+      setSessionRemainingSeconds(null);
+      return;
+    }
+    try {
+      const tokenResult = await userToCheck.getIdTokenResult();
+      const expirationMs = new Date(tokenResult.expirationTime).getTime();
+      setSessionExpirationTime(expirationMs);
+      const remaining = Math.max(0, Math.floor((expirationMs - Date.now()) / 1000));
+      setSessionRemainingSeconds(remaining);
+    } catch (error) {
+      console.error("Error fetching session token details:", error);
+    }
+  };
+
+  const handleRefreshSession = async () => {
+    if (!currentUser) return;
+    setIsRefreshingSession(true);
+    try {
+      toastService.info("Renewing secure Firebase session handshake...", "Session Persistence");
+      await currentUser.getIdToken(true);
+      await checkTokenExpiration(currentUser);
+      toastService.success("Firebase secure session token successfully renewed!", "Session Persistence");
+    } catch (error: any) {
+      console.error("Failed to refresh session:", error);
+      toastService.error("Handshake refresh failed. Please sign out and sign in again.", "Session Error");
+    } finally {
+      setIsRefreshingSession(false);
+    }
+  };
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (sessionExpirationTime) {
+        const remaining = Math.max(0, Math.floor((sessionExpirationTime - Date.now()) / 1000));
+        setSessionRemainingSeconds(remaining);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [sessionExpirationTime]);
+
+  // Automatic background token refresh when session has less than 2 minutes (120 seconds) remaining
+  useEffect(() => {
+    if (currentUser && sessionRemainingSeconds !== null && sessionRemainingSeconds < 120 && sessionRemainingSeconds > 0 && !isRefreshingSession) {
+      console.log(`[Auto Session Refresh] Session has less than 2 minutes remaining (${sessionRemainingSeconds}s). Triggering silent background token refresh.`);
+      handleRefreshSession();
+    }
+  }, [sessionRemainingSeconds, currentUser, isRefreshingSession]);
   
   // Custom user session detection: restricts property-specific logins and unlocks corporate HQ permissions
   const userEmail = currentUser?.email?.toLowerCase() || "";
@@ -2370,6 +2425,7 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
+        checkTokenExpiration(user);
         // Ensure strict dynamic segregation and total privacy as requested:
         const email = user.email?.toLowerCase() || "";
         const isRamada = email.includes("ramada");
@@ -2536,6 +2592,8 @@ export default function App() {
         }
       } else {
         setUserRole(null);
+        setSessionExpirationTime(null);
+        setSessionRemainingSeconds(null);
         if (unsubRole) {
           unsubRole();
           unsubRole = null;
@@ -3417,6 +3475,37 @@ export default function App() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {currentUser && sessionRemainingSeconds !== null && sessionRemainingSeconds < 600 && (
+          <div className="bg-red-600 text-white px-4 py-2.5 flex items-center justify-between text-xs font-sans tracking-wide font-medium shadow-sm z-50 animate-pulse shrink-0">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={16} className="shrink-0 text-white" />
+              <span>
+                Your secure Firebase authentication session is nearing expiration (expires in{" "}
+                <strong>
+                  {Math.floor(sessionRemainingSeconds / 60)}m {sessionRemainingSeconds % 60}s
+                </strong>
+                ). Please refresh your session now to avoid service interruption.
+              </span>
+            </div>
+            <button
+              onClick={handleRefreshSession}
+              disabled={isRefreshingSession}
+              className="bg-white text-red-600 px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm hover:bg-slate-100 transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              {isRefreshingSession ? (
+                <>
+                  <RefreshCw size={12} className="animate-spin" />
+                  Refreshing...
+                </>
+              ) : (
+                <>
+                  <RefreshCw size={12} />
+                  Refresh Session
+                </>
+              )}
+            </button>
+          </div>
+        )}
         {/* Header */}
         <header className="h-16 md:h-20 bg-white border-b border-gold/10 flex items-center justify-between px-3 md:px-10 shrink-0">
           <div className="flex items-center gap-1 md:gap-6 flex-1 min-w-0">
@@ -3510,6 +3599,55 @@ export default function App() {
                 complaintsError={complaintsError}
                 onForceResync={() => setRefreshKey(prev => prev + 1)}
               />
+
+              {/* Session Persistence Heartbeat Status Indicator */}
+              {currentUser && (
+                <div 
+                  id="session-persistence-indicator"
+                  className={cn(
+                    "hidden md:flex items-center gap-2 px-2.5 py-1.5 border rounded-sm shadow-sm text-[10px] font-sans font-medium tracking-wide transition-all",
+                    sessionRemainingSeconds !== null && sessionRemainingSeconds < 600
+                      ? "bg-red-50 border-red-300 text-red-700 animate-pulse"
+                      : "bg-white border-slate-200 text-slate-700 hover:border-gold"
+                  )}
+                >
+                  <div className="relative flex h-2 w-2">
+                    {sessionRemainingSeconds !== null && sessionRemainingSeconds < 600 ? (
+                      <>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </>
+                    )}
+                  </div>
+                  <div className="flex flex-col text-left leading-tight">
+                    <span className="text-[8px] uppercase font-bold tracking-widest text-slate-500">
+                      Session Persistence
+                    </span>
+                    <span className="font-mono text-[10px]">
+                      {sessionRemainingSeconds !== null 
+                        ? `${Math.floor(sessionRemainingSeconds / 60)}m ${sessionRemainingSeconds % 60}s left`
+                        : "Active handshake"
+                      }
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleRefreshSession}
+                    disabled={isRefreshingSession}
+                    className={cn(
+                      "p-1 rounded-full ml-1 hover:bg-slate-100 text-slate-500 hover:text-gold transition-colors cursor-pointer",
+                      isRefreshingSession && "animate-spin text-gold"
+                    )}
+                    title="Refresh Firebase Session Handshake (1-Click)"
+                  >
+                    <RefreshCw size={11} />
+                  </button>
+                </div>
+              )}
 
 
 

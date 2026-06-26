@@ -25,7 +25,9 @@ import {
   Filter,
   Info,
   Sparkles,
-  Edit
+  Edit,
+  RefreshCw,
+  Database
 } from "lucide-react";
 
 interface Subscriber {
@@ -76,6 +78,30 @@ export default function NewsletterSubscribers({ companyId, userRole, onConvertSu
   useEffect(() => {
     setSelectedWebhookProperty(companyId);
   }, [companyId]);
+
+  const [isScanningCloud, setIsScanningCloud] = useState(false);
+
+  const handleDeepLedgerRecoveryScan = async () => {
+    setIsScanningCloud(true);
+    try {
+      const res = await fetch("/api/trigger-recovery-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Deep Ledger Scan Completed! All raw historical subscribers and restaurant guests have been fully recovered from the Firestore cloud collections.");
+        fetchSubscribers();
+      } else {
+        alert("Deep Scan Warning: " + (data.message || "Could not complete recovery scan. Please try again."));
+      }
+    } catch (err: any) {
+      console.error("Deep scan failed:", err);
+      alert("Failed to initiate deep scan. Check connection.");
+    } finally {
+      setIsScanningCloud(false);
+    }
+  };
 
   // Construct the smart universal script dynamically!
   const getUniversalWebhookScript = () => {
@@ -447,6 +473,16 @@ export default function NewsletterSubscribers({ companyId, userRole, onConvertSu
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <button 
+            id="btn-deep-recovery-scan"
+            onClick={handleDeepLedgerRecoveryScan}
+            disabled={isScanningCloud}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2.5 rounded-lg text-sm transition border border-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Perform deep dynamic scan on all raw Google Firestore collections to recover any historical data from 2 days ago"
+          >
+            <RefreshCw className={`w-4 h-4 ${isScanningCloud ? "animate-spin" : ""}`} />
+            {isScanningCloud ? "Recovering Ledger..." : "Force Ledger Recovery Scan"}
+          </button>
           <button 
             id="btn-export-csv"
             onClick={exportToCSV}

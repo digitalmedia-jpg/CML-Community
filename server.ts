@@ -1610,6 +1610,7 @@ async function startServer() {
   let firestoreRestSync: FirestoreRestSync | null = null;
   let isCloudHydrated = false;
   let previouslySyncedKeys = new Set<string>();
+  let triggerActiveRecoveryScan: (() => Promise<void>) | null = null;
 
   try {
     const configPath = path.join(process.cwd(), "firebase-applet-config.json");
@@ -1675,7 +1676,7 @@ async function startServer() {
       const companies = ["cml", "ramada", "wyndham", "radisson"];
       const databaseId = firestoreRestSync.getDatabaseId();
       
-      console.log("[MOCK_DB] Actively scanning live Firestore collections to restore any missing subscribers/guests...");
+      console.log("[MOCK_DB] Actively scanning live Firestore collections to restore any missing subscribers/guests/complaints...");
       let mutated = false;
       
       for (const activeCompanyId of companies) {
@@ -1693,22 +1694,25 @@ async function startServer() {
                 const id = fields.id?.stringValue || docObj.name.split("/").pop();
                 const dbKey = `newsletter-subscribers-${activeCompanyId}/${id}`;
                 
-                if (!serverMockDbStore[dbKey]) {
-                  serverMockDbStore[dbKey] = {
-                    id,
-                    email: fields.email?.stringValue || "",
-                    source: fields.source?.stringValue || "Newsletter Submission",
-                    createdAt: fields.createdAt?.stringValue || new Date().toISOString(),
-                    convertedToRewards: fields.convertedToRewards?.booleanValue !== false,
-                    companyId: fields.companyId?.stringValue || activeCompanyId
-                  };
+                const originalData = serverMockDbStore[dbKey];
+                const newData = {
+                  id,
+                  email: fields.email?.stringValue || "",
+                  source: fields.source?.stringValue || "Newsletter Submission",
+                  createdAt: fields.createdAt?.stringValue || new Date().toISOString(),
+                  convertedToRewards: fields.convertedToRewards?.booleanValue === true,
+                  companyId: fields.companyId?.stringValue || activeCompanyId
+                };
+
+                if (JSON.stringify(originalData) !== JSON.stringify(newData)) {
+                  serverMockDbStore[dbKey] = newData;
                   previouslySyncedKeys.add(dbKey);
                   restoredCount++;
                   mutated = true;
                 }
               }
               if (restoredCount > 0) {
-                console.log(`[MOCK_DB_RECOVERY] Restored ${restoredCount} subscribers from Firestore collection '${subCollection}'`);
+                console.log(`[MOCK_DB_RECOVERY] Restored/Updated ${restoredCount} subscribers from Firestore collection '${subCollection}'`);
               }
             }
           }
@@ -1730,31 +1734,135 @@ async function startServer() {
                 const id = fields.id?.stringValue || docObj.name.split("/").pop();
                 const dbKey = `restaurant-guests-${activeCompanyId}/${id}`;
                 
-                if (!serverMockDbStore[dbKey]) {
-                  serverMockDbStore[dbKey] = {
-                    id,
-                    fullName: fields.fullName?.stringValue || "",
-                    email: fields.email?.stringValue || "",
-                    phone: fields.phone?.stringValue || "+679",
-                    visitCount: parseInt(fields.visitCount?.integerValue || "1"),
-                    rewardPoints: parseInt(fields.rewardPoints?.integerValue || "100"),
-                    lastVisited: fields.lastVisited?.stringValue || new Date().toISOString(),
-                    createdAt: fields.createdAt?.stringValue || new Date().toISOString(),
-                    signUpSource: fields.signUpSource?.stringValue || "Website Newsletter Form",
-                    property: fields.property?.stringValue || (activeCompanyId === "ramada" ? "Ramada Suites Suva" : activeCompanyId === "wyndham" ? "Wyndham Resort Denarau" : "CML"),
-                    newsletterSubscribed: fields.newsletterSubscribed?.booleanValue !== false,
-                    status: fields.status?.stringValue || "Active",
-                    country: fields.country?.stringValue || "Fiji",
-                    zipCode: fields.zipCode?.stringValue || "",
-                    businessTraveler: fields.businessTraveler?.booleanValue || false
-                  };
+                const originalData = serverMockDbStore[dbKey];
+                const newData = {
+                  id,
+                  fullName: fields.fullName?.stringValue || "",
+                  email: fields.email?.stringValue || "",
+                  phone: fields.phone?.stringValue || "+679",
+                  visitCount: parseInt(fields.visitCount?.integerValue || "1"),
+                  rewardPoints: parseInt(fields.rewardPoints?.integerValue || "100"),
+                  lastVisited: fields.lastVisited?.stringValue || new Date().toISOString(),
+                  createdAt: fields.createdAt?.stringValue || new Date().toISOString(),
+                  signUpSource: fields.signUpSource?.stringValue || "Website Newsletter Form",
+                  property: fields.property?.stringValue || (activeCompanyId === "ramada" ? "Ramada Suites Suva" : activeCompanyId === "wyndham" ? "Wyndham Resort Denarau" : "CML"),
+                  newsletterSubscribed: fields.newsletterSubscribed?.booleanValue !== false,
+                  status: fields.status?.stringValue || "Active",
+                  country: fields.country?.stringValue || "Fiji",
+                  zipCode: fields.zipCode?.stringValue || "",
+                  businessTraveler: fields.businessTraveler?.booleanValue || false
+                };
+
+                if (JSON.stringify(originalData) !== JSON.stringify(newData)) {
+                  serverMockDbStore[dbKey] = newData;
                   previouslySyncedKeys.add(dbKey);
                   restoredCount++;
                   mutated = true;
                 }
               }
               if (restoredCount > 0) {
-                console.log(`[MOCK_DB_RECOVERY] Restored ${restoredCount} guests from Firestore collection '${guestCollection}'`);
+                console.log(`[MOCK_DB_RECOVERY] Restored/Updated ${restoredCount} guests from Firestore collection '${guestCollection}'`);
+              }
+            }
+          }
+        } catch (e) {
+          // silent warning
+        }
+
+        // 3. Recover guest-complaints (Customer Recovery)
+        try {
+          const complaintCollection = `complaints-${activeCompanyId}`;
+          const url = `https://firestore.googleapis.com/v1/projects/${firestoreRestSync.projectId}/databases/${databaseId}/documents/${complaintCollection}?pageSize=100&key=${firestoreRestSync.apiKey}`;
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && Array.isArray(data.documents)) {
+              let restoredCount = 0;
+              for (const docObj of data.documents) {
+                const fields = docObj.fields || {};
+                const id = fields.id?.stringValue || docObj.name.split("/").pop();
+                const dbKey = `complaints-${activeCompanyId}/${id}`;
+                
+                // Parse updates array
+                const updatesVal = fields.updates?.arrayValue?.values || [];
+                const parsedUpdates = updatesVal.map((v: any) => {
+                  const m = v.mapValue?.fields || {};
+                  return {
+                    message: m.message?.stringValue || "",
+                    timestamp: m.timestamp?.stringValue || new Date().toISOString(),
+                    user: m.user?.stringValue || "Staff member"
+                  };
+                });
+
+                const originalData = serverMockDbStore[dbKey];
+                const newData = {
+                  id,
+                  guestName: fields.guestName?.stringValue || "",
+                  roomNumber: fields.roomNumber?.stringValue || "",
+                  type: fields.type?.stringValue || "Service Issue",
+                  priority: fields.priority?.stringValue || "Medium",
+                  description: fields.description?.stringValue || "",
+                  status: fields.status?.stringValue || "Pending",
+                  authorId: fields.authorId?.stringValue || "",
+                  authorName: fields.authorName?.stringValue || "",
+                  propertyId: fields.propertyId?.stringValue || activeCompanyId,
+                  createdAt: fields.createdAt?.stringValue || new Date().toISOString(),
+                  updates: parsedUpdates
+                };
+
+                if (JSON.stringify(originalData) !== JSON.stringify(newData)) {
+                  serverMockDbStore[dbKey] = newData;
+                  previouslySyncedKeys.add(dbKey);
+                  restoredCount++;
+                  mutated = true;
+                }
+              }
+              if (restoredCount > 0) {
+                console.log(`[MOCK_DB_RECOVERY] Restored/Updated ${restoredCount} complaints from Firestore collection '${complaintCollection}'`);
+              }
+            }
+          }
+        } catch (e) {
+          // silent warning
+        }
+
+        // 4. Recover lost-and-found
+        try {
+          const lfCollection = `lost-and-found-${activeCompanyId}`;
+          const url = `https://firestore.googleapis.com/v1/projects/${firestoreRestSync.projectId}/databases/${databaseId}/documents/${lfCollection}?pageSize=100&key=${firestoreRestSync.apiKey}`;
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && Array.isArray(data.documents)) {
+              let restoredCount = 0;
+              for (const docObj of data.documents) {
+                const fields = docObj.fields || {};
+                const id = fields.id?.stringValue || docObj.name.split("/").pop();
+                const dbKey = `lost-and-found-${activeCompanyId}/${id}`;
+                
+                const originalData = serverMockDbStore[dbKey];
+                const newData = {
+                  id,
+                  itemName: fields.itemName?.stringValue || "",
+                  description: fields.description?.stringValue || "",
+                  locationFound: fields.locationFound?.stringValue || "",
+                  staffName: fields.staffName?.stringValue || "",
+                  staffPosition: fields.staffPosition?.stringValue || "",
+                  imageUrl: fields.imageUrl?.stringValue || "",
+                  status: fields.status?.stringValue || "Found",
+                  propertyId: fields.propertyId?.stringValue || activeCompanyId,
+                  createdAt: fields.createdAt?.stringValue || new Date().toISOString()
+                };
+
+                if (JSON.stringify(originalData) !== JSON.stringify(newData)) {
+                  serverMockDbStore[dbKey] = newData;
+                  previouslySyncedKeys.add(dbKey);
+                  restoredCount++;
+                  mutated = true;
+                }
+              }
+              if (restoredCount > 0) {
+                console.log(`[MOCK_DB_RECOVERY] Restored/Updated ${restoredCount} lost items from Firestore collection '${lfCollection}'`);
               }
             }
           }
@@ -1792,6 +1900,7 @@ async function startServer() {
           }
 
           // Trigger recovery scan
+          triggerActiveRecoveryScan = importDirectCollectionsFromFirestore;
           await importDirectCollectionsFromFirestore();
         } else {
           console.warn("[MOCK_DB] Cloud Firestore REST connection returned null (rate-limited or unreachable). Will retry hydration shortly...");
@@ -1968,6 +2077,21 @@ async function startServer() {
       attempts++;
     }
   };
+
+  app.post("/api/trigger-recovery-scan", async (req, res) => {
+    try {
+      if (triggerActiveRecoveryScan) {
+        console.log("[API] Explicitly triggered a Deep Cloud Ledger Recovery Scan from HOD dashboard.");
+        await triggerActiveRecoveryScan();
+        res.json({ success: true, message: "Deep Firestore collections scan completed successfully. All historical ledger data recovered." });
+      } else {
+        res.status(500).json({ success: false, message: "Active recovery scanner is currently initializing. Please try again in a few seconds." });
+      }
+    } catch (e: any) {
+      console.error("[API] Recovery scan error:", e);
+      res.status(500).json({ success: false, error: e.message || String(e) });
+    }
+  });
 
   app.get("/api/mock-db", async (req, res) => {
     // Wait for central cloud database state to load first to prevent empty state wiping local storage
