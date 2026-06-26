@@ -23,7 +23,8 @@ import {
   ChevronRight,
   TrendingUp,
   Check,
-  Award as AwardIcon
+  Award as AwardIcon,
+  Edit
 } from "lucide-react";
 import { 
   db,
@@ -63,9 +64,11 @@ interface RestaurantScannerProps {
   companyId: string;
   initialSubTab?: string;
   onSubTabChange?: (tab: string) => void;
+  prefilledRewardsMember?: { email: string; fullName: string } | null;
+  onClearPrefilledRewards?: () => void;
 }
 
-export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
+export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPrefilledRewards }: RestaurantScannerProps) {
   // Core states
   const [guests, setGuests] = useState<GuestProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<GuestProfile | null>(null);
@@ -78,6 +81,15 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
   
   // Modals / Form toggles
   const [showLogVisitModal, setShowLogVisitModal] = useState(false);
+
+  // Edit guest profile states
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [editFullName, setEditFullName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editError, setEditError] = useState("");
+  const [editSuccess, setEditSuccess] = useState("");
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
   // New guest registration fields
   const [newFullName, setNewFullName] = useState("");
@@ -131,6 +143,21 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
       setTiersConfig([]);
     }
   };
+
+  // Capture pre-filled subscriber conversion info
+  useEffect(() => {
+    if (prefilledRewardsMember) {
+      setNewFullName(prefilledRewardsMember.fullName);
+      setNewEmail(prefilledRewardsMember.email);
+      setNewPhone(""); // Reset phone
+      setFormError("");
+      setFormSuccess("");
+      // Clear prefilled state to avoid recurrent updates
+      if (onClearPrefilledRewards) {
+        onClearPrefilledRewards();
+      }
+    }
+  }, [prefilledRewardsMember, onClearPrefilledRewards]);
 
   // Load benefits and tiers on change of companyId
   useEffect(() => {
@@ -429,6 +456,59 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
       setFormError("Failed to persist member registration in cloud database.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Update Existing Member Profile Details
+  const handleOpenEditProfileModal = () => {
+    if (!selectedProfile) return;
+    setEditFullName(selectedProfile.fullName || "");
+    setEditEmail(selectedProfile.email || "");
+    setEditPhone(selectedProfile.phone || "");
+    setEditError("");
+    setEditSuccess("");
+    setShowEditProfileModal(true);
+  };
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProfile) return;
+    if (!editFullName.trim()) {
+      setEditError("Full Name is required.");
+      return;
+    }
+
+    setIsUpdatingProfile(true);
+    setEditError("");
+    setEditSuccess("");
+
+    try {
+      const docRef = doc(db, `restaurant-guests-${companyId}`, selectedProfile.id);
+      
+      const updatedFields = {
+        fullName: editFullName.trim(),
+        email: editEmail.trim(),
+        phone: editPhone.trim()
+      };
+
+      await setDoc(docRef, updatedFields, { merge: true });
+      
+      setEditSuccess("Member details updated successfully!");
+      
+      // Update local state for selected profile
+      setSelectedProfile(prev => prev ? { ...prev, ...updatedFields } : null);
+      
+      // Refresh list
+      await fetchGuests(selectedProfile.id);
+      
+      setTimeout(() => {
+        setShowEditProfileModal(false);
+      }, 1200);
+    } catch (err) {
+      console.error("Error updating member profile:", err);
+      setEditError("Failed to update member registration in cloud database.");
+    } finally {
+      setIsUpdatingProfile(false);
     }
   };
 
@@ -940,6 +1020,13 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
 
                 <div className="flex items-center gap-2 w-full md:w-auto">
                   <button
+                    onClick={handleOpenEditProfileModal}
+                    className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-slate-950 px-4 py-2.5 text-[9px] font-display uppercase tracking-wider font-extrabold transition-all shadow-sm"
+                  >
+                    <Edit size={13} />
+                    <span>Edit Profile</span>
+                  </button>
+                  <button
                     onClick={() => setShowLogVisitModal(true)}
                     className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-950 hover:bg-[#C5A02D] text-white px-4 py-2.5 text-[9px] font-display uppercase tracking-wider font-extrabold transition-all"
                   >
@@ -1389,6 +1476,124 @@ export function RestaurantScanner({ companyId }: RestaurantScannerProps) {
                       <>
                         <Check size={12} />
                         <span>Commit & Award Points</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {showEditProfileModal && selectedProfile && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[1px] z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white border border-slate-200 shadow-2xl w-full max-w-md p-6 relative animate-scale-up"
+            >
+              <button 
+                onClick={() => setShowEditProfileModal(false)}
+                className="absolute right-4 top-4 text-slate-400 hover:text-black transition-colors animate-fade-in"
+              >
+                <X size={16} />
+              </button>
+
+              <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
+                <Edit className="text-[#C5A02D]" size={16} />
+                <h3 className="text-xs font-display font-black uppercase tracking-widest text-slate-900">
+                  Edit Member Details: {selectedProfile.id}
+                </h3>
+              </div>
+
+              <form onSubmit={handleUpdateProfile} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] uppercase tracking-wider font-display font-black text-slate-450">
+                    Guest Full Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="E.g. Charles Cebujano"
+                    value={editFullName}
+                    onChange={e => setEditFullName(e.target.value)}
+                    className="border border-slate-200 px-3 py-2 text-xs rounded-none outline-none focus:border-[#C5A02D] transition-colors"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] uppercase tracking-wider font-display font-black text-slate-450">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-slate-400">
+                      <Mail size={12} />
+                    </span>
+                    <input
+                      type="email"
+                      placeholder="E.g. charles@cml.com.fj"
+                      value={editEmail}
+                      onChange={e => setEditEmail(e.target.value)}
+                      className="w-full border border-slate-200 pl-8 pr-3 py-2 text-xs rounded-none outline-none focus:border-[#C5A02D] transition-colors font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] uppercase tracking-wider font-display font-black text-slate-450">
+                    Phone Number
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-slate-400">
+                      <Phone size={12} />
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="E.g. +679 883 2910"
+                      value={editPhone}
+                      onChange={e => setEditPhone(e.target.value)}
+                      className="w-full border border-slate-200 pl-8 pr-3 py-2 text-xs rounded-none outline-none focus:border-[#C5A02D] transition-colors font-mono"
+                    />
+                  </div>
+                </div>
+
+                {editError && (
+                  <div className="p-2.5 bg-red-50 border border-red-250 text-red-750 text-[10px] flex items-center gap-2">
+                    <AlertCircle size={12} />
+                    <span>{editError}</span>
+                  </div>
+                )}
+
+                {editSuccess && (
+                  <div className="p-2.5 bg-green-50 border border-green-250 text-green-800 text-[10px] flex items-center gap-2">
+                    <CheckCircle size={12} />
+                    <span>{editSuccess}</span>
+                  </div>
+                )}
+
+                <div className="flex gap-2 justify-end mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditProfileModal(false)}
+                    className="px-4 py-2 border border-slate-200 text-slate-650 text-[10px] uppercase font-display font-bold hover:bg-slate-50 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdatingProfile}
+                    className="bg-slate-950 hover:bg-[#C5A02D] text-white px-5 py-2 text-[10px] uppercase font-display font-black tracking-wider transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    {isUpdatingProfile ? (
+                      <>
+                        <RefreshCw className="animate-spin" size={11} />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check size={12} />
+                        <span>Save Changes</span>
                       </>
                     )}
                   </button>

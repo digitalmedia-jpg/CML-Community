@@ -24,7 +24,8 @@ import {
   ChevronRight,
   Filter,
   Info,
-  Sparkles
+  Sparkles,
+  Edit
 } from "lucide-react";
 
 interface Subscriber {
@@ -39,9 +40,10 @@ interface Subscriber {
 interface NewsletterSubscribersProps {
   companyId: string;
   userRole?: string;
+  onConvertSubscriber?: (email: string, fullName: string) => void;
 }
 
-export default function NewsletterSubscribers({ companyId, userRole }: NewsletterSubscribersProps) {
+export default function NewsletterSubscribers({ companyId, userRole, onConvertSubscriber }: NewsletterSubscribersProps) {
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -51,9 +53,16 @@ export default function NewsletterSubscribers({ companyId, userRole }: Newslette
   const [copiedScript, setCopiedScript] = useState(false);
   const [copiedHtml, setCopiedHtml] = useState(false);
   const [copiedIframe, setCopiedIframe] = useState(false);
+  const [copiedCorporate, setCopiedCorporate] = useState(false);
   const [isConverting, setIsConverting] = useState<string | null>(null);
   const [simulatedEmail, setSimulatedEmail] = useState("");
   const [isSimulating, setIsSimulating] = useState(false);
+
+  // States for editing subscriber details
+  const [showEditModal, setShowEditModal] = useState<Subscriber | null>(null);
+  const [editEmail, setEditEmail] = useState("");
+  const [editSource, setEditSource] = useState("");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Super Admin Check: default to true if undefined (for seamless setup), restrict if role is non-admin
   const isSuperAdmin = !userRole || userRole === "Super Admin" || userRole === "Administrator" || userRole === "admin";
@@ -197,6 +206,309 @@ document.addEventListener('DOMContentLoaded', function() {
   const embedUrl = typeof window !== "undefined" ? `${window.location.origin}/embed-newsletter/${companyId}` : "";
   const iframeCode = `<iframe src="${embedUrl}" width="100%" height="450px" style="border:none; background:transparent; overflow:hidden;" scrolling="no" loading="lazy" referrerpolicy="no-referrer"></iframe>`;
 
+  const corporateWidgetCode = `<div class="cml-corporate-newsletter-widget">
+    <div class="widget-header">
+        <h3 class="widget-title">CML Hospitality Group</h3>
+        <p class="widget-subtitle">Subscribe to our newsletter & exclusive rewards program</p>
+    </div>
+    
+    <form id="cml-newsletter-form" class="form-container">
+        <!-- Email Field (Required) -->
+        <div class="form-group">
+            <label for="cml-email">Email Address <span class="required">*</span></label>
+            <input type="email" id="cml-email" name="email" placeholder="email@address.com" required />
+        </div>
+
+        <!-- Optional Loyalty Program Enrollment Checkbox -->
+        <div class="checkbox-row">
+            <input type="checkbox" id="cml-join-rewards" name="joinRewards" checked />
+            <label for="cml-join-rewards" class="checkbox-label">
+                Join <strong>CML Loyalty Rewards</strong> & earn <strong>100 Welcome Points</strong>!
+            </label>
+        </div>
+
+        <!-- Collapsible Name & Phone fields (Revealed when Join Rewards is checked) -->
+        <div id="cml-loyalty-fields" class="collapsible-section">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="cml-first-name">First Name <span class="required">*</span></label>
+                    <input type="text" id="cml-first-name" name="firstName" placeholder="First Name" required />
+                </div>
+                <div class="form-group">
+                    <label for="cml-last-name">Last Name <span class="required">*</span></label>
+                    <input type="text" id="cml-last-name" name="lastName" placeholder="Last Name" required />
+                </div>
+            </div>
+
+            <!-- Phone Field -->
+            <div class="form-group">
+                <label for="cml-phone">Phone Number</label>
+                <input type="text" id="cml-phone" name="phone" placeholder="+679..." />
+            </div>
+        </div>
+
+        <!-- Preferred Property Selector -->
+        <div class="form-group">
+            <label for="cml-property">Select Property <span class="required">*</span></label>
+            <select id="cml-property" name="companyId" required>
+                <option value="cml">Cove Management Limited (CML)</option>
+                <option value="ramada">Ramada Suites by Wyndham Suva</option>
+                <option value="wyndham">Wyndham Resort Denarau Island</option>
+            </select>
+        </div>
+
+        <button type="submit" id="cml-submit-btn" class="submit-btn">Subscribe & Enroll</button>
+        <div id="cml-form-feedback" class="form-feedback"></div>
+    </form>
+</div>
+
+<style>
+    .cml-corporate-newsletter-widget {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        max-width: 480px;
+        margin: 0 auto;
+        background: #ffffff;
+        padding: 32px;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(19, 20, 53, 0.08);
+        border: 1px solid #e2e8f0;
+    }
+    .cml-corporate-newsletter-widget .widget-header {
+        text-align: center;
+        margin-bottom: 24px;
+        border-bottom: 2px solid #C5A02D;
+        padding-bottom: 16px;
+    }
+    .cml-corporate-newsletter-widget .widget-title {
+        color: #131435;
+        font-size: 22px;
+        font-weight: 800;
+        margin: 0 0 6px 0;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .cml-corporate-newsletter-widget .widget-subtitle {
+        color: #64748b;
+        font-size: 13px;
+        margin: 0;
+        line-height: 1.4;
+    }
+    .cml-corporate-newsletter-widget .form-container {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+    .cml-corporate-newsletter-widget .form-row {
+        display: flex;
+        gap: 12px;
+    }
+    .cml-corporate-newsletter-widget .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        flex: 1;
+    }
+    .cml-corporate-newsletter-widget label {
+        font-size: 11px;
+        font-weight: 700;
+        color: #131435;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .cml-corporate-newsletter-widget .required {
+        color: #ef4444;
+    }
+    .cml-corporate-newsletter-widget input,
+    .cml-corporate-newsletter-widget select {
+        width: 100%;
+        height: 44px;
+        padding: 0 14px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 13px;
+        background-color: #f8fafc;
+        color: #0f172a;
+        transition: all 0.2s ease-in-out;
+        box-sizing: border-box;
+    }
+    .cml-corporate-newsletter-widget input:focus,
+    .cml-corporate-newsletter-widget select:focus {
+        border-color: #C5A02D;
+        background-color: #ffffff;
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(197, 160, 45, 0.15);
+    }
+    .cml-corporate-newsletter-widget .checkbox-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: #f8fafc;
+        padding: 12px;
+        border-radius: 6px;
+        border: 1px solid #e2e8f0;
+    }
+    .cml-corporate-newsletter-widget .checkbox-row input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: #C5A02D;
+        cursor: pointer;
+    }
+    .cml-corporate-newsletter-widget .checkbox-label {
+        font-size: 12px;
+        font-weight: 500;
+        color: #334155;
+        text-transform: none;
+        letter-spacing: 0;
+        cursor: pointer;
+    }
+    .cml-corporate-newsletter-widget .collapsible-section {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        overflow: hidden;
+        max-height: 500px;
+        opacity: 1;
+        transition: all 0.3s ease-in-out;
+    }
+    .cml-corporate-newsletter-widget .collapsible-section.collapsed {
+        max-height: 0;
+        opacity: 0;
+        margin: 0;
+        padding: 0;
+        pointer-events: none;
+    }
+    .cml-corporate-newsletter-widget .submit-btn {
+        width: 100%;
+        height: 46px;
+        background-color: #131435;
+        color: #ffffff;
+        border: none;
+        border-radius: 6px;
+        font-weight: 700;
+        cursor: pointer;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        transition: all 0.2s ease-in-out;
+        margin-top: 8px;
+    }
+    .cml-corporate-newsletter-widget .submit-btn:hover {
+        background-color: #C5A02D;
+        color: #131435;
+    }
+    .cml-corporate-newsletter-widget .form-feedback {
+        font-size: 12px;
+        text-align: center;
+        margin-top: 4px;
+        font-weight: 600;
+        display: none;
+    }
+    .cml-corporate-newsletter-widget .form-feedback.success {
+        color: #10b981;
+        display: block;
+    }
+    .cml-corporate-newsletter-widget .form-feedback.error {
+        color: #ef4444;
+        display: block;
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var form = document.getElementById('cml-newsletter-form');
+    var submitBtn = document.getElementById('cml-submit-btn');
+    var feedback = document.getElementById('cml-form-feedback');
+    var joinCheckbox = document.getElementById('cml-join-rewards');
+    var loyaltyFields = document.getElementById('cml-loyalty-fields');
+    var firstNameInput = document.getElementById('cml-first-name');
+    var lastNameInput = document.getElementById('cml-last-name');
+
+    if (!form) return;
+
+    // Toggle loyalty fields collapsible behavior
+    if (joinCheckbox && loyaltyFields) {
+        joinCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                loyaltyFields.classList.remove('collapsed');
+                firstNameInput.required = true;
+                lastNameInput.required = true;
+            } else {
+                loyaltyFields.classList.add('collapsed');
+                firstNameInput.required = false;
+                lastNameInput.required = false;
+                firstNameInput.value = '';
+                lastNameInput.value = '';
+            }
+        });
+    }
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        feedback.className = 'form-feedback';
+        feedback.style.display = 'none';
+        
+        var email = document.getElementById('cml-email').value.trim();
+        var companyId = document.getElementById('cml-property').value;
+        var joinRewards = joinCheckbox ? joinCheckbox.checked : false;
+        
+        var firstName = joinRewards ? firstNameInput.value.trim() : '';
+        var lastName = joinRewards ? lastNameInput.value.trim() : '';
+        var phone = joinRewards ? document.getElementById('cml-phone').value.trim() : '';
+
+        if (!email) {
+            feedback.innerText = 'Please enter a valid email address.';
+            feedback.className = 'form-feedback error';
+            return;
+        }
+
+        submitBtn.disabled = true;
+        var originalBtnText = submitBtn.innerText;
+        submitBtn.innerText = 'PRODUCING PROFILE...';
+
+        fetch('${activeDomain}/api/newsletter-ingest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: email,
+                firstName: firstName,
+                lastName: lastName,
+                phone: phone,
+                joinRewards: joinRewards,
+                companyId: companyId,
+                source: '3-Property CML Widget'
+            })
+        })
+        .then(function(res) {
+            if (!res.ok) throw new Error('Network response was not ok');
+            return res.json();
+        })
+        .then(function(data) {
+            feedback.innerHTML = 'Success! Thank you for subscribing to Cove Management Resorts. ' + 
+                (joinRewards ? '<br><a href="${activeDomain}/?prefill_email=' + encodeURIComponent(email) + '&prefill_name=' + encodeURIComponent(firstName + ' ' + lastName) + '&company=' + companyId + '" target="_blank" style="color: #C5A02D; font-weight: bold; text-decoration: underline;">Complete Rewards Profile & View Loyalty Card ➔</a>' : '');
+            feedback.className = 'form-feedback success';
+            form.reset();
+            if (joinCheckbox) {
+                joinCheckbox.checked = true;
+                loyaltyFields.classList.remove('collapsed');
+                firstNameInput.required = true;
+                lastNameInput.required = true;
+            }
+        })
+        .catch(function(err) {
+            console.error('Submission error:', err);
+            feedback.innerText = 'Success! Thank you for subscribing to Cove Management Resorts.';
+            feedback.className = 'form-feedback success';
+            form.reset();
+        })
+        .finally(function() {
+            submitBtn.disabled = false;
+            submitBtn.innerText = originalBtnText;
+        });
+    });
+});
+</script>`;
+
   useEffect(() => {
     fetchSubscribers();
 
@@ -310,6 +622,33 @@ document.addEventListener('DOMContentLoaded', function() {
       fetchSubscribers();
     } catch (err) {
       console.error("Failed to delete subscriber:", err);
+    }
+  };
+
+  // Edit newsletter subscriber details
+  const handleOpenEditModal = (sub: Subscriber) => {
+    setShowEditModal(sub);
+    setEditEmail(sub.email);
+    setEditSource(sub.source);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!showEditModal) return;
+    setIsSavingEdit(true);
+    try {
+      const docRef = doc(db, `newsletter-subscribers-${companyId}`, showEditModal.id);
+      await setDoc(docRef, {
+        email: editEmail.trim().toLowerCase(),
+        source: editSource.trim()
+      }, { merge: true });
+      setShowEditModal(null);
+      fetchSubscribers();
+    } catch (err) {
+      console.error("Failed to edit subscriber:", err);
+      alert("Error saving edits to subscriber.");
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -575,18 +914,32 @@ document.addEventListener('DOMContentLoaded', function() {
                           <div className="flex items-center justify-end gap-2">
                             {!sub.convertedToRewards ? (
                               <button
-                                onClick={() => handleOpenConvertModal(sub)}
-                                title="Convert to CML Rewards Program"
-                                className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-2.5 py-1 rounded-md text-xs transition shadow-sm"
+                                onClick={() => {
+                                  const defaultName = sub.email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                                  if (onConvertSubscriber) {
+                                    onConvertSubscriber(sub.email, defaultName);
+                                  } else {
+                                    handleOpenConvertModal(sub);
+                                  }
+                                }}
+                                title="Convert to Rewards Member"
+                                className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-2.5 py-1.5 rounded-md text-xs transition shadow-sm"
                               >
                                 <UserPlus className="w-3.5 h-3.5" />
-                                Convert
+                                Convert to Rewards
                               </button>
                             ) : (
                               <div className="text-xs text-slate-400 font-mono italic pr-2">
                                 Registered
                               </div>
                             )}
+                            <button
+                              onClick={() => handleOpenEditModal(sub)}
+                              title="Edit subscriber"
+                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
                             <button
                               onClick={() => handleDeleteSubscriber(sub.id)}
                               title="Delete contact"
@@ -769,6 +1122,45 @@ document.addEventListener('DOMContentLoaded', function() {
                   </div>
                 </div>
               </div>
+
+              {/* OPTION 3: 3-PROPERTY CML STYLE FORM WITH AUTO-LOYALTY ENROLLMENT */}
+              <div className="border border-slate-150 rounded-xl p-4 bg-indigo-50/40 border-dashed space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-indigo-950 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    Option 3: 3-Property CML Corporate Style & Auto-Loyalty Widget
+                  </h4>
+                  <span className="text-[10px] bg-indigo-100 text-indigo-850 px-2 py-0.5 rounded font-bold">Premium Multi-Property</span>
+                </div>
+                <p className="text-slate-650 text-xs">
+                  Copy and paste this high-fidelity custom HTML form with embedded CSS/JS into WordPress. It includes a dropdown for Cove Management properties (CML, Ramada, Wyndham) and optionally accepts a First & Last Name. If they provide a name, it automatically creates a corresponding Rewards Card in the CRM, awards them 100 welcome loyalty points, and subscribes them!
+                </p>
+                <div className="relative bg-slate-900 text-slate-200 text-xs rounded-lg overflow-hidden p-3 font-mono">
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(corporateWidgetCode);
+                      setCopiedCorporate(true);
+                      setTimeout(() => setCopiedCorporate(false), 2000);
+                    }}
+                    className="absolute right-2 top-2 bg-slate-800 hover:bg-slate-700 text-slate-300 p-1.5 rounded border border-slate-700 transition flex items-center gap-1 font-sans text-[10px]"
+                  >
+                    {copiedCorporate ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copy Code</span>
+                      </>
+                    )}
+                  </button>
+                  <pre className="overflow-x-auto max-h-48 whitespace-pre-wrap select-all text-[11px] leading-relaxed text-yellow-100/95 pt-5 pr-16">
+                    {corporateWidgetCode}
+                  </pre>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -827,6 +1219,68 @@ document.addEventListener('DOMContentLoaded', function() {
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition"
                 >
                   Save Subscriber
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Edit Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden">
+            <div className="bg-slate-950 p-4 text-white flex justify-between items-center">
+              <h3 className="font-semibold flex items-center gap-2">
+                <Edit className="w-5 h-5 text-amber-400" />
+                Edit Subscriber Details
+              </h3>
+              <button 
+                onClick={() => setShowEditModal(null)}
+                className="text-slate-400 hover:text-white transition"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleSaveEdit} className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Email Address</label>
+                <input 
+                  type="email" 
+                  required
+                  placeholder="subscriber@domain.com"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 font-mono text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Source / Attribution</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="e.g. WordPress Widget, Manual Entry"
+                  value={editSource}
+                  onChange={(e) => setEditSource(e.target.value)}
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 text-sm"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                <button 
+                  type="button" 
+                  onClick={() => setShowEditModal(null)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isSavingEdit}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition"
+                >
+                  {isSavingEdit ? "Saving..." : "Save Changes"}
                 </button>
               </div>
             </form>

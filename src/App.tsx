@@ -829,6 +829,7 @@ export default function App() {
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [tabHistory, setTabHistory] = useState<string[]>([]);
   const [externalFlipbookId, setExternalFlipbookId] = useState<string | null>(null);
+  const [prefilledRewardsMember, setPrefilledRewardsMember] = useState<{ email: string; fullName: string } | null>(null);
 
   // Unified confirmation modal target states
   const [deleteComplaintTarget, setDeleteComplaintTarget] = useState<any | null>(null);
@@ -923,6 +924,21 @@ export default function App() {
       } else {
         setSelectedCompany("cml");
       }
+    }
+
+    const prefillEmail = params.get("prefill_email");
+    if (prefillEmail) {
+      const prefillName = params.get("prefill_name") || "";
+      const prefillCompany = params.get("company") || "cml";
+      setSelectedCompany(prefillCompany);
+      setPrefilledRewardsMember({ email: prefillEmail, fullName: prefillName });
+      setActiveTab("dining-loyalty");
+
+      // Clean up search query parameters elegantly
+      const url = new URL(window.location.href);
+      url.searchParams.delete("prefill_email");
+      url.searchParams.delete("prefill_name");
+      window.history.replaceState({}, document.title, url.pathname + url.search);
     }
   }, []);
 
@@ -8218,10 +8234,19 @@ export default function App() {
                 }}
               />
             ) : activeTab === "newsletter-subscribers" ? (
-              <NewsletterSubscribers companyId={selectedCompany || 'cml'} userRole={userRole || undefined} />
+              <NewsletterSubscribers 
+                companyId={selectedCompany || 'cml'} 
+                userRole={userRole || undefined}
+                onConvertSubscriber={(email, fullName) => {
+                  setPrefilledRewardsMember({ email, fullName });
+                  setActiveTab("dining-loyalty");
+                }}
+              />
             ) : (activeTab === "restaurant-scanner" || activeTab.startsWith("dining-")) ? (
               <RestaurantScanner 
                 companyId={selectedCompany || 'cml'} 
+                prefilledRewardsMember={prefilledRewardsMember}
+                onClearPrefilledRewards={() => setPrefilledRewardsMember(null)}
                 initialSubTab={
                   activeTab === "dining-buffet" ? "buffet" :
                   activeTab === "dining-loyalty" ? "scanner" :

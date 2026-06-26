@@ -1877,7 +1877,7 @@ async function startServer() {
   app.post("/api/newsletter-ingest", async (req, res) => {
     try {
       await waitForHydration();
-      const { email, source, companyId } = req.body;
+      const { email, source, companyId, firstName, lastName, phone, phoneType, country, zipCode, businessTraveler, marketingOptIn, joinRewards } = req.body;
       if (!email || typeof email !== 'string') {
         return res.status(400).json({ error: "Missing email parameter" });
       }
@@ -1888,10 +1888,10 @@ async function startServer() {
       
       const newSubscriber = {
         id,
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         source: source || "Newsletter Submission",
         createdAt: new Date().toISOString(),
-        convertedToRewards: false,
+        convertedToRewards: !!(firstName || lastName || joinRewards),
         companyId: activeCompanyId
       };
 
@@ -1915,6 +1915,85 @@ async function startServer() {
           // ignore dead client
         }
       });
+
+      // SYNC TO LIVE FIRESTORE COLLECTIONS DIRECTLY
+      try {
+        const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+        if (fs.existsSync(configPath)) {
+          const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+          const apiKey = config.apiKey;
+          const projectId = config.projectId;
+          const databaseId = config.firestoreDatabaseId || "(default)";
+          
+          if (apiKey && projectId) {
+            // 1. Sync to newsletter-subscribers collection
+            const subCollection = `newsletter-subscribers-${activeCompanyId}`;
+            const subUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/${subCollection}?documentId=${id}&key=${apiKey}`;
+            
+            const subFields: Record<string, any> = {
+              id: { stringValue: id },
+              email: { stringValue: email.trim().toLowerCase() },
+              source: { stringValue: source || "Newsletter Submission" },
+              createdAt: { stringValue: new Date().toISOString() },
+              convertedToRewards: { booleanValue: !!(firstName || lastName || joinRewards) },
+              companyId: { stringValue: activeCompanyId }
+            };
+
+            await fetch(subUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ fields: subFields })
+            }).then(r => {
+              if (r.ok) {
+                console.log(`[Firestore Ingest Direct] Synced subscriber ${email} to ${subCollection}`);
+              } else {
+                r.text().then(t => console.error(`[Firestore Ingest Direct Error]`, t));
+              }
+            }).catch(e => console.error(`[Firestore Ingest Direct Fetch Error]`, e));
+
+            // 2. If it's a rewards enrollment (or contains first/last name), sync to restaurant-guests
+            if (firstName || lastName || joinRewards) {
+              const guestPrefix = activeCompanyId === "ramada" ? "RP" : activeCompanyId === "wyndham" ? "WG" : "CR";
+              const guestIdNum = Math.floor(10000 + Math.random() * 90000);
+              const guestCardId = `${guestPrefix}${guestIdNum}`;
+              const guestCollection = `restaurant-guests-${activeCompanyId}`;
+              const guestUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/${guestCollection}?documentId=${guestCardId}&key=${apiKey}`;
+
+              let fullName = `${firstName || ""} ${lastName || ""}`.trim();
+              if (!fullName) {
+                // generate a friendly display name from email
+                const emailPrefix = email.split('@')[0];
+                fullName = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+              }
+
+              const guestFields: Record<string, any> = {
+                id: { stringValue: guestCardId },
+                fullName: { stringValue: fullName },
+                email: { stringValue: email.trim().toLowerCase() },
+                phone: { stringValue: phone || "+679" },
+                visitCount: { integerValue: 0 },
+                rewardPoints: { integerValue: 100 }, // 100 welcome/rewards registration points
+                lastVisited: { nullValue: null },
+                createdAt: { stringValue: new Date().toISOString() }
+              };
+
+              await fetch(guestUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ fields: guestFields })
+              }).then(r => {
+                if (r.ok) {
+                  console.log(`[Firestore Ingest Direct] Created guest profile ${guestCardId} for ${fullName}`);
+                } else {
+                  r.text().then(t => console.error(`[Firestore Ingest Direct Guest Error]`, t));
+                }
+              }).catch(e => console.error(`[Firestore Ingest Direct Guest Fetch Error]`, e));
+            }
+          }
+        }
+      } catch (firestoreErr: any) {
+        console.error("[Firestore Ingest Direct Hook Exception]:", firestoreErr.message || firestoreErr);
+      }
 
       console.log(`[Newsletter Ingest] Registered subscriber: ${email} for company ${activeCompanyId}`);
       res.json({ success: true, subscriber: newSubscriber });
