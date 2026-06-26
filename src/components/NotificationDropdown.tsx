@@ -159,17 +159,17 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onNa
   };
 
   return (
-    <div className="relative">
+    <div className="relative shrink-0">
       <button 
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-full transition-all relative border",
+          "w-8 h-8 md:w-10 md:h-10 shrink-0 flex items-center justify-center rounded-full transition-all relative border",
           isOpen ? "border-gold bg-gold/5 shadow-lg" : "border-gold/20 hover:border-gold hover:bg-luxury-cream text-slate-400 hover:text-gold"
         )}
       >
-        <Bell size={18} className={cn(unreadCount > 0 && "animate-bounce-slow")} />
+        <Bell size={16} className={cn(unreadCount > 0 && "animate-bounce-slow")} />
         {unreadCount > 0 && (
-          <span className="absolute top-2 right-2 w-4 h-4 bg-red-500 text-white text-[9px] font-black flex items-center justify-center rounded-full border-2 border-white">
+          <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-red-500 text-white text-[8px] font-black flex items-center justify-center rounded-full border border-white">
             {unreadCount}
           </span>
         )}

@@ -3564,7 +3564,7 @@ export default function App() {
               </p>
             </div>
             
-            <div className="flex items-center gap-1 md:gap-4">
+            <div className="flex items-center flex-nowrap justify-end gap-1 sm:gap-2 md:gap-4 shrink-0">
               {/* Real-time Group Sync Trigger */}
               <button
                 id="global-header-sync-btn"
@@ -3572,7 +3572,7 @@ export default function App() {
                 onClick={handleManualSyncAll}
                 disabled={isSyncingAll}
                 className={cn(
-                  "p-1.5 md:p-2 border flex items-center justify-center rounded-sm transition-all duration-200 active:scale-95 shadow-sm cursor-pointer",
+                  "p-1.5 md:p-2 border flex items-center justify-center shrink-0 rounded-sm transition-all duration-200 active:scale-95 shadow-sm cursor-pointer",
                   isSyncingAll 
                     ? "bg-slate-50 border-gold/40 text-gold" 
                     : "bg-white border-slate-200 hover:border-gold text-slate-700 hover:text-gold"
@@ -3596,13 +3596,13 @@ export default function App() {
                 <div 
                   id="session-persistence-indicator"
                   className={cn(
-                    "hidden md:flex items-center gap-2 px-2.5 py-1.5 border rounded-sm shadow-sm text-[10px] font-sans font-medium tracking-wide transition-all",
+                    "flex items-center shrink-0 gap-1 md:gap-2 px-1 md:px-2.5 py-1 md:py-1.5 border rounded-sm shadow-sm text-[9px] md:text-[10px] font-sans font-medium tracking-wide transition-all",
                     sessionRemainingSeconds !== null && sessionRemainingSeconds < 600
                       ? "bg-red-50 border-red-300 text-red-700 animate-pulse"
                       : "bg-white border-slate-200 text-slate-700 hover:border-gold"
                   )}
                 >
-                  <div className="relative flex h-2 w-2">
+                  <div className="relative flex h-2 w-2 shrink-0">
                     {sessionRemainingSeconds !== null && sessionRemainingSeconds < 600 ? (
                       <>
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -3615,21 +3615,21 @@ export default function App() {
                       </>
                     )}
                   </div>
-                  <div className="flex flex-col text-left leading-tight">
-                    <span className="text-[8px] uppercase font-bold tracking-widest text-slate-500">
+                  <div className="flex flex-col text-left leading-tight shrink-0">
+                    <span className="hidden lg:inline-block text-[8px] uppercase font-bold tracking-widest text-slate-500">
                       Session Persistence
                     </span>
-                    <span className="font-mono text-[10px]">
+                    <span className="font-mono text-[9px] md:text-[10px] whitespace-nowrap">
                       {sessionRemainingSeconds !== null 
-                        ? `${Math.floor(sessionRemainingSeconds / 60)}m ${sessionRemainingSeconds % 60}s left`
-                        : "Active handshake"
+                        ? `${Math.floor(sessionRemainingSeconds / 60)}m ${sessionRemainingSeconds % 60}s`
+                        : "Active"
                       }
                     </span>
                   </div>
                   <button
                     onClick={handleRefreshSession}
                     disabled={isRefreshingSession}
-                    className="p-1 rounded-full ml-1 hover:bg-slate-100 text-slate-500 hover:text-gold transition-colors cursor-pointer flex items-center justify-center"
+                    className="p-1 rounded-full hover:bg-slate-100 text-slate-500 hover:text-gold transition-colors cursor-pointer flex items-center justify-center shrink-0"
                     title="Refresh Firebase Session Handshake (1-Click)"
                   >
                     <RefreshCw 
@@ -3649,11 +3649,11 @@ export default function App() {
                 <NotificationDropdown onNavigate={(tab) => navigateTo(tab)} />
               )}
               
-              <div className="relative">
+              <div className="relative shrink-0">
                 <button 
                   onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
                   className={cn(
-                    "w-7 h-7 md:w-10 md:h-10 border p-0.5 flex items-center justify-center rounded-sm transition-all active:scale-95 overflow-hidden shadow-sm",
+                    "w-8 h-8 md:w-10 md:h-10 shrink-0 border p-0.5 flex items-center justify-center rounded-sm transition-all active:scale-95 overflow-hidden shadow-sm",
                     isProfileMenuOpen ? "border-gold bg-gold" : "border-slate-200 bg-white hover:border-gold"
                   )}
                 >

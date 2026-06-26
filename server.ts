@@ -31,6 +31,50 @@ async function sendToUserGoogleChat(messageText: string) {
   await safePostToWebhook(webhookUrl, { text: messageText });
 }
 
+function isDirectCollectionKey(key: string): boolean {
+  return (
+    key.startsWith("newsletter-subscribers-") ||
+    key.startsWith("lost-and-found-") ||
+    key.startsWith("restaurant-guests-") ||
+    key.startsWith("complaints-")
+  );
+}
+
+function decodeFirestoreFields(fields: any): any {
+  if (!fields) return {};
+  const obj: Record<string, any> = {};
+  for (const [k, v] of Object.entries(fields)) {
+    if (v && typeof v === "object") {
+      if ("stringValue" in v) {
+        obj[k] = (v as any).stringValue;
+      } else if ("booleanValue" in v) {
+        obj[k] = (v as any).booleanValue;
+      } else if ("integerValue" in v) {
+        obj[k] = parseInt((v as any).integerValue || "0", 10);
+      } else if ("doubleValue" in v) {
+        obj[k] = parseFloat((v as any).doubleValue || "0");
+      } else if ("arrayValue" in v) {
+        const arr = (v as any).arrayValue?.values || [];
+        obj[k] = arr.map((item: any) => {
+          if (item && typeof item === "object") {
+            if ("stringValue" in item) return item.stringValue;
+            if ("booleanValue" in item) return item.booleanValue;
+            if ("integerValue" in item) return parseInt(item.integerValue || "0", 10);
+            if ("doubleValue" in item) return parseFloat(item.doubleValue || "0");
+            if ("mapValue" in item) return decodeFirestoreFields(item.mapValue?.fields || {});
+          }
+          return item;
+        });
+      } else if ("mapValue" in v) {
+        obj[k] = decodeFirestoreFields((v as any).mapValue?.fields || {});
+      } else if ("nullValue" in v) {
+        obj[k] = null;
+      }
+    }
+  }
+  return obj;
+}
+
 async function startServer() {
   const app = express();
   app.use(express.json({ limit: "50mb" }));
@@ -1605,6 +1649,83 @@ async function startServer() {
     }
     async set(k: string, val: any): Promise<void> {}
     async delete(k: string): Promise<void> {}
+
+    async saveDirectDocument(collectionName: string, docId: string, docData: any): Promise<boolean> {
+      try {
+        const fields = this.convertToFirestoreFields(docData);
+        const url = `https://firestore.googleapis.com/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collectionName}/${docId}?key=${this.apiKey}`;
+        const res = await fetch(url, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: `projects/${this.projectId}/databases/${this.databaseId}/documents/${collectionName}/${docId}`,
+            fields
+          })
+        });
+        if (res.ok) {
+          console.log(`[MOCK_DB] Successfully saved direct document '${collectionName}/${docId}' to Cloud Firestore.`);
+          return true;
+        } else {
+          const text = await res.text();
+          console.warn(`[MOCK_DB] Failed to save direct document '${collectionName}/${docId}' to Cloud Firestore: Status ${res.status} ${text}`);
+          return false;
+        }
+      } catch (err: any) {
+        console.error(`[MOCK_DB] Exception saving direct document '${collectionName}/${docId}' to Cloud Firestore:`, err.message || err);
+        return false;
+      }
+    }
+
+    async deleteDirectDocument(collectionName: string, docId: string): Promise<boolean> {
+      try {
+        const url = `https://firestore.googleapis.com/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collectionName}/${docId}?key=${this.apiKey}`;
+        const res = await fetch(url, {
+          method: "DELETE"
+        });
+        if (res.ok) {
+          console.log(`[MOCK_DB] Successfully deleted direct document '${collectionName}/${docId}' from Cloud Firestore.`);
+          return true;
+        } else {
+          const text = await res.text();
+          console.warn(`[MOCK_DB] Failed to delete direct document '${collectionName}/${docId}' from Cloud Firestore: Status ${res.status} ${text}`);
+          return false;
+        }
+      } catch (err: any) {
+        console.error(`[MOCK_DB] Exception deleting direct document '${collectionName}/${docId}' from Cloud Firestore:`, err.message || err);
+        return false;
+      }
+    }
+
+    private convertToFirestoreFields(obj: any): any {
+      const fields: Record<string, any> = {};
+      for (const [k, v] of Object.entries(obj)) {
+        if (v === null || v === undefined) continue;
+        if (typeof v === "string") {
+          fields[k] = { stringValue: v };
+        } else if (typeof v === "boolean") {
+          fields[k] = { booleanValue: v };
+        } else if (typeof v === "number") {
+          if (Number.isInteger(v)) {
+            fields[k] = { integerValue: String(v) };
+          } else {
+            fields[k] = { doubleValue: v };
+          }
+        } else if (Array.isArray(v)) {
+          const values = v.map(item => {
+            if (typeof item === "string") {
+              return { stringValue: item };
+            } else if (typeof item === "object" && item !== null) {
+              return { mapValue: { fields: this.convertToFirestoreFields(item) } };
+            }
+            return { stringValue: String(item) };
+          });
+          fields[k] = { arrayValue: { values } };
+        } else if (typeof v === "object") {
+          fields[k] = { mapValue: { fields: this.convertToFirestoreFields(v) } };
+        }
+      }
+      return fields;
+    }
   }
 
   let firestoreRestSync: FirestoreRestSync | null = null;
@@ -1690,23 +1811,14 @@ async function startServer() {
             if (data && Array.isArray(data.documents)) {
               let restoredCount = 0;
               for (const docObj of data.documents) {
-                const fields = docObj.fields || {};
-                const id = fields.id?.stringValue || docObj.name.split("/").pop();
+                const decoded = decodeFirestoreFields(docObj.fields);
+                const id = decoded.id || docObj.name.split("/").pop();
+                decoded.id = id;
                 const dbKey = `newsletter-subscribers-${activeCompanyId}/${id}`;
                 
                 const originalData = serverMockDbStore[dbKey];
-                const newData = {
-                  id,
-                  email: fields.email?.stringValue || "",
-                  source: fields.source?.stringValue || "Newsletter Submission",
-                  createdAt: fields.createdAt?.stringValue || new Date().toISOString(),
-                  convertedToRewards: fields.convertedToRewards?.booleanValue === true,
-                  companyId: fields.companyId?.stringValue || activeCompanyId
-                };
-
-                if (JSON.stringify(originalData) !== JSON.stringify(newData)) {
-                  serverMockDbStore[dbKey] = newData;
-                  previouslySyncedKeys.add(dbKey);
+                if (JSON.stringify(originalData) !== JSON.stringify(decoded)) {
+                  serverMockDbStore[dbKey] = decoded;
                   restoredCount++;
                   mutated = true;
                 }
@@ -1730,32 +1842,14 @@ async function startServer() {
             if (data && Array.isArray(data.documents)) {
               let restoredCount = 0;
               for (const docObj of data.documents) {
-                const fields = docObj.fields || {};
-                const id = fields.id?.stringValue || docObj.name.split("/").pop();
+                const decoded = decodeFirestoreFields(docObj.fields);
+                const id = decoded.id || docObj.name.split("/").pop();
+                decoded.id = id;
                 const dbKey = `restaurant-guests-${activeCompanyId}/${id}`;
                 
                 const originalData = serverMockDbStore[dbKey];
-                const newData = {
-                  id,
-                  fullName: fields.fullName?.stringValue || "",
-                  email: fields.email?.stringValue || "",
-                  phone: fields.phone?.stringValue || "+679",
-                  visitCount: parseInt(fields.visitCount?.integerValue || "1"),
-                  rewardPoints: parseInt(fields.rewardPoints?.integerValue || "100"),
-                  lastVisited: fields.lastVisited?.stringValue || new Date().toISOString(),
-                  createdAt: fields.createdAt?.stringValue || new Date().toISOString(),
-                  signUpSource: fields.signUpSource?.stringValue || "Website Newsletter Form",
-                  property: fields.property?.stringValue || (activeCompanyId === "ramada" ? "Ramada Suites Suva" : activeCompanyId === "wyndham" ? "Wyndham Resort Denarau" : "CML"),
-                  newsletterSubscribed: fields.newsletterSubscribed?.booleanValue !== false,
-                  status: fields.status?.stringValue || "Active",
-                  country: fields.country?.stringValue || "Fiji",
-                  zipCode: fields.zipCode?.stringValue || "",
-                  businessTraveler: fields.businessTraveler?.booleanValue || false
-                };
-
-                if (JSON.stringify(originalData) !== JSON.stringify(newData)) {
-                  serverMockDbStore[dbKey] = newData;
-                  previouslySyncedKeys.add(dbKey);
+                if (JSON.stringify(originalData) !== JSON.stringify(decoded)) {
+                  serverMockDbStore[dbKey] = decoded;
                   restoredCount++;
                   mutated = true;
                 }
@@ -1779,40 +1873,14 @@ async function startServer() {
             if (data && Array.isArray(data.documents)) {
               let restoredCount = 0;
               for (const docObj of data.documents) {
-                const fields = docObj.fields || {};
-                const id = fields.id?.stringValue || docObj.name.split("/").pop();
+                const decoded = decodeFirestoreFields(docObj.fields);
+                const id = decoded.id || docObj.name.split("/").pop();
+                decoded.id = id;
                 const dbKey = `complaints-${activeCompanyId}/${id}`;
                 
-                // Parse updates array
-                const updatesVal = fields.updates?.arrayValue?.values || [];
-                const parsedUpdates = updatesVal.map((v: any) => {
-                  const m = v.mapValue?.fields || {};
-                  return {
-                    message: m.message?.stringValue || "",
-                    timestamp: m.timestamp?.stringValue || new Date().toISOString(),
-                    user: m.user?.stringValue || "Staff member"
-                  };
-                });
-
                 const originalData = serverMockDbStore[dbKey];
-                const newData = {
-                  id,
-                  guestName: fields.guestName?.stringValue || "",
-                  roomNumber: fields.roomNumber?.stringValue || "",
-                  type: fields.type?.stringValue || "Service Issue",
-                  priority: fields.priority?.stringValue || "Medium",
-                  description: fields.description?.stringValue || "",
-                  status: fields.status?.stringValue || "Pending",
-                  authorId: fields.authorId?.stringValue || "",
-                  authorName: fields.authorName?.stringValue || "",
-                  propertyId: fields.propertyId?.stringValue || activeCompanyId,
-                  createdAt: fields.createdAt?.stringValue || new Date().toISOString(),
-                  updates: parsedUpdates
-                };
-
-                if (JSON.stringify(originalData) !== JSON.stringify(newData)) {
-                  serverMockDbStore[dbKey] = newData;
-                  previouslySyncedKeys.add(dbKey);
+                if (JSON.stringify(originalData) !== JSON.stringify(decoded)) {
+                  serverMockDbStore[dbKey] = decoded;
                   restoredCount++;
                   mutated = true;
                 }
@@ -1836,27 +1904,14 @@ async function startServer() {
             if (data && Array.isArray(data.documents)) {
               let restoredCount = 0;
               for (const docObj of data.documents) {
-                const fields = docObj.fields || {};
-                const id = fields.id?.stringValue || docObj.name.split("/").pop();
+                const decoded = decodeFirestoreFields(docObj.fields);
+                const id = decoded.id || docObj.name.split("/").pop();
+                decoded.id = id;
                 const dbKey = `lost-and-found-${activeCompanyId}/${id}`;
                 
                 const originalData = serverMockDbStore[dbKey];
-                const newData = {
-                  id,
-                  itemName: fields.itemName?.stringValue || "",
-                  description: fields.description?.stringValue || "",
-                  locationFound: fields.locationFound?.stringValue || "",
-                  staffName: fields.staffName?.stringValue || "",
-                  staffPosition: fields.staffPosition?.stringValue || "",
-                  imageUrl: fields.imageUrl?.stringValue || "",
-                  status: fields.status?.stringValue || "Found",
-                  propertyId: fields.propertyId?.stringValue || activeCompanyId,
-                  createdAt: fields.createdAt?.stringValue || new Date().toISOString()
-                };
-
-                if (JSON.stringify(originalData) !== JSON.stringify(newData)) {
-                  serverMockDbStore[dbKey] = newData;
-                  previouslySyncedKeys.add(dbKey);
+                if (JSON.stringify(originalData) !== JSON.stringify(decoded)) {
+                  serverMockDbStore[dbKey] = decoded;
                   restoredCount++;
                   mutated = true;
                 }
@@ -1892,7 +1947,7 @@ async function startServer() {
           }
 
           if (Object.keys(cloudState).length > 0) {
-            serverMockDbStore = { ...serverMockDbStore, ...cloudState };
+            serverMockDbStore = { ...cloudState, ...serverMockDbStore };
             console.log(`[MOCK_DB] Fully synchronized and merged ${Object.keys(cloudState).length} records from central cloud Firestore database.`);
             saveMockDbToDisk();
           } else {
@@ -2118,11 +2173,33 @@ async function startServer() {
     if (updates && typeof updates === "object" && Object.keys(updates).length > 0) {
       serverMockDbStore = { ...serverMockDbStore, ...updates };
       mutated = true;
+
+      // Propagate direct collection updates to individual Firestore collections
+      if (firestoreRestSync) {
+        for (const [key, value] of Object.entries(updates)) {
+          if (isDirectCollectionKey(key)) {
+            const parts = key.split('/');
+            if (parts.length === 2) {
+              const [collectionName, docId] = parts;
+              firestoreRestSync.saveDirectDocument(collectionName, docId, value);
+            }
+          }
+        }
+      }
     }
     
     if (Array.isArray(deletedKeys) && deletedKeys.length > 0) {
       deletedKeys.forEach((k: string) => {
         delete serverMockDbStore[k];
+
+        // Propagate direct collection deletions to individual Firestore collections
+        if (firestoreRestSync && isDirectCollectionKey(k)) {
+          const parts = k.split('/');
+          if (parts.length === 2) {
+            const [collectionName, docId] = parts;
+            firestoreRestSync.deleteDirectDocument(collectionName, docId);
+          }
+        }
       });
       mutated = true;
     }
