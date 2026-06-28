@@ -212,7 +212,7 @@ export default function NewsletterSubscribers({ companyId, userRole, onConvertSu
     .then(function(res) { return res.json(); })
     .then(function(data) {
       console.log('[CML Webhook] Ingestion succeeded:', data);
-      alert('Thank you! You have successfully subscribed and registered to CML Loyalty Rewards with 100 Welcome Points.');
+      alert('Thank you! You have successfully subscribed to our newsletter.');
     })
     .catch(function(err) {
       console.error('[CML Webhook] Connection error:', err);
@@ -312,7 +312,7 @@ export default function NewsletterSubscribers({ companyId, userRole, onConvertSu
       .then((data) => {
         setIsSimulating(false);
         setSimulatedEmail("");
-        alert("Simulator Success: Email subscribed and CML Rewards profile automatically generated with 100 welcome points!");
+        alert("Simulator Success: Email successfully added to the Newsletter Subscribers Database as Unconverted.");
         fetchSubscribers();
       })
       .catch((err) => {
@@ -473,16 +473,6 @@ export default function NewsletterSubscribers({ companyId, userRole, onConvertSu
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <button 
-            id="btn-deep-recovery-scan"
-            onClick={handleDeepLedgerRecoveryScan}
-            disabled={isScanningCloud}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2.5 rounded-lg text-sm transition border border-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Perform deep dynamic scan on all raw Google Firestore collections to recover any historical data from 2 days ago"
-          >
-            <RefreshCw className={`w-4 h-4 ${isScanningCloud ? "animate-spin" : ""}`} />
-            {isScanningCloud ? "Recovering Ledger..." : "Force Ledger Recovery Scan"}
-          </button>
           <button 
             id="btn-export-csv"
             onClick={exportToCSV}

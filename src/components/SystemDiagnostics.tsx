@@ -18,12 +18,18 @@ interface SystemDiagnosticsProps {
   complaintsCount: number;
   complaintsError: string | null;
   onForceResync?: () => void;
+  lastComplaintsSnapshotTime?: Date | null;
+  lastNewsSnapshotTime?: Date | null;
+  selectedCompany?: string | null;
 }
 
 export const SystemDiagnostics: React.FC<SystemDiagnosticsProps> = ({
   complaintsCount,
   complaintsError,
-  onForceResync
+  onForceResync,
+  lastComplaintsSnapshotTime,
+  lastNewsSnapshotTime,
+  selectedCompany
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoggerOpen, setIsLoggerOpen] = useState(false);
@@ -71,8 +77,9 @@ export const SystemDiagnostics: React.FC<SystemDiagnosticsProps> = ({
             ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
             : !isOnline
             ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-            : "border-gold/30 bg-gold/5 text-slate-800 hover:bg-gold/10"
+            : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
         }`}
+        title="View System Connection Diagnostics & Force Sync"
       >
         <span className="relative flex h-2 w-2 shrink-0">
           <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
@@ -80,14 +87,14 @@ export const SystemDiagnostics: React.FC<SystemDiagnosticsProps> = ({
               ? "bg-red-400" 
               : !isOnline 
               ? "bg-amber-400" 
-              : "bg-gold"
+              : "bg-emerald-400"
           }`}></span>
           <span className={`relative inline-flex rounded-full h-2 w-2 ${
             complaintsError 
               ? "bg-red-600" 
               : !isOnline 
               ? "bg-amber-600" 
-              : "bg-gold"
+              : "bg-emerald-600"
           }`}></span>
         </span>
 
@@ -95,10 +102,10 @@ export const SystemDiagnostics: React.FC<SystemDiagnosticsProps> = ({
         
         <span className="text-[10px] uppercase tracking-wider font-semibold hidden md:inline">
           {complaintsError 
-            ? "Sync Alert" 
+            ? "Sync Blocked" 
             : !isOnline 
-            ? "Offline Mode" 
-            : "SANDBOX DB"
+            ? "Offline Buffering" 
+            : "Live Sync Connected"
           }
         </span>
         <ChevronDown size={12} className="text-slate-400" />
@@ -163,31 +170,64 @@ export const SystemDiagnostics: React.FC<SystemDiagnosticsProps> = ({
                   Collection Subscriptions
                 </p>
                 <div className="bg-slate-50 p-2 space-y-1.5 font-mono text-[10px]">
+                  {/* Selected property info */}
+                  <div className="flex flex-col border-b border-slate-200/50 pb-2 mb-2 text-[10px]">
+                    <div className="flex justify-between text-slate-400 uppercase tracking-widest font-bold text-[9px] mb-1">
+                      <span>Active Hotel Property:</span>
+                    </div>
+                    <span className="text-slate-800 font-bold font-sans text-xs">
+                      {selectedCompany === "wyndham" 
+                        ? "Wyndham Garden Fiji (Wailoaloa Beach)" 
+                        : selectedCompany === "ramada" 
+                        ? "Ramada Suites Wailoaloa" 
+                        : "CML Corporate Headquarters"
+                      }
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-mono mt-0.5">ID: {selectedCompany || "cml"}</span>
+                  </div>
+
                   {/* Complaints Collections */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600">complaints-cml</span>
-                    <span className="text-emerald-600 flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-                      Syncing
-                    </span>
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600 font-semibold">complaints-{selectedCompany || "cml"}</span>
+                      <span className={`${isOnline ? "text-emerald-600" : "text-amber-600"} flex items-center gap-1 text-[9px] font-semibold`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`}></span>
+                        {isOnline ? "Receiving Live" : "Buffered"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[9px] text-slate-400 mt-0.5">
+                      <span>Last Snapshot Receipt:</span>
+                      <span className="font-bold text-slate-700">
+                        {lastComplaintsSnapshotTime 
+                          ? lastComplaintsSnapshotTime.toLocaleDateString() + " " + lastComplaintsSnapshotTime.toLocaleTimeString()
+                          : "Connecting..."
+                        }
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600">complaints-ramada</span>
-                    <span className="text-emerald-600 flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-                      Syncing
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600">complaints-wyndham</span>
-                    <span className="text-emerald-600 flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-                      Syncing
-                    </span>
+
+                  {/* Daily News Collections */}
+                  <div className="flex flex-col gap-0.5 pt-2 mt-2 border-t border-slate-150">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600 font-semibold">daily-news (Noticeboard)</span>
+                      <span className={`${isOnline ? "text-emerald-600" : "text-amber-600"} flex items-center gap-1 text-[9px] font-semibold`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`}></span>
+                        {isOnline ? "Receiving Live" : "Buffered"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[9px] text-slate-400 mt-0.5">
+                      <span>Last Snapshot Receipt:</span>
+                      <span className="font-bold text-slate-700">
+                        {lastNewsSnapshotTime 
+                          ? lastNewsSnapshotTime.toLocaleDateString() + " " + lastNewsSnapshotTime.toLocaleTimeString()
+                          : "Connecting..."
+                        }
+                      </span>
+                    </div>
                   </div>
 
                   {/* Cache info */}
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 mt-1">
+                  <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60 mt-1.5 text-[9px]">
                     <span className="text-slate-500">Active Records:</span>
                     <span className="font-semibold text-slate-700">{complaintsCount} logs</span>
                   </div>

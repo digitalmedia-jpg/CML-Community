@@ -1947,7 +1947,7 @@ async function startServer() {
           }
 
           if (Object.keys(cloudState).length > 0) {
-            serverMockDbStore = { ...cloudState, ...serverMockDbStore };
+            serverMockDbStore = { ...serverMockDbStore, ...cloudState };
             console.log(`[MOCK_DB] Fully synchronized and merged ${Object.keys(cloudState).length} records from central cloud Firestore database.`);
             saveMockDbToDisk();
           } else {
@@ -1959,10 +1959,12 @@ async function startServer() {
           await importDirectCollectionsFromFirestore();
         } else {
           console.warn("[MOCK_DB] Cloud Firestore REST connection returned null (rate-limited or unreachable). Will retry hydration shortly...");
+          isCloudHydrated = false; // Guard saving/overwriting until successfully hydrated
           setTimeout(hydrateStore, 10000); // retry in 10s
         }
       } catch (err) {
         console.warn("[MOCK_DB] Cloud Firestore REST connection warning (continuing with container filesystem only):", err);
+        isCloudHydrated = false; // Guard saving/overwriting until successfully hydrated
         setTimeout(hydrateStore, 15000); // retry in 15s
       }
     } else {
@@ -2038,8 +2040,8 @@ async function startServer() {
   };
 
   if (firestoreRestSync) {
-    setInterval(pollCloudDatabase, 45000); // 45 second polling interval to be kind on API quotas
-    // Continuously and automatically run the Deep Cloud Recovery Scan every 20 seconds to keep memory store fully synchronized with live collections!
+    setInterval(pollCloudDatabase, 180000); // 3 minute polling interval to be kind on API quotas
+    // Continuously and automatically run the Deep Cloud Recovery Scan every 15 minutes to keep memory store fully synchronized with live collections!
     setInterval(async () => {
       if (triggerActiveRecoveryScan) {
         try {
@@ -2049,7 +2051,7 @@ async function startServer() {
           console.error("[BACKGROUND_RECOVERY] Background recovery scan failed:", e);
         }
       }
-    }, 20000);
+    }, 900000); // 15 minutes instead of 20 seconds!
   }
 
   // Server-Sent Events (SSE) Stream Endpoint
@@ -2074,9 +2076,13 @@ async function startServer() {
   });
 
   app.get("/api/sync-cloud", async (req, res) => {
+    const isForceGet = req.query.forceGet === "true";
+    if (isForceGet) {
+      console.log("[MOCK_DB] Diagnostic startup alert: client requested forceGet cache-busting fetch. Re-hydrating immediately.");
+    }
     if (firestoreRestSync) {
       try {
-        console.log("[MOCK_DB] Explicit client request: forcing cloud fetch and merge...");
+        console.log(`[MOCK_DB] Explicit client request: forcing cloud fetch and merge... (forceGet=${isForceGet})`);
         const cloudState = await firestoreRestSync.getMaster();
         if (cloudState !== null) {
           isCloudHydrated = true;
@@ -2136,7 +2142,7 @@ async function startServer() {
   });
 
   const waitForHydration = async () => {
-    if (!firestoreRestSync || isCloudHydrated) return;
+    if (!firestoreRestSync || isCloudHydrated || Object.keys(serverMockDbStore).length > 0) return;
     let attempts = 0;
     while (!isCloudHydrated && attempts < 15) {
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -2259,7 +2265,7 @@ async function startServer() {
         email: email.trim().toLowerCase(),
         source: source || "Newsletter Submission",
         createdAt: new Date().toISOString(),
-        convertedToRewards: true, // Auto-enrolled by default!
+        convertedToRewards: false, // Charles wants to manually convert!
         companyId: activeCompanyId
       };
 
@@ -2303,7 +2309,7 @@ async function startServer() {
               email: { stringValue: email.trim().toLowerCase() },
               source: { stringValue: source || "Newsletter Submission" },
               createdAt: { stringValue: new Date().toISOString() },
-              convertedToRewards: { booleanValue: true },
+              convertedToRewards: { booleanValue: false }, // false here as well!
               companyId: { stringValue: activeCompanyId }
             };
 
@@ -2318,71 +2324,6 @@ async function startServer() {
                 r.text().then(t => console.error(`[Firestore Ingest Direct Error]`, t));
               }
             }).catch(e => console.error(`[Firestore Ingest Direct Fetch Error]`, e));
-
-            // 2. Automatically sync to restaurant-guests (Rewards Members)
-            const guestPrefix = activeCompanyId === "ramada" ? "RP" : activeCompanyId === "wyndham" ? "WG" : "CR";
-            const guestIdNum = Math.floor(10000 + Math.random() * 90000);
-            const guestCardId = `${guestPrefix}${guestIdNum}`;
-            const guestCollection = `restaurant-guests-${activeCompanyId}`;
-            const guestUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/${guestCollection}?documentId=${guestCardId}&key=${apiKey}`;
-
-            let fullName = `${firstName || ""} ${lastName || ""}`.trim();
-            if (!fullName) {
-              // generate a friendly display name from email
-              const emailPrefix = email.split('@')[0];
-              fullName = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
-            }
-
-            const guestFields: Record<string, any> = {
-              id: { stringValue: guestCardId },
-              fullName: { stringValue: fullName },
-              email: { stringValue: email.trim().toLowerCase() },
-              phone: { stringValue: phone || "+679" },
-              visitCount: { integerValue: 1 },
-              rewardPoints: { integerValue: 100 }, // 100 welcome/rewards registration points
-              lastVisited: { stringValue: new Date().toISOString() },
-              createdAt: { stringValue: new Date().toISOString() },
-              
-              // Extra Member Details (stored on the profile info, not displayed on the card ID)
-              signUpSource: { stringValue: source || "Website Newsletter Form" },
-              property: { stringValue: activeCompanyId === "ramada" ? "Ramada Suites Suva" : activeCompanyId === "wyndham" ? "Wyndham Resort Denarau" : "CML" },
-              newsletterSubscribed: { booleanValue: true },
-              status: { stringValue: "Active" },
-              country: { stringValue: country || "Fiji" },
-              zipCode: { stringValue: zipCode || "" },
-              businessTraveler: { booleanValue: !!businessTraveler }
-            };
-
-            await fetch(guestUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ fields: guestFields })
-            }).then(r => {
-              if (r.ok) {
-                console.log(`[Firestore Ingest Direct] Created guest profile ${guestCardId} for ${fullName}`);
-              } else {
-                r.text().then(t => console.error(`[Firestore Ingest Direct Guest Error]`, t));
-              }
-            }).catch(e => console.error(`[Firestore Ingest Direct Guest Fetch Error]`, e));
-
-            // 3. Create a matching initial visit/bonus deposit log under subcollection `visits` in Firestore
-            const visitId = "vis_" + Math.random().toString(36).substring(2, 11);
-            const visitUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/restaurant-guests-${activeCompanyId}/${guestCardId}/visits?documentId=${visitId}&key=${apiKey}`;
-            
-            const visitFields = {
-              cardId: { stringValue: guestCardId },
-              receiptNumber: { stringValue: "NEWSLETTER-WELCOME" },
-              billAmount: { doubleValue: 0.0 },
-              pointsAwarded: { integerValue: 100 },
-              type: { stringValue: "visit" },
-              timestamp: { stringValue: new Date().toISOString() }
-            };
-
-            await fetch(visitUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ fields: visitFields })
-            }).catch(e => console.error(`[Firestore Visit Log Error]`, e));
           }
         }
       } catch (firestoreErr: any) {

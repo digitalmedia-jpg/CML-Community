@@ -1150,6 +1150,11 @@ export default function App() {
   const isCmlUser = currentUser ? (!userEmail.includes("ramada") && !userEmail.includes("wyndham")) : true;
 
   // Daily News Hook for Home Dashboard
+  const [lastComplaintsSnapshotTime, setLastComplaintsSnapshotTime] = useState<Date | null>(null);
+  const [lastNewsSnapshotTime, setLastNewsSnapshotTime] = useState<Date | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [complaints, setComplaints] = useState<any[]>([]);
+  
   const [latestCorporateNews, setLatestCorporateNews] = useState<any[]>([]);
   const [newsLoading, setNewsLoading] = useState(true);
 
@@ -1168,6 +1173,7 @@ export default function App() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
+      setLastNewsSnapshotTime(new Date());
       let newsItems: any[] = [];
       if (!snapshot.empty) {
         newsItems = snapshot.docs.map(doc => ({
@@ -1230,9 +1236,182 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, [currentUser, selectedCompany]);
+  }, [currentUser, selectedCompany, refreshTrigger]);
   const [sopSubTab, setSopSubTab] = useState<string>("registry");
   const [brandSubTab, setBrandSubTab] = useState<string>("rules");
+
+  const [hasRunDiagnosticForProperty, setHasRunDiagnosticForProperty] = useState<Record<string, boolean>>({});
+
+  // 1. Explicitly re-fetch and reconcile all data (re-queries collections via direct REST/Firestore getDocs)
+  const reFetchAllData = async () => {
+    // Increment refreshTrigger to force fresh onSnapshot listener subscriptions
+    setRefreshTrigger(prev => prev + 1);
+
+    try {
+      if (!db || typeof db !== 'object') return;
+      
+      console.log("[Re-fetch All Data] Manually re-querying Firestore collections for instant reconciliation...");
+      
+      // Re-query Complaints for active properties
+      const propertiesList = isCmlUser ? ['cml', 'ramada', 'wyndham'] : [selectedCompany || 'cml'];
+      const complaintsMap: { [key: string]: any[] } = {};
+
+      for (const prefix of propertiesList) {
+        try {
+          const qComplaints = query(
+            collection(db, `complaints-${prefix}`),
+            orderBy('createdAt', 'desc')
+          );
+          // Explict getDocs queries Firestore collection directly, bypassing cached memory to reconcile entries
+          const snapshot = await getDocs(qComplaints);
+          console.log(`[Re-fetch All Data] Explict query successful for complaints-${prefix}: ${snapshot?.docs?.length || 0} docs.`);
+          
+          if (snapshot && snapshot.docs) {
+            setLastComplaintsSnapshotTime(new Date());
+            const docs = snapshot.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data(),
+              propertyId: prefix
+            }));
+            complaintsMap[prefix] = docs;
+          }
+        } catch (err) {
+          console.warn(`[Re-fetch All Data] Warning during direct complaints-${prefix} query:`, err);
+        }
+      }
+
+      // Combine and sort by createdAt desc
+      const aggregated = Object.values(complaintsMap).flat();
+      const getTimestamp = (val: any) => {
+        if (!val) return 0;
+        if (typeof val.toDate === 'function') return val.toDate().getTime();
+        if (val.seconds) return val.seconds * 1000;
+        const d = new Date(val).getTime();
+        return isNaN(d) ? 0 : d;
+      };
+      aggregated.sort((a, b) => {
+        return getTimestamp(b.createdAt) - getTimestamp(a.createdAt);
+      });
+      setComplaints(aggregated);
+
+      // Re-query Daily News
+      try {
+        const qNews = query(collection(db, "daily-news"), orderBy("createdAt", "desc"));
+        const snapshotNews = await getDocs(qNews);
+        console.log(`[Re-fetch All Data] Explict query successful for daily-news: ${snapshotNews?.docs?.length || 0} docs.`);
+        
+        if (snapshotNews && snapshotNews.docs) {
+          setLastNewsSnapshotTime(new Date());
+          const newsItems = snapshotNews.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          
+          const targetProp = 
+            selectedCompany === 'cml' ? "CML Corporate" :
+            selectedCompany === 'wyndham' ? "Wyndham Garden" :
+            selectedCompany === 'ramada' ? "Ramada Suites" : "All";
+            
+          const filtered = newsItems.filter((item: any) => 
+            item.propertyTarget === "All" || 
+            item.propertyTarget === targetProp
+          ).slice(0, 3); // max 3 elements
+          
+          setLatestCorporateNews(filtered);
+        }
+      } catch (err) {
+        console.warn("[Re-fetch All Data] Warning during direct daily-news query:", err);
+      }
+      
+    } catch (err) {
+      console.error("[Re-fetch All Data] Critical error during manual reconciliation:", err);
+    }
+  };
+
+  // 2. Robust refresh handler for the header RefreshCw button
+  const [isRefreshingData, setIsRefreshingData] = useState(false);
+  const handleRefreshData = async () => {
+    if (isRefreshingData) return;
+    setIsRefreshingData(true);
+    
+    try {
+      console.log("[Refresh Header Action] Initiating robust cache clear and active Firestore sync...");
+      
+      // Clear local cache indices for the current property in localStorage
+      if (selectedCompany) {
+        const cacheKeys = [
+          `cml_maintenance_history_${selectedCompany}`,
+          `cml_sops_${selectedCompany}`,
+          `cml_maintenance_history`,
+          `cml_sops`
+        ];
+        cacheKeys.forEach(k => {
+          try {
+            localStorage.removeItem(k);
+          } catch (e) {}
+        });
+        console.log(`[Refresh Header Action] Successfully cleared local property-level cache indices for '${selectedCompany}'.`);
+      }
+
+      // Trigger immediate mock/cloud DB active synchronizations
+      await forceSyncNow();
+
+      // Trigger explicit re-fetch of onSnapshot lists and direct query reconciliation
+      await reFetchAllData();
+
+      // Provide user feedback via toast service
+      toastService.success(
+        `Database re-synchronization completed! Fresh real-time listings reconciled for ${selectedCompany ? selectedCompany.toUpperCase() : "CML"}.`, 
+        "System Refreshed"
+      );
+    } catch (err: any) {
+      console.error("[Refresh Header Action] Failure during robust sync:", err);
+      toastService.error("Synchronization warning. Local offline buffer maintained safely.", "Sync Warn");
+    } finally {
+      setIsRefreshingData(false);
+    }
+  };
+
+  // 3. Diagnostic status check effect on initialization / selectedCompany changes (Requirement 3)
+  useEffect(() => {
+    if (!currentUser || !selectedCompany) return;
+    if (hasRunDiagnosticForProperty[selectedCompany]) return;
+
+    // Set a period of 4 seconds to verify if Firestore document data is detected
+    const diagnosticTimer = setTimeout(async () => {
+      setHasRunDiagnosticForProperty(prev => ({ ...prev, [selectedCompany]: true }));
+      const isComplaintsDetected = complaints && complaints.length > 0;
+      const isNewsDetected = latestCorporateNews && latestCorporateNews.length > 0;
+
+      if (!isComplaintsDetected || !isNewsDetected) {
+        console.warn("[Diagnostic Startup] Real-time Firestore document data not fully detected after set period (4.0s). Triggering automated cache-busting fallback...");
+        
+        try {
+          // Implement automated fallback logic to query the server with cache-busting parameters (`forceGet`)
+          const cb = Date.now();
+          const response = await fetch(`/api/sync-cloud?forceGet=true&cb=${cb}`);
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log("[Diagnostic Startup] Automated forceGet cache-busting server fetch succeeded. Returned keys count:", Object.keys(data).length);
+            
+            // Reconcile and ensure data is rendered in the UI
+            await reFetchAllData();
+            
+            toastService.info("Automated diagnostic connection restored. Live database states synchronized successfully.", "Self-Healing Portal");
+          } else {
+            console.warn("[Diagnostic Startup] forceGet fallback responded with status:", response.status);
+          }
+        } catch (err) {
+          console.error("[Diagnostic Startup] Automated forceGet query fallback failed:", err);
+        }
+      } else {
+        console.log("[Diagnostic Startup] Firestore data check: verified. Live real-time documents active.");
+      }
+    }, 4000);
+
+    return () => clearTimeout(diagnosticTimer);
+  }, [currentUser, selectedCompany, complaints?.length, latestCorporateNews?.length, hasRunDiagnosticForProperty]);
 
   useEffect(() => {
     if (currentUser) {
@@ -1243,7 +1422,6 @@ export default function App() {
   }, [currentUser]);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [workflowConfig, setWorkflowConfig] = useState<{ approverEmails?: string[]; delegations?: any[] } | null>(null);
-  const [complaints, setComplaints] = useState<any[]>([]);
   const [complaintForm, setComplaintForm] = useState({
     guestName: "",
     roomNumber: "",
@@ -1571,6 +1749,7 @@ export default function App() {
         );
         
         const unsub = onSnapshot(q, (snapshot) => {
+          setLastComplaintsSnapshotTime(new Date());
           const isFromCache = (snapshot && snapshot.metadata) ? (snapshot.metadata.fromCache ? 'cache' : 'server') : 'mock';
           console.log(`[Firestore Listener] Received snapshot update for 'complaints-${prefix}' with ${snapshot?.docs?.length || 0} document(s). Source: ${isFromCache}`);
           
@@ -1639,7 +1818,7 @@ export default function App() {
     return () => {
       unsubscribes.forEach(unsub => unsub());
     };
-  }, [currentUser, isCmlUser, refreshKey, selectedCompany]);
+  }, [currentUser, isCmlUser, refreshKey, selectedCompany, refreshTrigger]);
 
   const handleComplaintImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -3564,32 +3743,38 @@ export default function App() {
               </p>
             </div>
             
-            <div className="flex items-center flex-nowrap justify-end gap-1 sm:gap-2 md:gap-4 shrink-0">
-              {/* Real-time Group Sync Trigger */}
-              <button
-                id="global-header-sync-btn"
-                type="button"
-                onClick={handleManualSyncAll}
-                disabled={isSyncingAll}
-                className={cn(
-                  "p-1.5 md:p-2 border flex items-center justify-center shrink-0 rounded-sm transition-all duration-200 active:scale-95 shadow-sm cursor-pointer",
-                  isSyncingAll 
-                    ? "bg-slate-50 border-gold/40 text-gold" 
-                    : "bg-white border-slate-200 hover:border-gold text-slate-700 hover:text-gold"
-                )}
-                title="Force Sync with Group Ledger (Real-time)"
-              >
-                <RefreshCw size={14} className={cn("transition-transform duration-500", isSyncingAll && "animate-spin")} />
-                <span className="hidden sm:inline-block text-[9px] uppercase tracking-wider font-bold ml-1.5 font-sans">
-                  {isSyncingAll ? "Syncing..." : "Sync All"}
-                </span>
-              </button>
+            <div className="flex items-center flex-nowrap justify-end gap-1.5 sm:gap-2 md:gap-3 shrink-0">
+              {currentUser && (
+                <button
+                  id="global-header-sync-btn"
+                  type="button"
+                  onClick={handleRefreshData}
+                  disabled={isRefreshingData}
+                  className={cn(
+                    "p-1.5 md:p-2 border flex items-center justify-center shrink-0 rounded-sm transition-all duration-200 active:scale-95 shadow-sm cursor-pointer",
+                    isRefreshingData 
+                      ? "bg-slate-50 border-gold/40 text-gold" 
+                      : "bg-white border-slate-200 hover:border-gold text-slate-700 hover:text-gold"
+                  )}
+                  title="Clear cache and re-sync all Firestore documents"
+                >
+                  <RefreshCw size={13} className={cn("transition-transform duration-500", isRefreshingData && "animate-spin")} />
+                  <span className="hidden sm:inline-block text-[9px] uppercase tracking-wider font-bold ml-1.5 font-sans">
+                    {isRefreshingData ? "Syncing..." : "Sync All"}
+                  </span>
+                </button>
+              )}
 
-              <SystemDiagnostics 
-                complaintsCount={complaints?.length || 0}
-                complaintsError={complaintsError}
-                onForceResync={() => setRefreshKey(prev => prev + 1)}
-              />
+              {currentUser && (
+                <SystemDiagnostics 
+                  complaintsCount={complaints?.length || 0}
+                  complaintsError={complaintsError}
+                  onForceResync={reFetchAllData}
+                  lastComplaintsSnapshotTime={lastComplaintsSnapshotTime}
+                  lastNewsSnapshotTime={lastNewsSnapshotTime}
+                  selectedCompany={selectedCompany}
+                />
+              )}
 
               {/* Session Persistence Heartbeat Status Indicator */}
               {currentUser && (
@@ -3626,24 +3811,8 @@ export default function App() {
                       }
                     </span>
                   </div>
-                  <button
-                    onClick={handleRefreshSession}
-                    disabled={isRefreshingSession}
-                    className="p-1 rounded-full hover:bg-slate-100 text-slate-500 hover:text-gold transition-colors cursor-pointer flex items-center justify-center shrink-0"
-                    title="Refresh Firebase Session Handshake (1-Click)"
-                  >
-                    <RefreshCw 
-                      size={11} 
-                      className={cn(
-                        "transition-all duration-1000",
-                        isRefreshingSession ? "animate-smooth-spin text-gold" : ""
-                      )} 
-                    />
-                  </button>
                 </div>
               )}
-
-
 
               {currentUser && (
                 <NotificationDropdown onNavigate={(tab) => navigateTo(tab)} />
