@@ -9187,4 +9187,17 @@ function StatCard({ label, value, trend, icon: Icon, color }: any) {
   );
 }
 
+import { BreakfastMonitor } from './components/BreakfastMonitor';
+
+function App() {
+  return (
+    <div className="app-container">
+      {/* Place this tag within your current tabs layout wrapper block */}
+      <BreakfastMonitor />
+    </div>
+  );
+}
+
+export default App;
+
 
