@@ -2142,9 +2142,9 @@ async function startServer() {
   });
 
   const waitForHydration = async () => {
-    if (!firestoreRestSync || isCloudHydrated || Object.keys(serverMockDbStore).length > 0) return;
+    if (!firestoreRestSync || isCloudHydrated) return;
     let attempts = 0;
-    while (!isCloudHydrated && attempts < 15) {
+    while (!isCloudHydrated && attempts < 30) {
       await new Promise(resolve => setTimeout(resolve, 500));
       attempts++;
     }

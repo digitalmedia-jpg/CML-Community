@@ -72,6 +72,69 @@ const DEPARTMENTS = [
   "Customer Service"
 ];
 
+const getLoginCount = (loginCount: any) => {
+  if (!loginCount) return 0;
+  if (typeof loginCount === 'object') {
+    return loginCount.value !== undefined ? loginCount.value : 0;
+  }
+  return loginCount;
+};
+
+const formatUserDate = (dateVal: any) => {
+  if (!dateVal) return 'NEVER';
+  try {
+    if (typeof dateVal === 'object') {
+      if (dateVal.seconds) {
+        return new Date(dateVal.seconds * 1000).toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }).toUpperCase();
+      }
+      if (dateVal.toDate && typeof dateVal.toDate === 'function') {
+        return new Date(dateVal.toDate()).toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }).toUpperCase();
+      }
+    }
+    const d = new Date(dateVal);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).toUpperCase();
+    }
+  } catch (err) {
+    console.error("Error formatting date:", err);
+  }
+  return 'NEVER';
+};
+
+const formatLogDate = (dateVal: any) => {
+  if (!dateVal) return 'Just now';
+  try {
+    if (typeof dateVal === 'object') {
+      if (dateVal.seconds) {
+        return new Date(dateVal.seconds * 1000).toLocaleString();
+      }
+      if (dateVal.toDate && typeof dateVal.toDate === 'function') {
+        return new Date(dateVal.toDate()).toLocaleString();
+      }
+    }
+    const d = new Date(dateVal);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleString();
+    }
+  } catch (err) {}
+  return 'Just now';
+};
+
 export const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -565,7 +628,7 @@ export const UserManagement: React.FC = () => {
                               </span>
                               {user.loginCount !== undefined && (
                                 <div className="px-1.5 py-0.5 bg-slate-100 rounded-full">
-                                   <p className="text-[7px] font-display font-black text-slate-400">{user.loginCount} Logins</p>
+                                   <p className="text-[7px] font-display font-black text-slate-400">{getLoginCount(user.loginCount)} Logins</p>
                                 </div>
                               )}
                             </div>
@@ -580,12 +643,7 @@ export const UserManagement: React.FC = () => {
                             <div className="flex items-center gap-2">
                               <Clock size={12} className="text-slate-300" />
                               <p className="text-[10px] text-slate-500 font-display uppercase tracking-widest">
-                                {user.lastLogin ? new Date(user.lastLogin.seconds * 1000).toLocaleString('en-US', { 
-                                  month: 'short', 
-                                  day: 'numeric', 
-                                  hour: '2-digit', 
-                                  minute: '2-digit' 
-                                }).toUpperCase() : 'NEVER'}
+                                {formatUserDate(user.lastLogin)}
                               </p>
                             </div>
                             {user.lastActiveTab && (
@@ -682,7 +740,7 @@ export const UserManagement: React.FC = () => {
                            <div className="flex items-center gap-2">
                               <Clock size={12} className="text-slate-300" />
                               <p className="text-[10px] text-slate-500 font-display tracking-widest uppercase">
-                                 {log.timestamp?.toDate ? new Date(log.timestamp.toDate()).toLocaleString() : 'Just now'}
+                                 {formatLogDate(log.timestamp)}
                               </p>
                            </div>
                         </td>

@@ -172,6 +172,12 @@ const SignaturePad: React.FC<{ onSave: (url: string) => void, onClear: () => voi
 };
 
 export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> = ({ userRole, companyId = "cml" }) => {
+  const [activeCompanyId, setActiveCompanyId] = useState<string>(companyId);
+  
+  useEffect(() => {
+    setActiveCompanyId(companyId);
+  }, [companyId]);
+
   const [items, setItems] = useState<LostItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"All" | "Found" | "Secured in Office" | "Claimed" | "Disposed" | "Archived">("All");
@@ -395,7 +401,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
   useEffect(() => {
     // Collect from property-specific database as requested by Charles
     const q = query(
-      collection(db, `lost-and-found-${companyId}`), 
+      collection(db, `lost-and-found-${activeCompanyId}`), 
       orderBy("createdAt", "desc")
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -410,7 +416,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [companyId]);
+  }, [activeCompanyId]);
 
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -420,7 +426,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
       setLoading(true);
       const filteredUrls = newItem.imageUrls.filter(url => url && typeof url === 'string' && url.trim() !== "");
       
-      const targetCollection = collection(db, `lost-and-found-${companyId}`);
+      const targetCollection = collection(db, `lost-and-found-${activeCompanyId}`);
 
       const itemData = {
         itemName: newItem.itemName,
@@ -429,7 +435,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
         staffName: newItem.staffName,
         staffPosition: newItem.staffPosition,
         imageUrls: filteredUrls,
-        propertyId: companyId,
+        propertyId: activeCompanyId,
         isHighValue: newItem.isHighValue
       };
 
@@ -438,7 +444,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
           alert("Only Administrators and Managers are permitted to edit records.");
           return;
         }
-        await updateDoc(doc(db, `lost-and-found-${companyId}`, editingItem.id), {
+        await updateDoc(doc(db, `lost-and-found-${activeCompanyId}`, editingItem.id), {
           ...itemData,
           updatedAt: serverTimestamp()
         });
@@ -468,7 +474,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
           if (typeof window !== "undefined" && "Notification" in window) {
             if (Notification.permission === "granted") {
               try {
-                new Notification(`🚨 High-Value Alert (${companyId.toUpperCase()})`, {
+                new Notification(`🚨 High-Value Alert (${activeCompanyId.toUpperCase()})`, {
                   body: `"${newItem.itemName}" has been logged at ${newItem.locationFound} by ${newItem.staffName}. Management team alert has been triggered successfully.`,
                   icon: "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?q=80&w=2576"
                 });
@@ -506,7 +512,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                companyId: companyId,
+                companyId: activeCompanyId,
                 item: { ...itemData, imageUrls: filteredUrls },
                 type: "found",
                 sender: {
@@ -559,7 +565,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
 
   const handleUpdateStatus = async (id: string, newStatus: "Found" | "Received at Office" | "Claimed" | "Disposed") => {
     try {
-      await updateDoc(doc(db, `lost-and-found-${companyId}`, id), {
+      await updateDoc(doc(db, `lost-and-found-${activeCompanyId}`, id), {
         status: newStatus,
         updatedAt: serverTimestamp(),
         ...(newStatus === "Received at Office" ? {
@@ -577,7 +583,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
     if (!selectedItemForDispose || !auth.currentUser) return;
     try {
       setLoading(true);
-      await updateDoc(doc(db, `lost-and-found-${companyId}`, selectedItemForDispose.id), {
+      await updateDoc(doc(db, `lost-and-found-${activeCompanyId}`, selectedItemForDispose.id), {
         status: "Disposed",
         isArchived: true,
         archivedAt: serverTimestamp(),
@@ -595,7 +601,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          companyId: companyId,
+          companyId: activeCompanyId,
           type: "disposed",
           item: {
             ...selectedItemForDispose,
@@ -635,7 +641,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
     if (!selectedItemForLogReceived || !auth.currentUser) return;
     try {
       setLoading(true);
-      await updateDoc(doc(db, `lost-and-found-${companyId}`, selectedItemForLogReceived.id), {
+      await updateDoc(doc(db, `lost-and-found-${activeCompanyId}`, selectedItemForLogReceived.id), {
         status: "Secured in Office",
         receivedDetails: {
           ...logReceivedForm,
@@ -649,7 +655,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          companyId: companyId,
+          companyId: activeCompanyId,
           type: "secured",
           item: {
             ...selectedItemForLogReceived,
@@ -737,7 +743,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
       setLoading(true);
       const autoNote = `[AUTOMATIC SYSTEM NOTE: Item already released/dispatched to ${dispatchForm.guestName} on ${dispatchForm.releaseDate}]`;
 
-      await updateDoc(doc(db, `lost-and-found-${companyId}`, selectedItemForDispatch.id), {
+      await updateDoc(doc(db, `lost-and-found-${activeCompanyId}`, selectedItemForDispatch.id), {
         status: "Claimed",
         isArchived: true,
         archivedAt: serverTimestamp(),
@@ -757,7 +763,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          companyId: companyId,
+          companyId: activeCompanyId,
           type: "claimed",
           item: {
             ...selectedItemForDispatch,
@@ -802,7 +808,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
   const handleDeleteConfirm = async () => {
     if (!deleteTargetId) return;
     try {
-      await updateDoc(doc(db, `lost-and-found-${companyId}`, deleteTargetId), {
+      await updateDoc(doc(db, `lost-and-found-${activeCompanyId}`, deleteTargetId), {
         isArchived: true,
         archivedAt: serverTimestamp(),
         archivedBy: auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || "Administrator",
@@ -819,7 +825,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
     if (!restoreTargetId) return;
     try {
       setLoading(true);
-      await updateDoc(doc(db, `lost-and-found-${companyId}`, restoreTargetId), {
+      await updateDoc(doc(db, `lost-and-found-${activeCompanyId}`, restoreTargetId), {
         isArchived: false,
         archivedAt: null,
         archivedBy: null,
@@ -909,6 +915,35 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
             Report Found Item
           </button>
         </div>
+      </div>
+
+      {/* Property Registry Selector */}
+      <div className="flex border-b border-slate-100 pb-2 gap-6 text-[10px] font-display uppercase tracking-widest overflow-x-auto scrollbar-none">
+        {[
+          { id: "wyndham", label: "Wyndham Garden Wailoaloa" },
+          { id: "ramada", label: "Ramada Suites Wailoaloa" },
+          { id: "cml", label: "CML Corporate Office" }
+        ].map((prop) => {
+          const isActive = activeCompanyId === prop.id;
+          return (
+            <button
+              key={prop.id}
+              onClick={() => setActiveCompanyId(prop.id)}
+              className={cn(
+                "pb-2 font-extrabold transition-all relative flex items-center gap-1.5 whitespace-nowrap cursor-pointer",
+                isActive ? "text-gold border-b-2 border-gold font-black" : "text-slate-400 hover:text-slate-600"
+              )}
+            >
+              {prop.label}
+              <span className={cn(
+                "text-[8px] font-mono px-1.5 py-0.2 rounded-full",
+                isActive ? "bg-gold text-white" : "bg-slate-100 text-slate-500"
+              )}>
+                {isActive ? items.length : "-"}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Controls */}
@@ -1376,7 +1411,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                     )}
                   </div>
                 </div>
-                <ItemCommentsSection item={item} companyId={companyId} />
+                <ItemCommentsSection item={item} companyId={activeCompanyId} />
               </motion.div>
             ))}
           </AnimatePresence>
@@ -1713,7 +1748,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
                 </div>
 
                 {/* Full-width Comments block at the bottom of the line */}
-                <ItemCommentsSection item={item} companyId={companyId} />
+                <ItemCommentsSection item={item} companyId={activeCompanyId} />
               </motion.div>
             ))}
           </AnimatePresence>

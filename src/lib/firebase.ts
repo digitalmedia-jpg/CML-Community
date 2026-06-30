@@ -458,11 +458,28 @@ class MockAuth {
   private listeners = new Set<(user: any) => void>();
   private _currentUser: any = null;
 
+  private enrichUser(user: any) {
+    if (!user) return null;
+    return {
+      ...user,
+      getIdToken: async (forceRefresh?: boolean) => {
+        return "mock_id_token_12345";
+      },
+      getIdTokenResult: async () => {
+        return {
+          token: "mock_id_token_12345",
+          expirationTime: new Date(Date.now() + 3600 * 1000 * 24).toISOString(),
+          claims: {}
+        };
+      }
+    };
+  }
+
   constructor() {
     try {
       const saved = localStorage.getItem('cml_mock_user');
       if (saved) {
-        this._currentUser = JSON.parse(saved);
+        this._currentUser = this.enrichUser(JSON.parse(saved));
       }
     } catch (e) {}
   }
@@ -503,14 +520,15 @@ class MockAuth {
       try { localStorage.setItem('cml_suggested_property', matched.property); } catch (e) {}
     }
 
-    this._currentUser = {
+    const userObj = {
       uid: resolvedUid,
       email: resolvedEmail,
       displayName: displayName,
       photoURL: isCharles ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=256' : '',
       emailVerified: true
     };
-    try { localStorage.setItem('cml_mock_user', JSON.stringify(this._currentUser)); } catch (e) {}
+    try { localStorage.setItem('cml_mock_user', JSON.stringify(userObj)); } catch (e) {}
+    this._currentUser = this.enrichUser(userObj);
     this.trigger();
     return { user: this._currentUser };
   }
