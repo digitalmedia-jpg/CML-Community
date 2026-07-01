@@ -164,7 +164,7 @@ async function startServer() {
     next();
   });
 
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const PORT = 3000;
 
   // API routes
   app.get("/api/health", (req, res) => {

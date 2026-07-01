@@ -84,6 +84,9 @@ const CallTimer: React.FC = () => {
 };
 
 export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId }) => {
+  const primaryColor = companyId === "ramada" ? "#D11242" : (companyId === "wyndham" ? "#0b5c4b" : "#C5A02D");
+  const darkColor = companyId === "ramada" ? "#b00e35" : (companyId === "wyndham" ? "#084437" : "#a68421");
+
   const [isOpen, setIsOpen] = useState(false);
   const [activeSpaceId, setActiveSpaceId] = useState("general-announcements");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -286,7 +289,20 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
         const updated = getGoogleWorkspaceConnections();
         setConnections(updated);
         const email = updated[companyId]?.email || "";
-        toastService.success(`Linked Google Chat (${email}) for ${getPropertyName(companyId)}!`);
+        const domain = email.trim().toLowerCase().split("@")[1] || "";
+        if (companyId === "ramada" && domain === "wyndhamgardenwailoaloafiji.com") {
+          disconnectGoogleWorkspaceProperty(companyId);
+          setConnections(getGoogleWorkspaceConnections());
+          toastService.error("Linking failed: @wyndhamgardenwailoaloafiji.com email is not allowed for Ramada Suites.");
+          return;
+        }
+        if (companyId === "wyndham" && domain === "ramadawailoaloafiji.com") {
+          disconnectGoogleWorkspaceProperty(companyId);
+          setConnections(getGoogleWorkspaceConnections());
+          toastService.error("Linking failed: @ramadawailoaloafiji.com email is not allowed for Wyndham Garden.");
+          return;
+        }
+        toastService.success(`Linked CML Chat (${email}) for ${getPropertyName(companyId)}!`);
       } else {
         throw new Error("Could not acquire access token.");
       }
@@ -410,7 +426,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
 
                 // Native Desktop Push notification (perfect when in background/other tabs)
                 if (!isCurrentActiveSpaceFocused && window.Notification && Notification.permission === "granted") {
-                  new Notification(`Google Chat: ${space.name.replace(/^[^\s]+\s/, '')}`, {
+                  new Notification(`CML Chat: ${space.name.replace(/^[^\s]+\s/, '')}`, {
                     body: `${msg.senderName}: ${msg.content}`,
                     icon: "https://cml.com.fj/wp-content/uploads/2025/12/CML-Logo-White-BG-Landscape-e1780482084995.png"
                   });
@@ -490,7 +506,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
               {
                 senderName: "Charles Cebujano",
                 senderEmail: "digitalmedia@cml.com.fj",
-                content: "Welcome to the integrated Google Chat channel! This widget connects our CML Portfolio Portal directly with Google Chat spaces in real-time.",
+                content: "Welcome to the integrated CML Chat channel! This widget connects our CML Portfolio Portal directly with CML Chat spaces in real-time.",
                 timestamp: new Date(now.getTime() - 3600000 * 4).toISOString()
               },
               {
@@ -711,8 +727,11 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
             setIsOpen(!isOpen);
             playChime();
           }}
-          className="w-14 h-14 bg-[#0f9d58] text-white hover:bg-[#0b8043] rounded-full flex items-center justify-center shadow-2xl hover:scale-105 transition-all select-none cursor-pointer border-2 border-white"
-          title="Open Integrated Google Chat"
+          className="w-14 h-14 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-105 transition-all select-none cursor-pointer border-2 border-white"
+          style={{ backgroundColor: primaryColor }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = darkColor}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = primaryColor}
+          title="Open Integrated CML Chat"
         >
           {isOpen ? <Minimize2 size={24} /> : <MessageSquare size={24} />}
           {unreadTotal > 0 && (
@@ -730,17 +749,17 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
           className="fixed bottom-24 right-6 w-96 h-[550px] bg-white border border-slate-200 shadow-2xl flex flex-col z-[110] overflow-hidden"
         >
           {/* Header */}
-          <div className="bg-[#0f9d58] text-white px-4 py-3.5 flex items-center justify-between select-none shrink-0">
+          <div className="text-white px-4 py-3.5 flex items-center justify-between select-none shrink-0" style={{ backgroundColor: primaryColor }}>
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-sm">
                 💬
               </div>
               <div>
                 <h3 className="text-xs font-display uppercase tracking-wider font-extrabold flex items-center gap-1.5">
-                  Google Chat
-                  <span className="bg-emerald-200 text-emerald-900 text-[7px] font-sans px-1.5 py-0.2 rounded-full uppercase font-black">Linked</span>
+                  CML Chat
+                  <span className="bg-white/20 text-white text-[7px] font-sans px-1.5 py-0.2 rounded-full uppercase font-black">Linked</span>
                 </h3>
-                <p className="text-[9px] text-emerald-100 font-sans">Portfolio Forums & Alerts Sync</p>
+                <p className="text-[9px] text-white/80 font-sans">Portfolio Forums & Alerts Sync</p>
               </div>
             </div>
 
@@ -773,87 +792,127 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
           </div>
           
           {/* Google Workspace Auth Status Banner */}
-          <div className="bg-emerald-50/75 border-b border-emerald-100/80 px-4 py-2.5 shrink-0 text-xs">
+          <div className={`px-4 py-2.5 shrink-0 text-xs border-b ${
+            companyId === "ramada" 
+              ? "bg-red-50/75 border-red-100/80" 
+              : (companyId === "wyndham" 
+                  ? "bg-teal-50/75 border-teal-100/80" 
+                  : "bg-amber-50/75 border-amber-100/80")
+          }`}>
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[9px] font-sans font-bold uppercase tracking-wider text-slate-500">
-                Google Workspace Chat Sync
+                CML Workspace Chat Sync
               </span>
-              <span className="text-[8px] text-emerald-800 font-sans font-semibold bg-emerald-100/50 px-1.5 py-0.5 rounded">
+              <span className={`text-[8px] font-sans font-semibold px-1.5 py-0.5 rounded ${
+                companyId === "ramada" 
+                  ? "text-red-800 bg-red-100/50" 
+                  : (companyId === "wyndham" 
+                      ? "text-teal-800 bg-teal-100/50" 
+                      : "text-amber-800 bg-amber-100/50")
+              }`}>
                 Active: {getPropertyName(companyId)}
               </span>
             </div>
             
             <div className="flex flex-col gap-1">
-              {["wyndham", "ramada", "cml"].map((propId) => {
-                const conn = connections[propId];
-                const isLinked = !!conn?.accessToken;
-                const isActive = propId === companyId;
-                
-                return (
-                  <div 
-                    key={propId} 
-                    className={`flex items-center justify-between px-2 py-1 rounded transition-all ${
-                      isActive 
-                        ? "bg-emerald-100/60 border border-emerald-200/50 shadow-xs" 
-                        : "bg-white/60 border border-slate-100/70"
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isLinked ? "bg-emerald-500 animate-pulse" : "bg-slate-300"}`} />
-                      <div className="text-left truncate">
-                        <span className={`text-[9px] font-sans font-bold ${isActive ? "text-slate-900 font-extrabold" : "text-slate-700"}`}>
-                          {getPropertyName(propId)} {isActive && <span className="text-[8px] text-emerald-700 font-normal">(Current)</span>}
-                        </span>
-                        <p className="text-[8px] text-slate-400 font-mono truncate max-w-[190px] leading-none mt-0.5">
-                          {isLinked ? conn.email : "Not Linked"}
-                        </p>
+              {["wyndham", "ramada", "cml"]
+                .filter((propId) => {
+                  if (companyId === "ramada" && propId === "wyndham") return false;
+                  if (companyId === "wyndham" && propId === "ramada") return false;
+                  return true;
+                })
+                .map((propId) => {
+                  const conn = connections[propId];
+                  const isLinked = !!conn?.accessToken;
+                  const isActive = propId === companyId;
+                  
+                  return (
+                    <div 
+                      key={propId} 
+                      className={`flex items-center justify-between px-2 py-1 rounded transition-all ${
+                        isActive 
+                          ? (companyId === "ramada" 
+                              ? "bg-red-100/60 border border-red-200/50 shadow-xs" 
+                              : (companyId === "wyndham" 
+                                  ? "bg-teal-100/60 border border-teal-200/50 shadow-xs" 
+                                  : "bg-amber-100/60 border border-amber-200/50 shadow-xs"))
+                          : "bg-white/60 border border-slate-100/70"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isLinked ? "bg-emerald-500 animate-pulse" : "bg-slate-300"}`} />
+                        <div className="text-left truncate">
+                          <span className={`text-[9px] font-sans font-bold ${isActive ? "text-slate-900 font-extrabold" : "text-slate-700"}`}>
+                            {getPropertyName(propId)} {isActive && <span className={`text-[8px] font-normal ${companyId === "ramada" ? "text-red-750" : (companyId === "wyndham" ? "text-teal-750" : "text-amber-750")}`}>(Current)</span>}
+                          </span>
+                          <p className="text-[8px] text-slate-400 font-mono truncate max-w-[190px] leading-none mt-0.5">
+                            {isLinked ? conn.email : "Not Linked"}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-1">
+                        {isLinked ? (
+                          <button 
+                            onClick={() => {
+                              disconnectGoogleWorkspaceProperty(propId);
+                              setConnections(getGoogleWorkspaceConnections());
+                              if (propId === companyId) {
+                                setRealSpaces(null);
+                                setApiError(null);
+                              }
+                              toastService.info(`Disconnected ${getPropertyName(propId)}.`);
+                            }}
+                            className="text-[8px] text-red-500 hover:text-red-700 font-sans font-semibold hover:underline bg-red-50 hover:bg-red-100/40 px-1.5 py-0.5 rounded transition-colors"
+                          >
+                            Unlink
+                          </button>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              setIsConnecting(true);
+                              try {
+                                const token = await connectGoogleWorkspace(propId);
+                                if (token) {
+                                  const updated = getGoogleWorkspaceConnections();
+                                  const email = updated[propId]?.email || "";
+                                  const domain = email.trim().toLowerCase().split("@")[1] || "";
+                                  
+                                  if (propId === "ramada" && domain === "wyndhamgardenwailoaloafiji.com") {
+                                    disconnectGoogleWorkspaceProperty(propId);
+                                    setConnections(getGoogleWorkspaceConnections());
+                                    toastService.error("Linking failed: @wyndhamgardenwailoaloafiji.com email is not allowed for Ramada Suites.");
+                                    return;
+                                  }
+                                  if (propId === "wyndham" && domain === "ramadawailoaloafiji.com") {
+                                    disconnectGoogleWorkspaceProperty(propId);
+                                    setConnections(getGoogleWorkspaceConnections());
+                                    toastService.error("Linking failed: @ramadawailoaloafiji.com email is not allowed for Wyndham Garden.");
+                                    return;
+                                  }
+                                  
+                                  setConnections(updated);
+                                  toastService.success(`Linked ${getPropertyName(propId)} as ${email}!`);
+                                }
+                              } catch (e) {
+                                toastService.error(`Failed to link ${getPropertyName(propId)}.`);
+                              } finally {
+                                setIsConnecting(false);
+                              }
+                            }}
+                            disabled={isConnecting}
+                            className="text-white disabled:bg-slate-300 text-[8px] font-sans font-bold px-1.5 py-0.5 rounded transition-all shadow-xs"
+                            style={{ backgroundColor: primaryColor }}
+                            onMouseEnter={(e) => !isConnecting && (e.currentTarget.style.backgroundColor = darkColor)}
+                            onMouseLeave={(e) => !isConnecting && (e.currentTarget.style.backgroundColor = primaryColor)}
+                          >
+                            Link Gmail
+                          </button>
+                        )}
                       </div>
                     </div>
-                    
-                    <div className="flex items-center gap-1">
-                      {isLinked ? (
-                        <button 
-                          onClick={() => {
-                            disconnectGoogleWorkspaceProperty(propId);
-                            setConnections(getGoogleWorkspaceConnections());
-                            if (propId === companyId) {
-                              setRealSpaces(null);
-                              setApiError(null);
-                            }
-                            toastService.info(`Disconnected ${getPropertyName(propId)}.`);
-                          }}
-                          className="text-[8px] text-red-500 hover:text-red-700 font-sans font-semibold hover:underline bg-red-50 hover:bg-red-100/40 px-1.5 py-0.5 rounded transition-colors"
-                        >
-                          Unlink
-                        </button>
-                      ) : (
-                        <button
-                          onClick={async () => {
-                            setIsConnecting(true);
-                            try {
-                              const token = await connectGoogleWorkspace(propId);
-                              if (token) {
-                                const updated = getGoogleWorkspaceConnections();
-                                setConnections(updated);
-                                const email = updated[propId]?.email || "";
-                                toastService.success(`Linked ${getPropertyName(propId)} as ${email}!`);
-                              }
-                            } catch (e) {
-                              toastService.error(`Failed to link ${getPropertyName(propId)}.`);
-                            } finally {
-                              setIsConnecting(false);
-                            }
-                          }}
-                          disabled={isConnecting}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white disabled:bg-slate-300 text-[8px] font-sans font-bold px-1.5 py-0.5 rounded transition-all shadow-xs"
-                        >
-                          Link Gmail
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           </div>
 
@@ -889,7 +948,8 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                     setActiveCall(prev => prev ? { ...prev, status: "connected" } : null);
                   }, 2500);
                 }}
-                className="p-1 hover:bg-slate-200 hover:text-[#0f9d58] transition-colors"
+                className="p-1 hover:bg-slate-200 transition-colors"
+                style={{ color: primaryColor }}
                 title="Start Voice Call"
               >
                 <Phone size={13} />
@@ -909,7 +969,8 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                     setActiveCall(prev => prev ? { ...prev, status: "connected" } : null);
                   }, 2500);
                 }}
-                className="p-1 hover:bg-slate-200 hover:text-[#0f9d58] transition-colors"
+                className="p-1 hover:bg-slate-200 transition-colors"
+                style={{ color: primaryColor }}
                 title="Start Video Call"
               >
                 <Video size={13} />
@@ -919,14 +980,16 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                   setShowSearch(!showSearch);
                   if (showSearch) setSearchQuery("");
                 }}
-                className={`p-1 hover:bg-slate-200 transition-colors ${showSearch ? 'text-[#0f9d58]' : ''}`}
+                className="p-1 hover:bg-slate-200 transition-colors"
+                style={{ color: showSearch ? primaryColor : undefined }}
                 title="Search Messages"
               >
                 <Search size={14} />
               </button>
               <button 
                 onClick={() => setShowMembers(!showMembers)}
-                className={`p-1 hover:bg-slate-200 transition-colors ${showMembers ? 'text-[#0f9d58]' : ''}`}
+                className="p-1 hover:bg-slate-200 transition-colors"
+                style={{ color: showMembers ? primaryColor : undefined }}
                 title="Active Portfolio Presence"
               >
                 <Users size={14} />
@@ -965,7 +1028,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <span className="text-[7px] text-slate-400 uppercase font-bold mr-1">{member.status}</span>
-                      <span className="text-[8px] text-[#0f9d58] hover:underline font-bold font-sans">Chat</span>
+                      <span className="text-[8px] hover:underline font-bold font-sans" style={{ color: primaryColor }}>Chat</span>
                     </div>
                   </div>
                 ))}
@@ -981,7 +1044,8 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                 <span className="text-[8px] font-display uppercase tracking-widest text-slate-400 font-black">Active Spaces</span>
                 <button 
                   onClick={() => setIsCreatingSpace(true)}
-                  className="text-[#0f9d58] hover:text-[#0b8043] transition-colors p-0.5"
+                  className="transition-colors p-0.5"
+                  style={{ color: primaryColor }}
                   title="Add Space"
                 >
                   <PlusCircle size={12} />
@@ -1001,9 +1065,14 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                       }}
                       className={`w-full text-left px-2.5 py-2 text-[10px] border-b border-slate-100 flex flex-col gap-0.5 transition-all outline-none ${
                         isActive 
-                          ? "bg-emerald-50 border-l-2 border-l-[#0f9d58] text-emerald-800 font-bold" 
+                          ? "border-l-2 font-bold" 
                           : "text-slate-600 hover:bg-slate-100"
                       }`}
+                      style={isActive ? {
+                        backgroundColor: companyId === "ramada" ? "#fef2f2" : (companyId === "wyndham" ? "#f0fdfa" : "#fdfbeb"),
+                        borderLeftColor: primaryColor,
+                        color: primaryColor
+                      } : {}}
                     >
                       <span className="truncate">{space.name.replace(/^[^\s]+\s/, '')}</span>
                     </button>
@@ -1019,7 +1088,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                   <div className="space-y-3">
                     <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                       <h4 className="text-[10px] font-display uppercase tracking-wider text-slate-700 font-bold flex items-center gap-1.5">
-                        <PlusCircle size={14} className="text-[#0f9d58]" />
+                        <PlusCircle size={14} style={{ color: primaryColor }} />
                         Create New Space
                       </h4>
                       <button 
@@ -1067,7 +1136,10 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                       type="button"
                       onClick={() => handleAddSpace(newSpaceName, newSpaceDesc)}
                       disabled={!newSpaceName.trim()}
-                      className="flex-1 bg-[#0f9d58] hover:bg-[#0b8043] disabled:bg-slate-200 disabled:text-slate-400 text-white text-[9px] font-sans font-bold py-1.5 rounded transition-all shadow-sm"
+                      className="flex-1 disabled:bg-slate-200 disabled:text-slate-400 text-white text-[9px] font-sans font-bold py-1.5 rounded transition-all shadow-sm"
+                      style={{ backgroundColor: newSpaceName.trim() ? primaryColor : undefined }}
+                      onMouseEnter={(e) => newSpaceName.trim() && (e.currentTarget.style.backgroundColor = darkColor)}
+                      onMouseLeave={(e) => newSpaceName.trim() && (e.currentTarget.style.backgroundColor = primaryColor)}
                     >
                       Create Space
                     </button>
@@ -1093,7 +1165,9 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                               <button 
                                 type="button"
                                 onClick={() => handleStartPrivateChat(msg.senderName)}
-                                className="text-[8px] font-sans font-black text-slate-700 hover:text-[#0f9d58] hover:underline cursor-pointer select-none text-left"
+                                className="text-[8px] font-sans font-black text-slate-700 hover:underline cursor-pointer select-none text-left"
+                                onMouseEnter={(e) => e.currentTarget.style.color = primaryColor}
+                                onMouseLeave={(e) => e.currentTarget.style.color = ""}
                                 title={`Chat privately with ${msg.senderName}`}
                               >
                                 {msg.senderName}
@@ -1105,9 +1179,10 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                             <div 
                               className={`p-2.5 max-w-[90%] text-[10px] leading-relaxed break-words whitespace-pre-wrap ${
                                 isSelf 
-                                  ? 'bg-emerald-600 text-white rounded-l-md rounded-tr-md' 
+                                  ? 'text-white rounded-l-md rounded-tr-md' 
                                   : 'bg-slate-100 text-slate-800 rounded-r-md rounded-tl-md'
                               }`}
+                              style={isSelf ? { backgroundColor: primaryColor } : {}}
                             >
                               {msg.content}
 
@@ -1121,7 +1196,8 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                                       href={msg.attachmentUrl} 
                                       target="_blank" 
                                       rel="noreferrer" 
-                                      className="text-[6px] text-[#0f9d58] font-bold hover:underline"
+                                      className="text-[6px] font-bold hover:underline"
+                                      style={{ color: primaryColor }}
                                     >
                                       View mock upload
                                     </a>
@@ -1140,9 +1216,11 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                                     type="button"
                                     key={emoji}
                                     onClick={() => handleToggleReaction(msg, emoji)}
-                                    className={`text-[8px] px-1 bg-slate-50 hover:bg-slate-100 rounded-[2px] border ${
-                                      hasReacted ? 'border-[#0f9d58] bg-emerald-50' : 'border-slate-100'
-                                    }`}
+                                    className="text-[8px] px-1 bg-slate-50 hover:bg-slate-100 rounded-[2px] border"
+                                    style={hasReacted ? {
+                                      borderColor: primaryColor,
+                                      backgroundColor: companyId === "ramada" ? "#fef2f2" : (companyId === "wyndham" ? "#f0fdfa" : "#fdfbeb")
+                                    } : { borderColor: "#f1f5f9" }}
                                   >
                                     {emoji} {reactUsers.length > 0 && reactUsers.length}
                                   </button>
@@ -1162,12 +1240,19 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                     className="border-t border-slate-150 p-2 bg-slate-50 flex flex-col gap-1.5 shrink-0"
                   >
                     {simulatedAttachment && (
-                      <div className="bg-emerald-50 text-[8px] text-emerald-800 px-2 py-1 flex items-center justify-between border border-emerald-100 rounded-sm">
+                      <div className={`text-[8px] px-2 py-1 flex items-center justify-between border rounded-sm ${
+                        companyId === "ramada" 
+                          ? "bg-red-50 text-red-800 border-red-100" 
+                          : (companyId === "wyndham" 
+                              ? "bg-teal-50 text-teal-800 border-teal-100" 
+                              : "bg-amber-50 text-amber-800 border-amber-100")
+                      }`}>
                         <span className="truncate">📎 {simulatedAttachment.name}</span>
                         <button 
                           type="button" 
                           onClick={() => setSimulatedAttachment(null)} 
-                          className="text-emerald-950 font-bold"
+                          className="font-bold font-sans text-[10px] hover:scale-110 transition-transform"
+                          style={{ color: primaryColor }}
                         >
                           ✕
                         </button>
@@ -1195,13 +1280,18 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                         placeholder={`Reply to ${spaces.find(s => s.id === activeSpaceId)?.name.substring(3)}...`}
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
-                        className="flex-1 bg-white border border-slate-250 text-[10px] px-2.5 py-1.5 outline-none font-sans text-slate-800 focus:border-[#0f9d58]"
+                        className="flex-1 bg-white border border-slate-250 text-[10px] px-2.5 py-1.5 outline-none font-sans text-slate-800"
+                        onFocus={(e) => e.currentTarget.style.borderColor = primaryColor}
+                        onBlur={(e) => e.currentTarget.style.borderColor = ""}
                       />
 
                       <button
                         type="submit"
                         disabled={!newMessage.trim() && !simulatedAttachment}
-                        className="p-1.5 bg-[#0f9d58] text-white hover:bg-[#0b8043] disabled:bg-slate-300 disabled:text-slate-500 rounded-sm transition-all"
+                        className="p-1.5 text-white disabled:bg-slate-300 disabled:text-slate-500 rounded-sm transition-all"
+                        style={{ backgroundColor: (newMessage.trim() || simulatedAttachment) ? primaryColor : undefined }}
+                        onMouseEnter={(e) => (newMessage.trim() || simulatedAttachment) && (e.currentTarget.style.backgroundColor = darkColor)}
+                        onMouseLeave={(e) => (newMessage.trim() || simulatedAttachment) && (e.currentTarget.style.backgroundColor = primaryColor)}
                       >
                         <Send size={12} />
                       </button>
@@ -1216,7 +1306,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] uppercase font-display tracking-widest text-emerald-400 font-extrabold flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                      Google Chat Call
+                      CML Chat Call
                     </span>
                     <span className="text-[9px] text-slate-400 font-mono">
                       {activeCall.type === "video" ? "HD Video Sync" : "Voice Link"}
@@ -1237,15 +1327,15 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                         </div>
                         {activeCall.hasVideo && (
                           <div className="absolute top-2 right-2 w-16 h-12 bg-slate-900 rounded border border-slate-700 overflow-hidden shadow-md">
-                            <div className="w-full h-full bg-[#0f9d58]/20 flex items-center justify-center">
-                              <span className="text-[6px] text-emerald-400 font-sans font-black">You</span>
+                            <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: `${primaryColor}20` }}>
+                              <span className="text-[6px] text-white font-sans font-black opacity-80">You</span>
                             </div>
                           </div>
                         )}
                       </div>
                     ) : (
                       <div className="flex flex-col items-center gap-3">
-                        <div className="w-16 h-16 rounded-full bg-emerald-600/25 flex items-center justify-center border-2 border-emerald-500/50 animate-pulse">
+                        <div className="w-16 h-16 rounded-full flex items-center justify-center border-2 animate-pulse" style={{ backgroundColor: `${primaryColor}40`, borderColor: `${primaryColor}80` }}>
                           <span className="text-2xl">👤</span>
                         </div>
                         <div className="text-center">
@@ -1256,18 +1346,18 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                         </div>
                         {activeCall.status === "connected" && (
                           <div className="flex items-center gap-1 mt-2">
-                            <span className="w-1 h-3 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                            <span className="w-1 h-5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                            <span className="w-1 h-4 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
-                            <span className="w-1 h-6 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
-                            <span className="w-1 h-3 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.5s' }} />
+                            <span className="w-1 h-3 rounded-full animate-bounce" style={{ backgroundColor: primaryColor, animationDelay: '0.1s' }} />
+                            <span className="w-1 h-5 rounded-full animate-bounce" style={{ backgroundColor: primaryColor, animationDelay: '0.2s' }} />
+                            <span className="w-1 h-4 rounded-full animate-bounce" style={{ backgroundColor: primaryColor, animationDelay: '0.3s' }} />
+                            <span className="w-1 h-6 rounded-full animate-bounce" style={{ backgroundColor: primaryColor, animationDelay: '0.4s' }} />
+                            <span className="w-1 h-3 rounded-full animate-bounce" style={{ backgroundColor: primaryColor, animationDelay: '0.5s' }} />
                           </div>
                         )}
                       </div>
                     )}
                     
                     {activeCall.status === "connected" && (
-                      <span className="text-[10px] font-mono text-emerald-400 mt-3 font-semibold">
+                      <span className="text-[10px] font-mono mt-3 font-semibold" style={{ color: primaryColor }}>
                         <CallTimer />
                       </span>
                     )}

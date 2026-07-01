@@ -83,6 +83,21 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
+// Proactively purge old caches once on startup to ensure no stale assets are used
+try {
+  if (typeof window !== "undefined" && "caches" in window) {
+    caches.keys().then((keys) => {
+      keys.forEach((key) => {
+        caches.delete(key).then(() => {
+          console.log("[PWA Cache Clean] Purged stale cache:", key);
+        });
+      });
+    });
+  }
+} catch (e) {
+  console.warn("[PWA Cache Clean] Failed:", e);
+}
+
 // Register Service Worker for PWA Offline Caching and Mobile Push Notifications
 try {
   if ("serviceWorker" in navigator) {
