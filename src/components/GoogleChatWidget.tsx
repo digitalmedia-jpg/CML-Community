@@ -29,8 +29,15 @@ import {
   Volume2,
   VolumeX,
   Plus,
+  PlusCircle,
   Compass,
-  UserCheck
+  UserCheck,
+  Phone,
+  PhoneOff,
+  Video,
+  VideoOff,
+  Mic,
+  MicOff
 } from "lucide-react";
 import { toastService } from "../services/toastService";
 
@@ -103,8 +110,22 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     knownMessageIdsRef.current = new Set();
   }, [activeSpaceId]);
 
+  // Dynamic and custom spaces configuration
+  const [customSpaces, setCustomSpaces] = useState<ChatSpace[]>(() => {
+    try {
+      const saved = localStorage.getItem(`cml_custom_spaces_${companyId}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [isCreatingSpace, setIsCreatingSpace] = useState(false);
+  const [newSpaceName, setNewSpaceName] = useState("");
+  const [newSpaceDesc, setNewSpaceDesc] = useState("");
+
   // Simulated Space Config
-  const spaces: ChatSpace[] = [
+  const baseSpaces: ChatSpace[] = [
     { 
       id: "general-announcements", 
       name: "📢 general-announcements", 
@@ -130,6 +151,66 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
       unreadCount: 0
     }
   ];
+
+  const spaces = [...baseSpaces, ...customSpaces];
+
+  // Call & Video Simulation state
+  const [activeCall, setActiveCall] = useState<{
+    type: "voice" | "video";
+    status: "ringing" | "connected" | "ended";
+    participantName: string;
+    hasVideo: boolean;
+    hasMic: boolean;
+  } | null>(null);
+
+  // Sync custom spaces state on companyId change
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`cml_custom_spaces_${companyId}`);
+      setCustomSpaces(saved ? JSON.parse(saved) : []);
+    } catch (e) {
+      setCustomSpaces([]);
+    }
+  }, [companyId]);
+
+  // Create new Group Space/Forum
+  const handleAddSpace = (name: string, description: string) => {
+    if (!name.trim()) return;
+    const cleanName = name.trim().toLowerCase().replace(/\s+/g, '-');
+    const newSpace: ChatSpace = {
+      id: `custom-space-${cleanName}-${Date.now()}`,
+      name: `📁 ${cleanName}`,
+      description: description.trim() || "Custom staff group discussion forum",
+      unreadCount: 0
+    };
+    const updated = [...customSpaces, newSpace];
+    setCustomSpaces(updated);
+    localStorage.setItem(`cml_custom_spaces_${companyId}`, JSON.stringify(updated));
+    setActiveSpaceId(newSpace.id);
+    setIsCreatingSpace(false);
+    setNewSpaceName("");
+    setNewSpaceDesc("");
+    toastService.success(`Successfully created and synchronized group space #${cleanName}!`);
+  };
+
+  // Start Private Chat with a member
+  const handleStartPrivateChat = (memberName: string) => {
+    const dmId = `dm-${memberName.toLowerCase().replace(/\s+/g, '-')}`;
+    const existing = spaces.find(s => s.id === dmId);
+    if (!existing) {
+      const newSpace: ChatSpace = {
+        id: dmId,
+        name: `👤 ${memberName}`,
+        description: `Private secure communication with ${memberName}`,
+        unreadCount: 0
+      };
+      const updated = [...customSpaces, newSpace];
+      setCustomSpaces(updated);
+      localStorage.setItem(`cml_custom_spaces_${companyId}`, JSON.stringify(updated));
+    }
+    setActiveSpaceId(dmId);
+    toastService.success(`Started secure private direct message with ${memberName}.`);
+  };
 
   // Active Colleagues list
   const activeMembers: MemberPresence[] = [
@@ -314,12 +395,36 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     return () => unsubscribe();
   }, [companyId, activeSpaceId, soundEnabled, notificationsEnabled]);
 
+  // Request browser notification permissions on mount
+  useEffect(() => {
+    if (window.Notification && Notification.permission === "default") {
+      Notification.requestPermission().then((permission) => {
+        if (permission === "granted") {
+          toastService.success("Desktop alerts activated! You will receive system push updates.");
+        }
+      });
+    }
+  }, []);
+
   // Request browser notification permissions on first manual toggle/click
   const enableBrowserNotifications = () => {
-    if (window.Notification && Notification.permission !== "granted") {
-      Notification.requestPermission();
+    if (window.Notification) {
+      if (Notification.permission !== "granted") {
+        Notification.requestPermission().then((perm) => {
+          if (perm === "granted") {
+            toastService.success("Push notifications authorized!");
+            setNotificationsEnabled(true);
+          } else {
+            toastService.error("Push notifications denied by browser settings.");
+            setNotificationsEnabled(false);
+          }
+        });
+      } else {
+        setNotificationsEnabled(!notificationsEnabled);
+      }
+    } else {
+      toastService.warning("Notifications not supported in this browser.");
     }
-    setNotificationsEnabled(!notificationsEnabled);
   };
 
   // Pre-seed some initial professional messages when a space is empty
