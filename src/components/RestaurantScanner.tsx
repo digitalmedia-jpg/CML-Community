@@ -37,7 +37,8 @@ import {
   getDoc, 
   setDoc, 
   addDoc, 
-  serverTimestamp 
+  serverTimestamp,
+  onSnapshot
 } from "../lib/firebase";
 import { motion, AnimatePresence } from "motion/react";
 import RewardsConfigurator from "./RewardsConfigurator";
@@ -392,9 +393,48 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
     }
   };
 
-  // Load database on mount
+  // Load database on mount with real-time updates
   useEffect(() => {
-    fetchGuests();
+    setLoading(true);
+    const colRef = collection(db, `restaurant-guests-${companyId}`);
+    const unsubscribe = onSnapshot(colRef, (snapshot) => {
+      const list: GuestProfile[] = [];
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        list.push({
+          id: docSnap.id,
+          fullName: data.fullName || "",
+          email: data.email || "",
+          phone: data.phone || "",
+          visitCount: data.visitCount || 0,
+          rewardPoints: data.rewardPoints || 0,
+          lastVisited: data.lastVisited,
+          createdAt: data.createdAt
+        });
+      });
+
+      if (list.length === 0) {
+        // If collection is empty, trigger fetchGuests once to run seeding logic
+        fetchGuests();
+      } else {
+        setGuests(list);
+        setLoading(false);
+        // Sync selected profile
+        setSelectedProfile(current => {
+          if (!current && list.length > 0) return list[0];
+          if (current) {
+            const updated = list.find(g => g.id === current.id);
+            return updated || current;
+          }
+          return null;
+        });
+      }
+    }, (err) => {
+      console.error("Error with guest snapshot subscription:", err);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, [companyId]);
 
   // Load visits whenever active member changes

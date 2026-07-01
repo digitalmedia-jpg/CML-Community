@@ -137,6 +137,7 @@ import { syncLogger } from "./lib/syncLogger";
 import { ToastContainer } from "./components/ToastContainer";
 import { toastService } from "./services/toastService";
 import { GoogleAIPlanMan } from "./components/GoogleAIPlanMan";
+import { GoogleChatWidget } from "./components/GoogleChatWidget";
 import { SopBatchUploadModal } from "./components/SopBatchUploadModal";
 import { ImageLightboxModal } from "./components/ImageLightboxModal";
 import { AdminDashboard } from "./components/AdminDashboard";
@@ -629,6 +630,87 @@ function DashboardSkeleton({ companyId }: { companyId: string | null }) {
     </div>
   );
 }
+
+const SignaturePad: React.FC<{ onSave: (url: string) => void, onClear: () => void }> = ({ onSave, onClear }) => {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+  }, []);
+
+  const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
+    setIsDrawing(true);
+    draw(e);
+  };
+
+  const stopDrawing = () => {
+    setIsDrawing(false);
+    const canvas = canvasRef.current;
+    if (canvas) {
+      onSave(canvas.toDataURL());
+    }
+  };
+
+  const draw = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!isDrawing) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = ('touches' in e) ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
+    const y = ('touches' in e) ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  };
+
+  const clear = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (canvas && ctx) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.beginPath();
+      onClear();
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="border border-slate-300 bg-white rounded-sm">
+        <canvas 
+          ref={canvasRef}
+          width={400}
+          height={150}
+          className="w-full h-[150px] cursor-crosshair touch-none bg-slate-50/50"
+          onMouseDown={startDrawing}
+          onMouseUp={stopDrawing}
+          onMouseOut={stopDrawing}
+          onMouseMove={draw}
+          onTouchStart={startDrawing}
+          onTouchEnd={stopDrawing}
+          onTouchMove={draw}
+        />
+      </div>
+      <button 
+        type="button" 
+        onClick={clear}
+        className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-[10px] font-sans font-bold uppercase tracking-wider text-slate-700 transition-colors rounded-sm border border-slate-200"
+      >
+        Clear Signature
+      </button>
+    </div>
+  );
+};
 
 export default function App() {
   console.log("[DEBUG App.tsx] imported db is:", db, "type of db:", typeof db, "is Firestore?", db && typeof db === 'object' && 'app' in db);
@@ -1474,10 +1556,18 @@ export default function App() {
     reporterRole: "",
     photoBase64: "",
     propertyId: "",
+    assignedDepartment: "Front Office",
   });
   const [showComplaintForm, setShowComplaintForm] = useState(false);
   const [reporterTypeSelect, setReporterTypeSelect] = useState("Staff Member");
   const [reporterDeptInput, setReporterDeptInput] = useState("");
+  
+  // 3-Level Guest Recovery Floating Overlay Workflow States
+  const [showApprovalOverlayModal, setShowApprovalOverlayModal] = useState(false);
+  const [approvalOverlayNotes, setApprovalOverlayNotes] = useState("");
+  const [approvalOverlayStaffName, setApprovalOverlayStaffName] = useState("");
+  const [approvalOverlaySignature, setApprovalOverlaySignature] = useState("");
+  const [approvalOverlayLevel, setApprovalOverlayLevel] = useState<1 | 2 | 3>(1);
   const [selectedComplaint, setSelectedComplaint] = useState<any>(null);
   useEffect(() => {
     if (!selectedComplaint) return;
@@ -2436,6 +2526,7 @@ export default function App() {
         reporterRole: "",
         photoBase64: "",
         propertyId: "",
+        assignedDepartment: "Front Office",
       });
       setReporterDeptInput("");
       setReporterTypeSelect("Staff Member");
@@ -2510,6 +2601,7 @@ export default function App() {
         reporterRole: "",
         photoBase64: "",
         propertyId: "",
+        assignedDepartment: "Front Office",
       });
       setReporterDeptInput("");
       setReporterTypeSelect("Staff Member");
@@ -2556,6 +2648,7 @@ export default function App() {
           reporterRole: "",
           photoBase64: "",
           propertyId: "",
+          assignedDepartment: "Front Office",
         });
         setReporterDeptInput("");
         setReporterTypeSelect("Staff Member");
@@ -5946,6 +6039,23 @@ export default function App() {
                                     placeholder="e.g. Jean-Luc"
                                   />
                                </div>
+                             <div className="space-y-2">
+                                <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800">Concerned Department (Who will attend to the complaint)</label>
+                                <select 
+                                  value={complaintForm.assignedDepartment || "Front Office"}
+                                  onChange={(e) => setComplaintForm({...complaintForm, assignedDepartment: e.target.value})}
+                                  className="w-full bg-slate-50 border-none px-6 py-4 text-sm font-serif italic focus:ring-1 focus:ring-gold/50 font-serif"
+                                >
+                                  <option value="Front Office">Front Office (GSA / Reception)</option>
+                                  <option value="Housekeeping">Housekeeping</option>
+                                  <option value="Food & Beverage">Food & Beverage (F&B)</option>
+                                  <option value="Engineering & Maintenance">Engineering & Maintenance</option>
+                                  <option value="Accounts & Billing">Accounts & Billing</option>
+                                  <option value="Security">Security</option>
+                                  <option value="Executive Office">Executive Office (GM / OM)</option>
+                                </select>
+                             </div>
+
                                <div className="space-y-2">
                                   <label className="text-[10px] font-display uppercase tracking-widest font-black text-slate-800">Your Department / Group / Guest Status</label>
                                   <input 
@@ -6260,182 +6370,185 @@ export default function App() {
                                           Execute Dispatch
                                         </button>
                                      </div>
-                                  </div>
-
-                                  <div className="p-6 border border-emerald-100 bg-emerald-50/20 rounded-sm space-y-6">
-                                     <h4 className="text-[10px] font-display uppercase tracking-widest text-emerald-600 font-extrabold border-b border-emerald-100 pb-3 flex items-center gap-2">
-                                        🛡️ Multi-Step Approval & Resolution
+                                   <div className="p-6 border border-emerald-100 bg-emerald-50/20 rounded-sm space-y-6">
+                                     <h4 className="text-[10px] font-display uppercase tracking-widest text-emerald-600 font-extrabold border-b border-emerald-100 pb-3 flex items-center justify-between">
+                                        <span>🛡️ Multi-Level Clearance</span>
+                                        <span className="text-[8px] px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-sans uppercase font-bold tracking-wider">Rank-Authorized</span>
                                      </h4>
                                      
-                                     {/* Step 1: HOD Approval Status */}
-                                     <div className="space-y-2 border-b border-emerald-100/50 pb-4">
-                                        <div className="flex justify-between items-center">
-                                           <span className="text-[9px] font-display uppercase tracking-wider text-slate-400 font-bold">Step 1: HOD / Manager Review</span>
-                                           {selectedComplaint.hodApproved ? (
-                                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[8px] uppercase tracking-wider font-extrabold rounded-full">✓ Cleared</span>
-                                           ) : (
-                                              <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[8px] uppercase tracking-wider font-extrabold rounded-full">🔴 Pending Approval</span>
-                                           )}
-                                        </div>
-                                        
-                                        {selectedComplaint.hodApproved ? (
-                                           <p className="text-[10px] font-serif italic text-slate-600 leading-relaxed">
-                                              Approved by HOD <strong>{selectedComplaint.hodApprovedBy}</strong> {selectedComplaint.hodApprovedAt ? `on ${new Date(selectedComplaint.hodApprovedAt.seconds ? selectedComplaint.hodApprovedAt.seconds * 1000 : selectedComplaint.hodApprovedAt).toLocaleDateString()}` : "recently"}.
-                                           </p>
-                                        ) : (
-                                           <div className="space-y-3">
-                                              <p className="text-[10px] font-serif italic text-slate-500 leading-relaxed">
-                                                 Needs review and clearance by HOD/Manager (Manager or Administrator role required).
-                                              </p>
-                                              {(() => {
-                                                 const todayStr = new Date().toISOString().split("T")[0];
-                                                 const hasActiveDelegation = Array.isArray(workflowConfig?.delegations) && workflowConfig.delegations.some((del: any) => {
-                                                    if (del.toUserEmail?.toLowerCase() !== currentUser?.email?.toLowerCase()) return false;
-                                                    return todayStr >= del.startDate && todayStr <= del.endDate;
-                                                 });
-                                                 const canHODApprove = userRole === "Manager" || userRole === "Administrator" || userRole === "Super Admin" || userRole === "Audit" || userRole === "admin" || hasActiveDelegation;
-                                                 
-                                                 return canHODApprove && (
-                                                    <button
-                                                       onClick={async () => {
-                                                          try {
-                                                             const authorName = currentUser?.displayName || currentUser?.email?.split('@')[0] || "HOD Manager";
-                                                             
-                                                             await updateDoc(doc(db, `complaints-${selectedComplaint.propertyId || selectedCompany || 'cml'}`, selectedComplaint.id), {
-                                                                hodApproved: true,
-                                                                hodApprovedBy: authorName,
-                                                                hodApprovedAt: new Date(),
-                                                                status: "HOD Approved",
-                                                                updates: arrayUnion({
-                                                                   message: `STEP 1 APPROVED: Department Head (HOD) approval granted by ${authorName}.`,
-                                                                   authorName: "SYSTEM_ACTION",
-                                                                   timestamp: new Date()
-                                                                })
-                                                             });
-
-                                                             // Trigger background webhook of Google Chat & Emails
-                                                             fetch("/api/notify-complaint-update", {
-                                                                method: "POST",
-                                                                headers: { "Content-Type": "application/json" },
-                                                                body: JSON.stringify({
-                                                                   complaint: selectedComplaint,
-                                                                   action: "hod_approve",
-                                                                   authorName,
-                                                                   companyId: selectedComplaint.propertyId || selectedCompany || 'cml'
-                                                                })
-                                                             }).catch(err => console.error("HOD Approve notification failed", err));
-
-                                                             setSelectedComplaint(prev => ({
-                                                                ...prev,
-                                                                hodApproved: true,
-                                                                hodApprovedBy: authorName,
-                                                                hodApprovedAt: new Date(),
-                                                                status: "HOD Approved"
-                                                             }));
-                                                          } catch (e: any) { alert("Error granting HOD Approval: " + e.message); }
-                                                       }}
-                                                       className="w-full py-2 bg-amber-600 text-white text-[9px] font-display uppercase tracking-widest font-black hover:bg-amber-700 transition-colors shadow-sm cursor-pointer"
-                                                    >
-                                                       ✓ Grant HOD / Manager Approval
-                                                    </button>
-                                                 );
-                                              })()}
+                                     <div className="relative border-l-2 border-emerald-100 pl-4 ml-2 space-y-6">
+                                        {/* LEVEL 1: GSA CLEARANCE */}
+                                        <div className="relative">
+                                           {/* Bullet node */}
+                                           <div className={cn(
+                                              "absolute -left-[25px] top-1.5 w-4 h-4 rounded-full border-2 flex items-center justify-center bg-white",
+                                              selectedComplaint.level1Completed ? "border-emerald-500 bg-emerald-50" : "border-slate-300"
+                                           )}>
+                                              {selectedComplaint.level1Completed && <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />}
                                            </div>
-                                        )}
-                                     </div>
-
-                                     {/* Step 2: SuperAdmin Verification */}
-                                     <div className="space-y-4">
-                                        <div className="flex justify-between items-center">
-                                           <span className="text-[9px] font-display uppercase tracking-wider text-slate-400 font-bold">Step 2: SuperAdmin Resolution</span>
-                                           {selectedComplaint.superAdminApproved ? (
-                                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[8px] uppercase tracking-wider font-extrabold rounded-full">✓ Resolved & Sealed</span>
-                                           ) : (
-                                              <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[8px] uppercase tracking-wider font-extrabold rounded-full">⏳ Awaiting Verification</span>
-                                           )}
-                                        </div>
-
-                                        {selectedComplaint.superAdminApproved ? (
-                                           <p className="text-[10px] font-serif italic text-slate-600 leading-relaxed">
-                                              Verified and closed by SuperAdmin <strong>{selectedComplaint.superAdminApprovedBy}</strong> {selectedComplaint.superAdminApprovedAt ? `on ${new Date(selectedComplaint.superAdminApprovedAt.seconds ? selectedComplaint.superAdminApprovedAt.seconds * 1000 : selectedComplaint.superAdminApprovedAt).toLocaleDateString()}` : "recently"}.
-                                           </p>
-                                        ) : (
-                                           <div className="space-y-4">
-                                              <p className="text-[10px] font-serif italic text-slate-500 leading-relaxed">
-                                                 Final audit, resolution, and closure sign-off by CML Corporate SuperAdmin (Charles Cebujano / Root Admin).
-                                              </p>
-                                              
-                                              {/* Input form details for Resolution */}
-                                              <div className="space-y-3 p-3 bg-white border border-slate-150 rounded-sm">
-                                                 <div className="space-y-1">
-                                                    <label className="text-[8px] font-display uppercase tracking-widest text-slate-500 font-bold">Resolving Department</label>
-                                                    <input 
-                                                       value={resolveForm.department}
-                                                       onChange={(e) => setResolveForm({ ...resolveForm, department: e.target.value })}
-                                                       className="w-full bg-slate-50 border border-slate-200 px-3 py-1.5 text-[10px] font-serif italic outline-none focus:border-emerald-300"
-                                                       placeholder="e.g. Operations / I.T"
-                                                    />
-                                                 </div>
-                                                 <div className="space-y-1">
-                                                    <label className="text-[8px] font-display uppercase tracking-widest text-slate-500 font-bold">Closed By (SuperAdmin Name)</label>
-                                                    <input 
-                                                       value={resolveForm.resolvedBy}
-                                                       onChange={(e) => setResolveForm({ ...resolveForm, resolvedBy: e.target.value })}
-                                                       className="w-full bg-slate-50 border border-slate-200 px-3 py-1.5 text-[10px] font-serif italic outline-none focus:border-emerald-300"
-                                                       placeholder="SuperAdmin Name"
-                                                    />
-                                                 </div>
+                                           <div className="space-y-1">
+                                              <div className="flex justify-between items-center">
+                                                 <span className="text-[9px] font-display uppercase tracking-wider text-slate-700 font-bold">Level 1: GSA Initial Recovery</span>
+                                                 {selectedComplaint.level1Completed ? (
+                                                    <span className="text-[8px] font-sans font-bold text-emerald-600">Cleared ✓</span>
+                                                 ) : (
+                                                    <span className="text-[8px] font-sans font-bold text-amber-600">Active ⚡</span>
+                                                 )}
                                               </div>
-
-                                              {(userRole === "Administrator" || userRole === "Super Admin" || userRole === "admin") && (
-                                                 <button
-                                                    onClick={async () => {
-                                                       if (!resolveForm.department) { alert("Please specify resolving department"); return; }
-                                                       if (!resolveForm.resolvedBy) { alert("Please specify resolving SuperAdmin Name"); return; }
-                                                       try {
-                                                          const authorName = resolveForm.resolvedBy;
-                                                          
-                                                          await updateDoc(doc(db, `complaints-${selectedComplaint.propertyId || selectedCompany || 'cml'}`, selectedComplaint.id), {
-                                                             superAdminApproved: true,
-                                                             superAdminApprovedBy: authorName,
-                                                             superAdminApprovedAt: new Date(),
-                                                             status: "Resolved",
-                                                             resolvedAt: serverTimestamp(),
-                                                             resolvedBy: authorName,
-                                                             resolvedDepartment: resolveForm.department,
-                                                             updates: arrayUnion({
-                                                                message: `STEP 2 RESOLVED: Final SuperAdmin sign-off granted by ${authorName} (${resolveForm.department}).`,
-                                                                authorName: "SYSTEM_ACTION",
-                                                                timestamp: new Date()
-                                                             })
-                                                          });
-
-                                                          // Trigger background webhook of Google Chat & Emails
-                                                          fetch("/api/notify-complaint-update", {
-                                                             method: "POST",
-                                                             headers: { "Content-Type": "application/json" },
-                                                             body: JSON.stringify({
-                                                                complaint: selectedComplaint,
-                                                                action: "superadmin_approve",
-                                                                authorName,
-                                                                companyId: selectedComplaint.propertyId || selectedCompany || 'cml',
-                                                                department: resolveForm.department,
-                                                                resolvedBy: authorName
-                                                             })
-                                                          }).catch(err => console.error("SuperAdmin Approve notification failed", err));
-
-                                                          setSelectedComplaint(null);
-                                                          setResolveForm(prev => ({ ...prev, department: "" }));
-                                                       } catch (e: any) { alert("Error granting SuperAdmin Resolution: " + e.message); }
-                                                    }}
-                                                    className="w-full py-3 bg-emerald-600 text-white text-[9px] font-display uppercase tracking-widest font-black hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20 cursor-pointer"
-                                                 >
-                                                    👑 Approve & Resolve Log Officially
-                                                 </button>
+                                              {selectedComplaint.level1Completed ? (
+                                                 <div className="text-[10px] font-serif italic text-slate-600 space-y-1 bg-white/50 p-2 border border-slate-100">
+                                                    <p>Staff: <strong className="text-slate-850 font-sans not-italic">{selectedComplaint.level1Staff}</strong></p>
+                                                    <p className="text-slate-500">" {selectedComplaint.level1Notes} "</p>
+                                                    {selectedComplaint.level1CompletedAt && (
+                                                       <p className="text-[8px] font-mono text-slate-400">
+                                                          {new Date(selectedComplaint.level1CompletedAt.seconds ? selectedComplaint.level1CompletedAt.seconds * 1000 : selectedComplaint.level1CompletedAt).toLocaleString()}
+                                                       </p>
+                                                    )}
+                                                 </div>
+                                              ) : (
+                                                 <div className="pt-1">
+                                                    <button
+                                                       type="button"
+                                                       onClick={() => {
+                                                          setApprovalOverlayLevel(1);
+                                                          setApprovalOverlayNotes("");
+                                                          setApprovalOverlayStaffName(currentUser?.displayName || currentUser?.email?.split('@')[0] || "");
+                                                          setApprovalOverlaySignature("");
+                                                          setShowApprovalOverlayModal(true);
+                                                       }}
+                                                       className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-display uppercase tracking-widest font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                                                    >
+                                                       ✍️ Enter Level 1 Clearance
+                                                    </button>
+                                                 </div>
                                               )}
                                            </div>
-                                        )}
+                                        </div>
+
+                                        {/* LEVEL 2: HOD / DUTY MANAGER */}
+                                        <div className="relative">
+                                           {/* Bullet node */}
+                                           <div className={cn(
+                                              "absolute -left-[25px] top-1.5 w-4 h-4 rounded-full border-2 flex items-center justify-center bg-white",
+                                              (selectedComplaint.level2Completed || selectedComplaint.hodApproved) ? "border-emerald-500 bg-emerald-50" : "border-slate-300"
+                                           )}>
+                                              {(selectedComplaint.level2Completed || selectedComplaint.hodApproved) && <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />}
+                                           </div>
+                                           <div className="space-y-1">
+                                              <div className="flex justify-between items-center">
+                                                 <span className="text-[9px] font-display uppercase tracking-wider text-slate-700 font-bold">Level 2: Duty Manager / HOD</span>
+                                                 {(selectedComplaint.level2Completed || selectedComplaint.hodApproved) ? (
+                                                    <span className="text-[8px] font-sans font-bold text-emerald-600">Cleared ✓</span>
+                                                 ) : selectedComplaint.level1Completed ? (
+                                                    <span className="text-[8px] font-sans font-bold text-amber-600">Awaiting ⏳</span>
+                                                 ) : (
+                                                    <span className="text-[8px] font-sans font-bold text-slate-400">Locked 🔒</span>
+                                                 )}
+                                              </div>
+                                              {(selectedComplaint.level2Completed || selectedComplaint.hodApproved) ? (
+                                                 <div className="text-[10px] font-serif italic text-slate-600 space-y-1 bg-white/50 p-2 border border-slate-100">
+                                                    <p>Supervisor: <strong className="text-slate-850 font-sans not-italic">{selectedComplaint.level2Supervisor || selectedComplaint.hodApprovedBy}</strong></p>
+                                                    <p className="text-slate-500">" {selectedComplaint.level2Notes || "Oversight clearance granted."} "</p>
+                                                    {(selectedComplaint.level2CompletedAt || selectedComplaint.hodApprovedAt) && (
+                                                       <p className="text-[8px] font-mono text-slate-400">
+                                                          {new Date((selectedComplaint.level2CompletedAt || selectedComplaint.hodApprovedAt).seconds ? (selectedComplaint.level2CompletedAt || selectedComplaint.hodApprovedAt).seconds * 1000 : (selectedComplaint.level2CompletedAt || selectedComplaint.hodApprovedAt)).toLocaleString()}
+                                                       </p>
+                                                    )}
+                                                 </div>
+                                              ) : (
+                                                 <div className="pt-1">
+                                                    <button
+                                                       type="button"
+                                                       disabled={!selectedComplaint.level1Completed}
+                                                       onClick={() => {
+                                                          setApprovalOverlayLevel(2);
+                                                          setApprovalOverlayNotes("");
+                                                          setApprovalOverlayStaffName(currentUser?.displayName || currentUser?.email?.split('@')[0] || "");
+                                                          setApprovalOverlaySignature("");
+                                                          setShowApprovalOverlayModal(true);
+                                                       }}
+                                                       className={cn(
+                                                          "px-3 py-1.5 text-white text-[9px] font-display uppercase tracking-widest font-black transition-all flex items-center gap-1.5 shadow-sm",
+                                                          selectedComplaint.level1Completed 
+                                                             ? "bg-amber-600 hover:bg-amber-700 cursor-pointer" 
+                                                             : "bg-slate-300 cursor-not-allowed opacity-50"
+                                                       )}
+                                                    >
+                                                       ✍️ Verify & Transfer to Level 3
+                                                    </button>
+                                                 </div>
+                                              )}
+                                           </div>
+                                        </div>
+
+                                        {/* LEVEL 3: OPERATIONS MANAGER / GM / AUDIT */}
+                                        <div className="relative">
+                                           {/* Bullet node */}
+                                           <div className={cn(
+                                              "absolute -left-[25px] top-1.5 w-4 h-4 rounded-full border-2 flex items-center justify-center bg-white",
+                                              (selectedComplaint.level3Completed || selectedComplaint.superAdminApproved) ? "border-emerald-500 bg-emerald-50" : "border-slate-300"
+                                           )}>
+                                              {(selectedComplaint.level3Completed || selectedComplaint.superAdminApproved) && <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />}
+                                           </div>
+                                           <div className="space-y-1">
+                                              <div className="flex justify-between items-center">
+                                                 <span className="text-[9px] font-display uppercase tracking-wider text-slate-700 font-bold">Level 3: Operations Mgr / GM / Audit</span>
+                                                 {(selectedComplaint.level3Completed || selectedComplaint.superAdminApproved) ? (
+                                                    <span className="text-[8px] font-sans font-bold text-emerald-600">Sealed & Dispatched ✓</span>
+                                                 ) : (selectedComplaint.level2Completed || selectedComplaint.hodApproved) ? (
+                                                    <span className="text-[8px] font-sans font-bold text-amber-600">GM Review ⏳</span>
+                                                 ) : (
+                                                    <span className="text-[8px] font-sans font-bold text-slate-400">Locked 🔒</span>
+                                                 )}
+                                              </div>
+                                              {(selectedComplaint.level3Completed || selectedComplaint.superAdminApproved) ? (
+                                                 <div className="text-[10px] font-serif italic text-slate-600 space-y-2 bg-white/50 p-2 border border-slate-100">
+                                                    <p>Manager/GM: <strong className="text-slate-850 font-sans not-italic">{selectedComplaint.level3Manager || selectedComplaint.superAdminApprovedBy}</strong></p>
+                                                    <p className="text-slate-500">" {selectedComplaint.level3Notes || "Final resolution and audit seal."} "</p>
+                                                    {(selectedComplaint.level3SignatureUrl || selectedComplaint.signatureUrl) && (
+                                                       <div className="border border-slate-200 bg-white p-1 rounded-sm max-w-[150px]">
+                                                          <p className="text-[7px] font-display uppercase tracking-wider text-slate-400 font-bold mb-0.5">Verified Signature</p>
+                                                          <img 
+                                                             src={selectedComplaint.level3SignatureUrl || selectedComplaint.signatureUrl} 
+                                                             alt="Executive Signature" 
+                                                             className="h-10 w-auto object-contain bg-slate-50"
+                                                             referrerPolicy="no-referrer"
+                                                          />
+                                                       </div>
+                                                    )}
+                                                    {(selectedComplaint.level3CompletedAt || selectedComplaint.superAdminApprovedAt) && (
+                                                       <p className="text-[8px] font-mono text-slate-400">
+                                                          {new Date((selectedComplaint.level3CompletedAt || selectedComplaint.superAdminApprovedAt).seconds ? (selectedComplaint.level3CompletedAt || selectedComplaint.superAdminApprovedAt).seconds * 1000 : (selectedComplaint.level3CompletedAt || selectedComplaint.superAdminApprovedAt)).toLocaleString()}
+                                                       </p>
+                                                    )}
+                                                 </div>
+                                              ) : (
+                                                 <div className="pt-1">
+                                                    <button
+                                                       type="button"
+                                                       disabled={!(selectedComplaint.level2Completed || selectedComplaint.hodApproved)}
+                                                       onClick={() => {
+                                                          setApprovalOverlayLevel(3);
+                                                          setApprovalOverlayNotes("");
+                                                          setApprovalOverlayStaffName(currentUser?.displayName || currentUser?.email?.split('@')[0] || "");
+                                                          setApprovalOverlaySignature("");
+                                                          setShowApprovalOverlayModal(true);
+                                                       }}
+                                                       className={cn(
+                                                          "px-3 py-1.5 text-white text-[9px] font-display uppercase tracking-widest font-black transition-all flex items-center gap-1.5 shadow-sm",
+                                                          (selectedComplaint.level2Completed || selectedComplaint.hodApproved)
+                                                             ? "bg-emerald-600 hover:bg-emerald-700 cursor-pointer" 
+                                                             : "bg-slate-300 cursor-not-allowed opacity-50"
+                                                       )}
+                                                    >
+                                                       ✍️ Final GM Sign-Off & Dispatch
+                                                    </button>
+                                                 </div>
+                                              )}
+                                           </div>
+                                        </div>
                                      </div>
+                                  </div>
                                   </div>
 
                                   <div className="p-6 border border-rose-100 bg-rose-50/20 space-y-4">
@@ -6467,6 +6580,189 @@ export default function App() {
                                </div>
                             </div>
                          </div>
+                      </motion.div>
+                    </div>
+                  )}
+                </AnimatePresence>
+
+                <AnimatePresence>
+                  {showApprovalOverlayModal && (
+                    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+                      <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setShowApprovalOverlayModal(false)}
+                        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                      />
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="relative w-full max-w-md bg-white shadow-2xl rounded-sm overflow-hidden border-t-4 border-emerald-500 z-10 p-6 flex flex-col space-y-4"
+                      >
+                        <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+                           <div>
+                              <h3 className="text-sm font-sans font-bold uppercase tracking-wider text-slate-800">
+                                 {approvalOverlayLevel === 1 && "Level 1 Clearance: GSA Sign-Off"}
+                                 {approvalOverlayLevel === 2 && "Level 2 Clearance: Supervisor/HOD Sign-Off"}
+                                 {approvalOverlayLevel === 3 && "Level 3 Clearance: OM / GM Final Sign-Off"}
+                              </h3>
+                              <p className="text-[10px] text-slate-400 font-sans">Enter verification & recovery details below</p>
+                           </div>
+                           <button 
+                              type="button" 
+                              onClick={() => setShowApprovalOverlayModal(false)}
+                              className="text-slate-400 hover:text-slate-600 font-bold"
+                           >
+                              ✕
+                           </button>
+                        </div>
+
+                        <div className="space-y-4">
+                           <div className="space-y-1">
+                              <label className="text-[9px] font-display uppercase tracking-widest text-slate-500 font-bold">Authorized Staff Name</label>
+                              <input 
+                                 type="text"
+                                 required
+                                 value={approvalOverlayStaffName}
+                                 onChange={(e) => setApprovalOverlayStaffName(e.target.value)}
+                                 placeholder="e.g. Charles Cebujano"
+                                 className="w-full bg-slate-50 border border-slate-200 px-3 py-2 text-xs font-serif italic outline-none focus:border-emerald-300"
+                              />
+                           </div>
+
+                           <div className="space-y-1">
+                              <label className="text-[9px] font-display uppercase tracking-widest text-slate-500 font-bold">Verification & Actions Notes</label>
+                              <textarea 
+                                 required
+                                 value={approvalOverlayNotes}
+                                 onChange={(e) => setApprovalOverlayNotes(e.target.value)}
+                                 placeholder="Detail what was done, resolution steps, or auditing remarks..."
+                                 className="w-full h-20 bg-slate-50 border border-slate-200 px-3 py-2 text-xs font-serif italic outline-none focus:border-emerald-300 resize-none"
+                              />
+                           </div>
+
+                           {approvalOverlayLevel === 3 && (
+                              <div className="space-y-1">
+                                 <label className="text-[9px] font-display uppercase tracking-widest text-slate-500 font-bold">Draw Executive Signature (Compulsory)</label>
+                                 <SignaturePad 
+                                    onSave={(url) => setApprovalOverlaySignature(url)}
+                                    onClear={() => setApprovalOverlaySignature("")}
+                                 />
+                                 {approvalOverlaySignature ? (
+                                    <p className="text-[8px] text-emerald-600 font-sans font-bold">✓ Signature captured and validated.</p>
+                                 ) : (
+                                    <p className="text-[8px] text-rose-500 font-sans font-bold">⚠️ Signature drawing is required before dispatch clearance.</p>
+                                 )}
+                              </div>
+                           )}
+                        </div>
+
+                        <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+                           <button
+                              type="button"
+                              onClick={() => setShowApprovalOverlayModal(false)}
+                              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-[10px] font-display uppercase tracking-wider text-slate-700 transition-all rounded-sm"
+                           >
+                              Cancel
+                           </button>
+                           <button
+                              type="button"
+                              disabled={!approvalOverlayStaffName.trim() || !approvalOverlayNotes.trim() || (approvalOverlayLevel === 3 && !approvalOverlaySignature)}
+                              onClick={async () => {
+                                 if (!approvalOverlayStaffName.trim() || !approvalOverlayNotes.trim()) return;
+                                 if (approvalOverlayLevel === 3 && !approvalOverlaySignature) {
+                                    alert("Please draw your signature to complete Level 3 executive clearance.");
+                                    return;
+                                 }
+                                 try {
+                                    const targetPropertyId = selectedComplaint.propertyId || selectedCompany || 'wyndham';
+                                    const updateData: any = {};
+                                    let logMsg = "";
+
+                                    if (approvalOverlayLevel === 1) {
+                                       updateData.level1Completed = true;
+                                       updateData.level1Staff = approvalOverlayStaffName;
+                                       updateData.level1Notes = approvalOverlayNotes;
+                                       updateData.level1CompletedAt = new Date();
+                                       updateData.status = "GSA Attended";
+                                       logMsg = `LEVEL 1 COMPLETED: GSA ${approvalOverlayStaffName} completed initial recovery. Notes: "${approvalOverlayNotes}"`;
+                                    } else if (approvalOverlayLevel === 2) {
+                                       updateData.level2Completed = true;
+                                       updateData.level2Supervisor = approvalOverlayStaffName;
+                                       updateData.level2Notes = approvalOverlayNotes;
+                                       updateData.level2CompletedAt = new Date();
+                                       updateData.hodApproved = true;
+                                       updateData.hodApprovedBy = approvalOverlayStaffName;
+                                       updateData.hodApprovedAt = new Date();
+                                       updateData.status = "HOD Approved";
+                                       logMsg = `LEVEL 2 APPROVED: Supervisor/HOD ${approvalOverlayStaffName} verified recovery. Notes: "${approvalOverlayNotes}"`;
+                                    } else if (approvalOverlayLevel === 3) {
+                                       updateData.level3Completed = true;
+                                       updateData.level3Manager = approvalOverlayStaffName;
+                                       updateData.level3Notes = approvalOverlayNotes;
+                                       updateData.level3SignatureUrl = approvalOverlaySignature;
+                                       updateData.level3CompletedAt = new Date();
+                                       updateData.superAdminApproved = true;
+                                       updateData.superAdminApprovedBy = approvalOverlayStaffName;
+                                       updateData.superAdminApprovedAt = new Date();
+                                       updateData.resolvedBy = approvalOverlayStaffName;
+                                       updateData.resolvedDepartment = "Executive & Audit";
+                                       updateData.status = "Resolved";
+                                       updateData.resolvedAt = new Date();
+                                       logMsg = `LEVEL 3 RESOLVED: GM/Operations Manager ${approvalOverlayStaffName} verified & signed-off for dispatch. Notes: "${approvalOverlayNotes}"`;
+                                    }
+
+                                    // Firestore update
+                                    await updateDoc(doc(db, `complaints-${targetPropertyId}`, selectedComplaint.id), {
+                                       ...updateData,
+                                       updates: arrayUnion({
+                                          message: logMsg,
+                                          authorName: "SYSTEM_ACTION",
+                                          timestamp: new Date()
+                                       })
+                                    });
+
+                                    // Webhook update
+                                    fetch("/api/notify-complaint-update", {
+                                       method: "POST",
+                                       headers: { "Content-Type": "application/json" },
+                                       body: JSON.stringify({
+                                          complaint: { ...selectedComplaint, ...updateData },
+                                          action: approvalOverlayLevel === 3 ? "superadmin_approve" : approvalOverlayLevel === 2 ? "hod_approve" : "gsa_clear",
+                                          authorName: approvalOverlayStaffName,
+                                          companyId: targetPropertyId,
+                                          notes: approvalOverlayNotes
+                                       })
+                                    }).catch(err => console.error("Webhook update notification failed", err));
+
+                                    // Local state update
+                                    setSelectedComplaint((prev: any) => ({
+                                       ...prev,
+                                       ...updateData,
+                                       updates: [...(Array.isArray(prev.updates) ? prev.updates : []), {
+                                          message: logMsg,
+                                          authorName: "SYSTEM_ACTION",
+                                          timestamp: new Date()
+                                       }]
+                                    }));
+
+                                    setShowApprovalOverlayModal(false);
+                                 } catch (err: any) {
+                                    alert("Error processing clearance update: " + err.message);
+                                 }
+                              }}
+                              className={cn(
+                                 "px-4 py-2 text-[10px] font-display uppercase tracking-wider text-white transition-all rounded-sm font-bold shadow-md",
+                                 (!approvalOverlayStaffName.trim() || !approvalOverlayNotes.trim() || (approvalOverlayLevel === 3 && !approvalOverlaySignature))
+                                    ? "bg-slate-300 cursor-not-allowed"
+                                    : "bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
+                              )}
+                           >
+                              Submit Clearance
+                           </button>
+                        </div>
                       </motion.div>
                     </div>
                   )}
@@ -8680,7 +8976,13 @@ export default function App() {
             ) : activeTab === "canary" ? (
               <CanaryPortal companyId={selectedCompany || 'cml'} />
             ) : activeTab === "lost-and-found" ? (
-              <LostAndFound userRole={userRole || undefined} companyId={selectedCompany || 'cml'} />
+              <LostAndFound 
+                userRole={userRole || undefined} 
+                companyId={selectedCompany || 'cml'} 
+                onPropertyChange={(propertyId) => {
+                  setSelectedCompany(propertyId);
+                }}
+              />
             ) : activeTab === "staff-mailer" ? (
               <StaffMailer companyId={selectedCompany || 'cml'} />
             ) : activeTab === "digital-flipbooks" ? (
@@ -9066,6 +9368,7 @@ export default function App() {
         </main>
       </div>
       <ToastContainer />
+      <GoogleChatWidget companyId={selectedCompany || 'cml'} />
       <GoogleAIPlanMan
          isOpen={isPlanManOpen}
          onClose={() => setIsPlanManOpen(false)}

@@ -171,12 +171,23 @@ const SignaturePad: React.FC<{ onSave: (url: string) => void, onClear: () => voi
   );
 };
 
-export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> = ({ userRole, companyId = "cml" }) => {
+export const LostAndFound: React.FC<{ 
+  userRole?: string, 
+  companyId?: string,
+  onPropertyChange?: (propertyId: string) => void
+}> = ({ userRole, companyId = "cml", onPropertyChange }) => {
   const [activeCompanyId, setActiveCompanyId] = useState<string>(companyId);
   
   useEffect(() => {
     setActiveCompanyId(companyId);
   }, [companyId]);
+
+  const handleCompanyChange = (propId: string) => {
+    setActiveCompanyId(propId);
+    if (onPropertyChange) {
+      onPropertyChange(propId);
+    }
+  };
 
   const [items, setItems] = useState<LostItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -928,7 +939,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
           return (
             <button
               key={prop.id}
-              onClick={() => setActiveCompanyId(prop.id)}
+              onClick={() => handleCompanyChange(prop.id)}
               className={cn(
                 "pb-2 font-extrabold transition-all relative flex items-center gap-1.5 whitespace-nowrap cursor-pointer",
                 isActive ? "text-gold border-b-2 border-gold font-black" : "text-slate-400 hover:text-slate-600"
@@ -994,7 +1005,7 @@ export const LostAndFound: React.FC<{ userRole?: string, companyId?: string }> =
             {([
               { id: "All", label: "Active Items" },
               { id: "Secured in Office", label: "Secured in Office" },
-              { id: "Claimed", label: "Dispatch Folder (Claimed)" },
+              { id: "Claimed", label: "(claimed)" },
               { id: "Disposed", label: "Dispose Folder (Disposed)" },
               { id: "Archived", label: "Archive Folder" }
             ] as const).map((tab) => (

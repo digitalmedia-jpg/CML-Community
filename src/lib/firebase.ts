@@ -134,6 +134,13 @@ function saveMockStore(updatedPath?: string, isDelete = false) {
   } catch (e) {}
   
   if (updatedPath) {
+    // Instantly trigger local snapshot listeners for real-time reactivity
+    triggerListeners(updatedPath);
+    const parts = updatedPath.split('/');
+    if (parts.length > 1) {
+      triggerListeners(parts.slice(0, -1).join('/'));
+    }
+
     if (isDelete) {
       syncWithServerDirect(undefined, [updatedPath], true);
     } else {
@@ -220,20 +227,28 @@ export async function syncWithServerDirect(updates?: Record<string, any>, delete
           }
         }
         
-        for (const k of Object.keys(MOCK_STORE)) {
-          if (!(k in data.db) && !k.startsWith('users/') && !pendingDeletes.includes(k)) {
-            if (!hasDoneInitialSync) {
-              // Gather client-only items on page load to sync back to server instead of deleting them!
-              clientOnlyKeys[k] = MOCK_STORE[k];
-            } else {
-              delete MOCK_STORE[k];
-              changedKeys.add(k);
+        if (data.db && Object.keys(data.db).length > 0) {
+          for (const k of Object.keys(MOCK_STORE)) {
+            if (!(k in data.db) && !k.startsWith('users/') && !k.startsWith('auth/') && !pendingDeletes.includes(k)) {
+              if (!hasDoneInitialSync) {
+                // Gather client-only items on page load to sync back to server instead of deleting them!
+                clientOnlyKeys[k] = MOCK_STORE[k];
+              } else {
+                // Safeguard: Only delete if the server database has substantial records (e.g. not empty or partial re-sync)
+                if (Object.keys(data.db).length > 5) {
+                  delete MOCK_STORE[k];
+                  changedKeys.add(k);
+                }
+              }
             }
           }
         }
 
         pendingDeletes.forEach(k => {
-          delete MOCK_STORE[k];
+          if (k in MOCK_STORE) {
+            delete MOCK_STORE[k];
+            changedKeys.add(k);
+          }
         });
         
         try {

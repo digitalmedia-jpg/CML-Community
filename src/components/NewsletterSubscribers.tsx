@@ -6,7 +6,8 @@ import {
   deleteDoc, 
   doc, 
   updateDoc,
-  setDoc
+  setDoc,
+  onSnapshot
 } from "../lib/firebase";
 import { db } from "../lib/firebase";
 import { 
@@ -249,7 +250,23 @@ export default function NewsletterSubscribers({ companyId, userRole, onConvertSu
   };
 
   useEffect(() => {
-    fetchSubscribers();
+    setLoading(true);
+    const colRef = collection(db, `newsletter-subscribers-${companyId}`);
+    const unsubscribe = onSnapshot(colRef, (snapshot) => {
+      const list: Subscriber[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+      // Sort descending by date
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setSubscribers(list);
+      setLoading(false);
+    }, (e) => {
+      console.error("Error fetching newsletter subscribers snapshot:", e);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, [companyId]);
 
   // Read subscribers from dynamic Firestore/Sync Mock DB
