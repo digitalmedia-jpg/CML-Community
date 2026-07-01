@@ -114,6 +114,12 @@ export class MockQuerySnapshot {
   forEach(callback: (doc: MockDocSnapshot) => void) {
     this.docs.forEach(callback);
   }
+  docChanges() {
+    return this.docs.map(doc => ({
+      type: 'added' as const,
+      doc
+    }));
+  }
 }
 
 // 2. Local Database Store for Mock Mode
@@ -797,14 +803,92 @@ export const loginWithGoogle = async () => {
 };
 
 // Google Workspace integration helpers
-let googleAccessToken: string | null = null;
-
-export const connectGoogleWorkspace = async (): Promise<string> => {
-  console.log("Connecting Google Workspace...");
-  googleAccessToken = "ya29.a0ARWdfXzMOCK_TOKEN_CML_GROUP_PORTAL_2026_xyz";
-  return googleAccessToken;
+export const getGoogleWorkspaceConnections = (): Record<string, any> => {
+  try {
+    const saved = localStorage.getItem("cml_google_connections");
+    return saved ? JSON.parse(saved) : {};
+  } catch (e) {
+    return {};
+  }
 };
 
-export const getGoogleAccessToken = (): string | null => {
-  return googleAccessToken;
+export const disconnectGoogleWorkspaceProperty = (propertyId: string) => {
+  const connections = getGoogleWorkspaceConnections();
+  delete connections[propertyId];
+  localStorage.setItem("cml_google_connections", JSON.stringify(connections));
+};
+
+export const connectGoogleWorkspace = async (propertyId: string = "cml"): Promise<string> => {
+  console.log(`Connecting Google Workspace for property: ${propertyId}...`);
+  if (initializedRealFirebase && productionAuth) {
+    const provider = new GoogleAuthProvider();
+    provider.addScope("https://www.googleapis.com/auth/chat.spaces");
+    provider.addScope("https://www.googleapis.com/auth/chat.spaces.readonly");
+    provider.addScope("https://www.googleapis.com/auth/chat.messages");
+    provider.addScope("https://www.googleapis.com/auth/chat.messages.readonly");
+    provider.addScope("https://www.googleapis.com/auth/chat.messages.create");
+    provider.addScope("https://www.googleapis.com/auth/chat.memberships");
+    provider.addScope("https://www.googleapis.com/auth/chat.memberships.readonly");
+    provider.addScope("https://www.googleapis.com/auth/chat.messages.reactions");
+    provider.addScope("https://www.googleapis.com/auth/chat.messages.reactions.readonly");
+    provider.addScope("https://www.googleapis.com/auth/chat.messages.reactions.create");
+    
+    // Always show prompt to select account so they can use 3 different Gmail logins
+    provider.setCustomParameters({ prompt: "select_account" });
+    
+    try {
+      const result = await signInWithPopup(productionAuth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        const token = credential.accessToken;
+        const user = result.user;
+        const connection = {
+          accessToken: token,
+          email: user?.email || "unknown@gmail.com",
+          displayName: user?.displayName || "Google Workspace User",
+          photoURL: user?.photoURL || ""
+        };
+        
+        const connections = getGoogleWorkspaceConnections();
+        connections[propertyId] = connection;
+        localStorage.setItem("cml_google_connections", JSON.stringify(connections));
+        return token;
+      }
+      throw new Error("No access token returned from Google Auth.");
+    } catch (error) {
+      console.error("Error in connectGoogleWorkspace:", error);
+      throw error;
+    }
+  }
+  
+  // Mock mode email accounts based on propertyId
+  const mockEmails: Record<string, string> = {
+    wyndham: "wyndham.operations@cml.com.fj",
+    ramada: "ramada.loyalty@cml.com.fj",
+    cml: "group.hq@cml.com.fj"
+  };
+  const mockNames: Record<string, string> = {
+    wyndham: "Wyndham Operations Admin",
+    ramada: "Ramada Suites Loyalty Manager",
+    cml: "CML Corporate General Admin"
+  };
+
+  const token = `ya29.mock_token_${propertyId}_2026_${Math.random().toString(36).substring(7)}`;
+  const connection = {
+    accessToken: token,
+    email: mockEmails[propertyId] || "general@cml.com.fj",
+    displayName: mockNames[propertyId] || "CML General Admin",
+    photoURL: "https://cml.com.fj/wp-content/uploads/2025/12/CML-Logo-White-BG-Landscape-e1780482084995.png"
+  };
+
+  const connections = getGoogleWorkspaceConnections();
+  connections[propertyId] = connection;
+  localStorage.setItem("cml_google_connections", JSON.stringify(connections));
+  return token;
+};
+
+export const getGoogleAccessToken = (propertyId?: string): string | null => {
+  if (!propertyId) return null;
+  const connections = getGoogleWorkspaceConnections();
+  return connections[propertyId]?.accessToken || null;
 };
