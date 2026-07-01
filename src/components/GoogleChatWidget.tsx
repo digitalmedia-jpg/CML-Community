@@ -66,6 +66,23 @@ interface MemberPresence {
   status: "online" | "away";
 }
 
+const CallTimer: React.FC = () => {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSeconds((s) => s + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return (
+    <span>
+      {mins.toString().padStart(2, "0")}:{secs.toString().padStart(2, "0")}
+    </span>
+  );
+};
+
 export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [activeSpaceId, setActiveSpaceId] = useState("general-announcements");
@@ -107,7 +124,6 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
   // Reset tracking on activeSpaceId change
   useEffect(() => {
     initialLoadRef.current = true;
-    knownMessageIdsRef.current = new Set();
   }, [activeSpaceId]);
 
   // Dynamic and custom spaces configuration
@@ -339,50 +355,11 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
       const list: ChatMessage[] = [];
       snapshot.forEach((doc) => {
         list.push({ id: doc.id, ...doc.data() } as ChatMessage);
+        knownMessageIdsRef.current.add(doc.id); // Guard to prevent duplicate notification
       });
 
       // Sort by timestamp
       list.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-
-      // If NOT first load of this channel, check for any newly arrived messages
-      if (!initialLoadRef.current) {
-        list.forEach((msg) => {
-          if (!knownMessageIdsRef.current.has(msg.id)) {
-            knownMessageIdsRef.current.add(msg.id);
-            // If the message is not from self, play sound and show notification
-            const currentEmail = auth.currentUser?.email || "";
-            if (msg.senderEmail !== currentEmail) {
-              setTimeout(() => {
-                playChime();
-                
-                if (notificationsEnabled) {
-                  // Standard native desktop notification if permitted
-                  if (window.Notification && Notification.permission === "granted") {
-                    new Notification(`Google Chat: #${activeSpaceId}`, {
-                      body: `${msg.senderName}: ${msg.content}`,
-                      icon: "https://cml.com.fj/wp-content/uploads/2025/12/CML-Logo-White-BG-Landscape-e1780482084995.png"
-                    });
-                  }
-
-                  // Facebook-style mobile Toast Notification bottom-right popup
-                  toastService.show(
-                    msg.content,
-                    "info",
-                    5000,
-                    `💬 CHAT: ${msg.senderName} (#${activeSpaceId})`
-                  );
-                }
-              }, 0);
-            }
-          }
-        });
-      } else {
-        // Initial load: record existing message IDs without alerting
-        list.forEach((msg) => {
-          knownMessageIdsRef.current.add(msg.id);
-        });
-        initialLoadRef.current = false;
-      }
 
       setMessages(list);
 
@@ -393,7 +370,74 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     });
 
     return () => unsubscribe();
-  }, [companyId, activeSpaceId, soundEnabled, notificationsEnabled]);
+  }, [companyId, activeSpaceId]);
+
+  // Background listener for ALL spaces to trigger push notifications
+  useEffect(() => {
+    if (!notificationsEnabled) return;
+
+    const unsubscribes: (() => void)[] = [];
+
+    spaces.forEach((space) => {
+      const colRef = collection(db, `google-chat-messages-${companyId}-${space.id}`);
+      let isFirstRun = true;
+
+      const unsub = onSnapshot(colRef, (snapshot) => {
+        if (isFirstRun) {
+          snapshot.forEach((doc) => {
+            knownMessageIdsRef.current.add(doc.id);
+          });
+          isFirstRun = false;
+          return;
+        }
+
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "added") {
+            const id = change.doc.id;
+            const msg = change.doc.data() as ChatMessage;
+            const currentEmail = auth.currentUser?.email || "";
+
+            if (!knownMessageIdsRef.current.has(id)) {
+              knownMessageIdsRef.current.add(id);
+
+              if (msg.senderEmail && msg.senderEmail !== currentEmail) {
+                const isCurrentActiveSpaceFocused = isOpen && space.id === activeSpaceId;
+
+                // Play chime
+                if (soundEnabled) {
+                  playChime();
+                }
+
+                // Native Desktop Push notification (perfect when in background/other tabs)
+                if (!isCurrentActiveSpaceFocused && window.Notification && Notification.permission === "granted") {
+                  new Notification(`Google Chat: ${space.name.replace(/^[^\s]+\s/, '')}`, {
+                    body: `${msg.senderName}: ${msg.content}`,
+                    icon: "https://cml.com.fj/wp-content/uploads/2025/12/CML-Logo-White-BG-Landscape-e1780482084995.png"
+                  });
+                }
+
+                // Show floating Toast alert if not active and focused
+                if (!isCurrentActiveSpaceFocused) {
+                  toastService.show(
+                    msg.content,
+                    "info",
+                    5000,
+                    `💬 CHAT: ${msg.senderName} (${space.name.replace(/^[^\s]+\s/, '')})`
+                  );
+                }
+              }
+            }
+          }
+        });
+      });
+
+      unsubscribes.push(unsub);
+    });
+
+    return () => {
+      unsubscribes.forEach((unsub) => unsub());
+    };
+  }, [companyId, spaces, notificationsEnabled, soundEnabled, isOpen, activeSpaceId]);
 
   // Request browser notification permissions on mount
   useEffect(() => {
@@ -829,20 +873,60 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                 {spaces.find(s => s.id === activeSpaceId)?.description}
               </p>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 text-slate-400">
+              <button 
+                onClick={() => {
+                  const name = spaces.find(s => s.id === activeSpaceId)?.name.replace(/^[^\s]+\s/, '') || "Team Members";
+                  setActiveCall({
+                    type: "voice",
+                    status: "ringing",
+                    participantName: name,
+                    hasVideo: false,
+                    hasMic: true
+                  });
+                  toastService.info(`Calling ${name}...`);
+                  setTimeout(() => {
+                    setActiveCall(prev => prev ? { ...prev, status: "connected" } : null);
+                  }, 2500);
+                }}
+                className="p-1 hover:bg-slate-200 hover:text-[#0f9d58] transition-colors"
+                title="Start Voice Call"
+              >
+                <Phone size={13} />
+              </button>
+              <button 
+                onClick={() => {
+                  const name = spaces.find(s => s.id === activeSpaceId)?.name.replace(/^[^\s]+\s/, '') || "Team Members";
+                  setActiveCall({
+                    type: "video",
+                    status: "ringing",
+                    participantName: name,
+                    hasVideo: true,
+                    hasMic: true
+                  });
+                  toastService.info(`Starting video call with ${name}...`);
+                  setTimeout(() => {
+                    setActiveCall(prev => prev ? { ...prev, status: "connected" } : null);
+                  }, 2500);
+                }}
+                className="p-1 hover:bg-slate-200 hover:text-[#0f9d58] transition-colors"
+                title="Start Video Call"
+              >
+                <Video size={13} />
+              </button>
               <button 
                 onClick={() => {
                   setShowSearch(!showSearch);
                   if (showSearch) setSearchQuery("");
                 }}
-                className={`p-1 hover:bg-slate-200 transition-colors ${showSearch ? 'text-[#0f9d58]' : 'text-slate-400'}`}
+                className={`p-1 hover:bg-slate-200 transition-colors ${showSearch ? 'text-[#0f9d58]' : ''}`}
                 title="Search Messages"
               >
                 <Search size={14} />
               </button>
               <button 
                 onClick={() => setShowMembers(!showMembers)}
-                className={`p-1 hover:bg-slate-200 transition-colors ${showMembers ? 'text-[#0f9d58]' : 'text-slate-400'}`}
+                className={`p-1 hover:bg-slate-200 transition-colors ${showMembers ? 'text-[#0f9d58]' : ''}`}
                 title="Active Portfolio Presence"
               >
                 <Users size={14} />
@@ -866,15 +950,23 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
           {showMembers && (
             <div className="bg-slate-100 border-b border-slate-200 p-3 max-h-[140px] overflow-y-auto custom-scrollbar shrink-0">
               <h4 className="text-[8px] font-display uppercase tracking-wider text-slate-500 font-black mb-1.5">Active Presence Portfolio</h4>
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 {activeMembers.map((member, i) => (
-                  <div key={i} className="flex items-center justify-between text-[9px]">
-                    <div className="flex items-center gap-1.5">
-                      <div className={`w-1.5 h-1.5 rounded-full ${member.status === 'online' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-                      <span className="font-bold text-slate-800">{member.name}</span>
-                      <span className="text-[8px] text-slate-450 font-serif">({member.role})</span>
+                  <div 
+                    key={i} 
+                    onClick={() => handleStartPrivateChat(member.name)}
+                    className="flex items-center justify-between text-[9px] hover:bg-slate-200/60 p-1 rounded cursor-pointer transition-all select-none"
+                    title={`Start private chat with ${member.name}`}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${member.status === 'online' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                      <span className="font-bold text-slate-800 truncate">{member.name}</span>
+                      <span className="text-[7px] text-slate-400 font-serif truncate">({member.role})</span>
                     </div>
-                    <span className="text-[7px] text-slate-400 uppercase font-bold">{member.status}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-[7px] text-slate-400 uppercase font-bold mr-1">{member.status}</span>
+                      <span className="text-[8px] text-[#0f9d58] hover:underline font-bold font-sans">Chat</span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -885,8 +977,15 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
           <div className="flex-1 flex overflow-hidden">
             {/* Spaces navigation rail (left) */}
             <div className="w-1/3 bg-slate-50 border-r border-slate-200 flex flex-col select-none shrink-0 overflow-y-auto">
-              <div className="p-2 border-b border-slate-100 bg-slate-100/50">
+              <div className="p-2 border-b border-slate-100 bg-slate-100/50 flex items-center justify-between">
                 <span className="text-[8px] font-display uppercase tracking-widest text-slate-400 font-black">Active Spaces</span>
+                <button 
+                  onClick={() => setIsCreatingSpace(true)}
+                  className="text-[#0f9d58] hover:text-[#0b8043] transition-colors p-0.5"
+                  title="Add Space"
+                >
+                  <PlusCircle size={12} />
+                </button>
               </div>
               <div className="flex-1 py-1">
                 {spaces.map((space) => {
@@ -898,6 +997,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                         setActiveSpaceId(space.id);
                         setShowSearch(false);
                         setSearchQuery("");
+                        setIsCreatingSpace(false);
                       }}
                       className={`w-full text-left px-2.5 py-2 text-[10px] border-b border-slate-100 flex flex-col gap-0.5 transition-all outline-none ${
                         isActive 
@@ -913,131 +1013,310 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
             </div>
 
             {/* Messages Area (right) */}
-            <div className="flex-1 bg-white flex flex-col overflow-hidden">
-              <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
-                {filteredMessages.length === 0 ? (
-                  <div className="py-12 text-center flex flex-col items-center gap-1.5">
-                    <MessageSquare size={20} className="text-slate-250 animate-bounce" />
-                    <p className="text-[9px] text-slate-400 font-serif italic">No synchronized messages found.</p>
-                  </div>
-                ) : (
-                  filteredMessages.map((msg) => {
-                    const isSelf = msg.senderEmail === auth.currentUser?.email;
-                    return (
-                      <div 
-                        key={msg.id} 
-                        className={`flex flex-col ${isSelf ? 'items-end' : 'items-start'}`}
+            <div className="flex-1 bg-white flex flex-col overflow-hidden relative">
+              {isCreatingSpace ? (
+                <div className="flex-1 p-4 bg-slate-50 flex flex-col justify-between overflow-y-auto">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                      <h4 className="text-[10px] font-display uppercase tracking-wider text-slate-700 font-bold flex items-center gap-1.5">
+                        <PlusCircle size={14} className="text-[#0f9d58]" />
+                        Create New Space
+                      </h4>
+                      <button 
+                        type="button"
+                        onClick={() => setIsCreatingSpace(false)} 
+                        className="text-slate-400 hover:text-slate-600 text-[10px]"
                       >
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="text-[8px] font-sans font-black text-slate-700">{msg.senderName}</span>
-                          <span className="text-[7px] text-slate-400">
-                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                        <div 
-                          className={`p-2.5 max-w-[90%] text-[10px] leading-relaxed break-words whitespace-pre-wrap ${
-                            isSelf 
-                              ? 'bg-emerald-600 text-white rounded-l-md rounded-tr-md' 
-                              : 'bg-slate-100 text-slate-800 rounded-r-md rounded-tl-md'
-                          }`}
-                        >
-                          {msg.content}
+                        Cancel
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <label className="text-[8px] uppercase tracking-wider font-sans font-bold text-slate-500">Space Name</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. wyndham-marketing"
+                        value={newSpaceName}
+                        onChange={(e) => setNewSpaceName(e.target.value)}
+                        className="w-full text-[10px] border border-slate-200 px-2 py-1.5 outline-none bg-white font-sans text-slate-700"
+                        maxLength={30}
+                      />
+                    </div>
 
-                          {/* Render Attachment if any */}
-                          {msg.attachmentUrl && (
-                            <div className="mt-1.5 border border-slate-200 bg-white text-slate-800 p-1.5 rounded-[2px] flex items-center gap-1 max-w-[150px] overflow-hidden">
-                              <Paperclip size={10} className="text-gold shrink-0" />
-                              <div className="min-w-0 flex-1">
-                                <p className="text-[7px] font-bold truncate">{msg.attachmentName}</p>
-                                <a 
-                                  href={msg.attachmentUrl} 
-                                  target="_blank" 
-                                  rel="noreferrer" 
-                                  className="text-[6px] text-[#0f9d58] font-bold hover:underline"
-                                >
-                                  View mock upload
-                                </a>
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                    <div className="space-y-1">
+                      <label className="text-[8px] uppercase tracking-wider font-sans font-bold text-slate-500">Description</label>
+                      <textarea 
+                        placeholder="e.g. Discuss joint marketing drives..."
+                        value={newSpaceDesc}
+                        onChange={(e) => setNewSpaceDesc(e.target.value)}
+                        className="w-full text-[10px] border border-slate-200 px-2 py-1.5 outline-none bg-white font-sans text-slate-700 resize-none h-16"
+                        maxLength={100}
+                      />
+                    </div>
+                  </div>
 
-                        {/* Reactions row */}
-                        <div className="flex gap-1 mt-0.5">
-                          {["👍", "❤️", "😂"].map((emoji) => {
-                            const reactUsers = msg.reactions?.[emoji] || [];
-                            const hasReacted = reactUsers.includes(auth.currentUser?.displayName || "");
-                            return (
-                              <button
-                                key={emoji}
-                                onClick={() => handleToggleReaction(msg, emoji)}
-                                className={`text-[8px] px-1 bg-slate-50 hover:bg-slate-100 rounded-[2px] border ${
-                                  hasReacted ? 'border-[#0f9d58] bg-emerald-50' : 'border-slate-100'
-                                }`}
-                              >
-                                {emoji} {reactUsers.length > 0 && reactUsers.length}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Message Input Panel */}
-              <form 
-                onSubmit={handleSendMessage} 
-                className="border-t border-slate-150 p-2 bg-slate-50 flex flex-col gap-1.5 shrink-0"
-              >
-                {simulatedAttachment && (
-                  <div className="bg-emerald-50 text-[8px] text-emerald-800 px-2 py-1 flex items-center justify-between border border-emerald-100 rounded-sm">
-                    <span className="truncate">📎 {simulatedAttachment.name}</span>
+                  <div className="flex items-center gap-2 mt-4">
                     <button 
-                      type="button" 
-                      onClick={() => setSimulatedAttachment(null)} 
-                      className="text-emerald-950 font-bold"
+                      type="button"
+                      onClick={() => setIsCreatingSpace(false)}
+                      className="flex-1 border border-slate-200 hover:bg-slate-100 text-slate-500 text-[9px] font-sans font-bold py-1.5 rounded transition-all"
                     >
-                      ✕
+                      Cancel
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => handleAddSpace(newSpaceName, newSpaceDesc)}
+                      disabled={!newSpaceName.trim()}
+                      className="flex-1 bg-[#0f9d58] hover:bg-[#0b8043] disabled:bg-slate-200 disabled:text-slate-400 text-white text-[9px] font-sans font-bold py-1.5 rounded transition-all shadow-sm"
+                    >
+                      Create Space
                     </button>
                   </div>
-                )}
-
-                <div className="flex items-center gap-1.5">
-                  <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    onChange={handleFileChange} 
-                    className="hidden" 
-                  />
-                  <button
-                    type="button"
-                    onClick={handleTriggerAttachment}
-                    className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-sm transition-colors"
-                    title="Simulate Attachment"
-                  >
-                    <Paperclip size={14} />
-                  </button>
-
-                  <input
-                    type="text"
-                    placeholder={`Reply to ${spaces.find(s => s.id === activeSpaceId)?.name.substring(3)}...`}
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    className="flex-1 bg-white border border-slate-250 text-[10px] px-2.5 py-1.5 outline-none font-sans text-slate-800 focus:border-[#0f9d58]"
-                  />
-
-                  <button
-                    type="submit"
-                    disabled={!newMessage.trim() && !simulatedAttachment}
-                    className="p-1.5 bg-[#0f9d58] text-white hover:bg-[#0b8043] disabled:bg-slate-300 disabled:text-slate-500 rounded-sm transition-all"
-                  >
-                    <Send size={12} />
-                  </button>
                 </div>
-              </form>
+              ) : (
+                <>
+                  <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+                    {filteredMessages.length === 0 ? (
+                      <div className="py-12 text-center flex flex-col items-center gap-1.5">
+                        <MessageSquare size={20} className="text-slate-250 animate-bounce" />
+                        <p className="text-[9px] text-slate-400 font-serif italic">No synchronized messages found.</p>
+                      </div>
+                    ) : (
+                      filteredMessages.map((msg) => {
+                        const isSelf = msg.senderEmail === auth.currentUser?.email;
+                        return (
+                          <div 
+                            key={msg.id} 
+                            className={`flex flex-col ${isSelf ? 'items-end' : 'items-start'}`}
+                          >
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <button 
+                                type="button"
+                                onClick={() => handleStartPrivateChat(msg.senderName)}
+                                className="text-[8px] font-sans font-black text-slate-700 hover:text-[#0f9d58] hover:underline cursor-pointer select-none text-left"
+                                title={`Chat privately with ${msg.senderName}`}
+                              >
+                                {msg.senderName}
+                              </button>
+                              <span className="text-[7px] text-slate-400">
+                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <div 
+                              className={`p-2.5 max-w-[90%] text-[10px] leading-relaxed break-words whitespace-pre-wrap ${
+                                isSelf 
+                                  ? 'bg-emerald-600 text-white rounded-l-md rounded-tr-md' 
+                                  : 'bg-slate-100 text-slate-800 rounded-r-md rounded-tl-md'
+                              }`}
+                            >
+                              {msg.content}
+
+                              {/* Render Attachment if any */}
+                              {msg.attachmentUrl && (
+                                <div className="mt-1.5 border border-slate-200 bg-white text-slate-800 p-1.5 rounded-[2px] flex items-center gap-1 max-w-[150px] overflow-hidden">
+                                  <Paperclip size={10} className="text-gold shrink-0" />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-[7px] font-bold truncate">{msg.attachmentName}</p>
+                                    <a 
+                                      href={msg.attachmentUrl} 
+                                      target="_blank" 
+                                      rel="noreferrer" 
+                                      className="text-[6px] text-[#0f9d58] font-bold hover:underline"
+                                    >
+                                      View mock upload
+                                    </a>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Reactions row */}
+                            <div className="flex gap-1 mt-0.5">
+                              {["👍", "❤️", "😂"].map((emoji) => {
+                                const reactUsers = msg.reactions?.[emoji] || [];
+                                const hasReacted = reactUsers.includes(auth.currentUser?.displayName || "");
+                                return (
+                                  <button
+                                    type="button"
+                                    key={emoji}
+                                    onClick={() => handleToggleReaction(msg, emoji)}
+                                    className={`text-[8px] px-1 bg-slate-50 hover:bg-slate-100 rounded-[2px] border ${
+                                      hasReacted ? 'border-[#0f9d58] bg-emerald-50' : 'border-slate-100'
+                                    }`}
+                                  >
+                                    {emoji} {reactUsers.length > 0 && reactUsers.length}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  {/* Message Input Panel */}
+                  <form 
+                    onSubmit={handleSendMessage} 
+                    className="border-t border-slate-150 p-2 bg-slate-50 flex flex-col gap-1.5 shrink-0"
+                  >
+                    {simulatedAttachment && (
+                      <div className="bg-emerald-50 text-[8px] text-emerald-800 px-2 py-1 flex items-center justify-between border border-emerald-100 rounded-sm">
+                        <span className="truncate">📎 {simulatedAttachment.name}</span>
+                        <button 
+                          type="button" 
+                          onClick={() => setSimulatedAttachment(null)} 
+                          className="text-emerald-950 font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-1.5">
+                      <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        onChange={handleFileChange} 
+                        className="hidden" 
+                      />
+                      <button
+                        type="button"
+                        onClick={handleTriggerAttachment}
+                        className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-sm transition-colors"
+                        title="Simulate Attachment"
+                      >
+                        <Paperclip size={14} />
+                      </button>
+
+                      <input
+                        type="text"
+                        placeholder={`Reply to ${spaces.find(s => s.id === activeSpaceId)?.name.substring(3)}...`}
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        className="flex-1 bg-white border border-slate-250 text-[10px] px-2.5 py-1.5 outline-none font-sans text-slate-800 focus:border-[#0f9d58]"
+                      />
+
+                      <button
+                        type="submit"
+                        disabled={!newMessage.trim() && !simulatedAttachment}
+                        className="p-1.5 bg-[#0f9d58] text-white hover:bg-[#0b8043] disabled:bg-slate-300 disabled:text-slate-500 rounded-sm transition-all"
+                      >
+                        <Send size={12} />
+                      </button>
+                    </div>
+                  </form>
+                </>
+              )}
+
+              {/* Real-time Video/Voice Call Simulation HUD overlay */}
+              {activeCall && (
+                <div className="absolute inset-0 bg-slate-900/95 z-[150] flex flex-col justify-between p-6 text-white animate-fade-in">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-display tracking-widest text-emerald-400 font-extrabold flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                      Google Chat Call
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-mono">
+                      {activeCall.type === "video" ? "HD Video Sync" : "Voice Link"}
+                    </span>
+                  </div>
+
+                  <div className="flex-1 flex flex-col items-center justify-center my-4">
+                    {activeCall.type === "video" && activeCall.status === "connected" && activeCall.hasVideo ? (
+                      <div className="w-full h-40 bg-slate-800 rounded-lg relative overflow-hidden flex items-center justify-center border border-slate-700/80 shadow-inner">
+                        <img 
+                          src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80" 
+                          alt="Participant Feed" 
+                          className="w-full h-full object-cover opacity-80"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="absolute bottom-2 left-2 bg-slate-900/70 px-2 py-0.5 rounded text-[8px] font-sans">
+                          {activeCall.participantName}
+                        </div>
+                        {activeCall.hasVideo && (
+                          <div className="absolute top-2 right-2 w-16 h-12 bg-slate-900 rounded border border-slate-700 overflow-hidden shadow-md">
+                            <div className="w-full h-full bg-[#0f9d58]/20 flex items-center justify-center">
+                              <span className="text-[6px] text-emerald-400 font-sans font-black">You</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-16 h-16 rounded-full bg-emerald-600/25 flex items-center justify-center border-2 border-emerald-500/50 animate-pulse">
+                          <span className="text-2xl">👤</span>
+                        </div>
+                        <div className="text-center">
+                          <h4 className="text-xs font-sans font-bold text-slate-100">{activeCall.participantName}</h4>
+                          <p className="text-[8px] text-slate-400 mt-1 uppercase font-semibold tracking-wider font-sans">
+                            {activeCall.status === "ringing" ? "Ringing..." : "Connected"}
+                          </p>
+                        </div>
+                        {activeCall.status === "connected" && (
+                          <div className="flex items-center gap-1 mt-2">
+                            <span className="w-1 h-3 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
+                            <span className="w-1 h-5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                            <span className="w-1 h-4 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
+                            <span className="w-1 h-6 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+                            <span className="w-1 h-3 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.5s' }} />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {activeCall.status === "connected" && (
+                      <span className="text-[10px] font-mono text-emerald-400 mt-3 font-semibold">
+                        <CallTimer />
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-center gap-3">
+                    <button 
+                      type="button"
+                      onClick={() => setActiveCall(prev => prev ? { ...prev, hasMic: !prev.hasMic } : null)}
+                      className={`p-2.5 rounded-full border transition-all ${
+                        activeCall.hasMic 
+                          ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700" 
+                          : "bg-red-500/20 border-red-500/30 text-red-400 hover:bg-red-500/30"
+                      }`}
+                      title={activeCall.hasMic ? "Mute Microphone" : "Unmute Microphone"}
+                    >
+                      {activeCall.hasMic ? <Mic size={14} /> : <MicOff size={14} />}
+                    </button>
+
+                    {activeCall.type === "video" && (
+                      <button 
+                        type="button"
+                        onClick={() => setActiveCall(prev => prev ? { ...prev, hasVideo: !prev.hasVideo } : null)}
+                        className={`p-2.5 rounded-full border transition-all ${
+                          activeCall.hasVideo 
+                            ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700" 
+                            : "bg-red-500/20 border-red-500/30 text-red-400 hover:bg-red-500/30"
+                        }`}
+                        title={activeCall.hasVideo ? "Turn Camera Off" : "Turn Camera On"}
+                      >
+                        {activeCall.hasVideo ? <Video size={14} /> : <VideoOff size={14} />}
+                      </button>
+                    )}
+
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setActiveCall(prev => prev ? { ...prev, status: "ended" } : null);
+                        toastService.info("Call ended.");
+                        setTimeout(() => setActiveCall(null), 1000);
+                      }}
+                      className="p-2.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white transition-all shadow-lg"
+                      title="Hang Up"
+                    >
+                      <PhoneOff size={14} />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -1780,12 +1780,15 @@ async function startServer() {
 
   // Load initial state from disk fallback AND try to hydrate from Firestore cloud to deal with Cloud Run multiple stateless containers!
   const hydrateStore = async () => {
-    // 1. First feed from disk file (fast local fallback)
+    // 1. First feed from disk file (fast local fallback in development mode only)
     try {
-      if (fs.existsSync(mockDbFilePath)) {
+      const isProduction = process.env.NODE_ENV === "production";
+      if (!isProduction && fs.existsSync(mockDbFilePath)) {
         const savedData = fs.readFileSync(mockDbFilePath, "utf8");
         serverMockDbStore = JSON.parse(savedData);
         console.log(`[MOCK_DB] Pre-hydrated ${Object.keys(serverMockDbStore).length} keys from container disk.`);
+      } else if (isProduction) {
+        console.log("[MOCK_DB] Production environment detected. Bypassing container disk cache to prevent stale state overwriting the live cloud database.");
       }
     } catch (e) {
       console.warn("[MOCK_DB] Disk load warning:", e);
@@ -2141,13 +2144,14 @@ async function startServer() {
     res.json(serverMockDbStore);
   });
 
-  const waitForHydration = async () => {
-    if (!firestoreRestSync || isCloudHydrated) return;
+  const waitForHydration = async (): Promise<boolean> => {
+    if (!firestoreRestSync || isCloudHydrated) return true;
     let attempts = 0;
     while (!isCloudHydrated && attempts < 30) {
       await new Promise(resolve => setTimeout(resolve, 500));
       attempts++;
     }
+    return isCloudHydrated;
   };
 
   app.post("/api/trigger-recovery-scan", async (req, res) => {
@@ -2167,12 +2171,18 @@ async function startServer() {
 
   app.get("/api/mock-db", async (req, res) => {
     // Wait for central cloud database state to load first to prevent empty state wiping local storage
-    await waitForHydration();
+    const hydrated = await waitForHydration();
+    if (!hydrated && firestoreRestSync) {
+      return res.status(503).json({ error: "Cloud database hydration in progress. Please retry in a moment." });
+    }
     res.json(serverMockDbStore);
   });
 
   app.post("/api/mock-db", async (req, res) => {
-    await waitForHydration();
+    const hydrated = await waitForHydration();
+    if (!hydrated && firestoreRestSync) {
+      return res.status(503).json({ error: "Cloud database hydration in progress. Please retry in a moment." });
+    }
     const { updates, deletedKeys } = req.body;
     let mutated = false;
     
@@ -2250,7 +2260,10 @@ async function startServer() {
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
     try {
-      await waitForHydration();
+      const hydrated = await waitForHydration();
+      if (!hydrated && firestoreRestSync) {
+        return res.status(503).json({ error: "Database is currently offline/hydrating. Please try again soon." });
+      }
       const { email, source, companyId, firstName, lastName, phone, phoneType, country, zipCode, businessTraveler, marketingOptIn, joinRewards } = req.body;
       if (!email || typeof email !== 'string') {
         return res.status(400).json({ error: "Missing email parameter" });
@@ -2351,7 +2364,10 @@ async function startServer() {
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
     try {
-      await waitForHydration();
+      const hydrated = await waitForHydration();
+      if (!hydrated && firestoreRestSync) {
+        return res.status(503).json({ error: "Database is currently offline/hydrating. Please try again soon." });
+      }
       
       const email = (req.body.email || req.body.guest_email || req.body.email_address || "").trim();
       const rawFullName = (req.body.fullName || req.body.fullname || req.body.guest_name || req.body.name || "").trim();
