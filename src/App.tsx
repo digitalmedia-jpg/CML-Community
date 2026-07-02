@@ -1,4 +1,5 @@
 import { ConfirmModal } from "./components/ConfirmModal";
+import { AgreementsSigning } from "./components/AgreementsSigning";
 import React, { useState, useEffect, useRef } from "react"; 
 import { 
   LayoutDashboard, 
@@ -48,6 +49,7 @@ import {
   Waves,
   Wind,
   Send,
+  PenTool,
   History as HistoryIcon,
   LifeBuoy,
   ArrowRight,
@@ -2980,7 +2982,73 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  const navItems = [
+  const navItems = selectedCompany?.toLowerCase() === 'cml' ? [
+    {
+      id: "property-overview",
+      label: "Dashboard",
+      icon: Home,
+    },
+    {
+      id: "hotel-management",
+      label: "Properties",
+      icon: Hotel,
+      subItems: [
+        { id: "hotel-info", label: "Hotel Information", icon: Hotel },
+        { id: "revenue-mgmt", label: "Revenue Management", icon: DollarSign, disabled: true }
+      ]
+    },
+    {
+      id: "owners-section",
+      label: "Owners",
+      icon: Users,
+      disabled: true
+    },
+    {
+      id: "reservations-section",
+      label: "Reservations (future)",
+      icon: Calendar,
+      disabled: true
+    },
+    {
+      id: "resources-help",
+      label: "Documents",
+      icon: FileText,
+      subItems: [
+        { id: "hotel-resources", label: "Hotel Resources", icon: FileText, disabled: true },
+        { id: "hr", label: "Forms", icon: ClipboardList },
+        { id: "digital-flipbooks", label: "Flipbooks", icon: Layers }
+      ]
+    },
+    {
+      id: "agreements-signing",
+      label: "Agreements & Digital Signing",
+      icon: PenTool,
+    },
+    {
+      id: "projects-section",
+      label: "Projects",
+      icon: Briefcase,
+      disabled: true
+    },
+    {
+      id: "reports-section",
+      label: "Reports",
+      icon: TrendingUp,
+      disabled: true
+    },
+    {
+      id: "messages-section",
+      label: "Messages",
+      icon: MessageSquare,
+      disabled: true
+    },
+    {
+      id: "settings-section",
+      label: "Settings",
+      icon: Settings,
+      disabled: true
+    }
+  ] : [
     ...(isCmlUser ? [{
       id: "admin-dashboard",
       label: "ADMIN DASHBOARD",
@@ -9026,6 +9094,8 @@ export default function App() {
                   }
                 }}
               />
+            ) : activeTab === "agreements-signing" ? (
+              <AgreementsSigning />
             ) : activeTab === "managed-cases" ? (
               <ManageCases />
             ) : activeTab === "resources" ? (
