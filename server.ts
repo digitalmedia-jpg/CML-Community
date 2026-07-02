@@ -530,7 +530,7 @@ async function startServer() {
 
       // 2. Google Chat Webhook (Copy any property updates to appropriate Webhook under new instructions)
       {
-        let webhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=EBaBKpUjGgV-CxI8RiHbjzJL9uOCypvP1cr26XfO2AU";
+        let webhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=ZjzVA78vD8a6yDiAyGKDC_tMlY4DNs0RLHusXqalqRw";
         if (companyId === "wyndham") {
           webhookUrl = "https://chat.googleapis.com/v1/spaces/AAQAOj5WBis/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=5wfkQvH_r-eafOCkJDFNsYFvdJ_6fhgNjCutyDVrwuk";
         }
@@ -776,16 +776,16 @@ async function startServer() {
     let propertyName = "CML Community";
 
     if (companyId === "ramada") {
-      webhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=EBaBKpUjGgV-CxI8RiHbjzJL9uOCypvP1cr26XfO2AU";
+      webhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=RrHHIzJqXsT9UjEYGh73etlhttRO0sg55qzH101UFxc";
       propertyName = "Ramada Suites";
     } else if (companyId === "wyndham") {
-      webhookUrl = "https://chat.googleapis.com/v1/spaces/AAQAOj5WBis/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=5wfkQvH_r-eafOCkJDFNsYFvdJ_6fhgNjCutyDVrwuk";
+      webhookUrl = "https://chat.googleapis.com/v1/spaces/AAQAOj5WBis/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=X-LcP3tlqoGOT1uM1pIVeTV9am3eIhMJrPxy7zUmvTI";
       propertyName = "Wyndham Garden";
     }
 
     // Default fallback if no specific webhook
     if (!webhookUrl) {
-      webhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=EBaBKpUjGgV-CxI8RiHbjzJL9uOCypvP1cr26XfO2AU";
+      webhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=RrHHIzJqXsT9UjEYGh73etlhttRO0sg55qzH101UFxc";
     }
 
     try {
@@ -874,7 +874,7 @@ async function startServer() {
       }
 
       // Enforce duplicate copying to Ramada Suites Webhook as requested
-      const ramadaWebhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=EBaBKpUjGgV-CxI8RiHbjzJL9uOCypvP1cr26XfO2AU";
+      const ramadaWebhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=RrHHIzJqXsT9UjEYGh73etlhttRO0sg55qzH101UFxc";
       if (webhookUrl !== ramadaWebhookUrl) {
         console.log("[Webhook] Copying/mirroring duplicate notification to Ramada Suites space...");
         await fetch(ramadaWebhookUrl, {
@@ -1065,7 +1065,7 @@ async function startServer() {
   app.post("/api/notify-complaint-update", async (req, res) => {
     const { complaint, action, authorName, updateMessage, companyId, department, resolvedBy } = req.body;
     
-    let webhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=EBaBKpUjGgV-CxI8RiHbjzJL9uOCypvP1cr26XfO2AU";
+    let webhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=ZjzVA78vD8a6yDiAyGKDC_tMlY4DNs0RLHusXqalqRw";
     if (companyId === "wyndham") {
       webhookUrl = "https://chat.googleapis.com/v1/spaces/AAQAOj5WBis/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=5wfkQvH_r-eafOCkJDFNsYFvdJ_6fhgNjCutyDVrwuk";
     }
@@ -2343,6 +2343,33 @@ async function startServer() {
         console.error("[Firestore Ingest Direct Hook Exception]:", firestoreErr.message || firestoreErr);
       }
 
+      // Notify Google Chat Newsletter Webhook
+      try {
+        let newsletterWebhookUrl = "";
+        if (activeCompanyId === "ramada") {
+          newsletterWebhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=weGCY7esGrGvsqE8yK7-bT8zXrwPrOTc9Zpsi9a6ZNU";
+        } else if (activeCompanyId === "wyndham") {
+          newsletterWebhookUrl = "https://chat.googleapis.com/v1/spaces/AAQAOj5WBis/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=w-Ybrizm2yG2N1gJKOIOnG_uRXX0Axb9vgmXUL9Rlrs";
+        }
+        
+        if (newsletterWebhookUrl) {
+          const propertyLabelName = activeCompanyId === "ramada" ? "Ramada Suites" : "Wyndham Garden";
+          const messageText = `📨 *New Newsletter Subscriber Registered (${propertyLabelName})*\n\n` +
+                              `*Email:* ${email.trim().toLowerCase()}\n` +
+                              `*Source:* ${source || "Newsletter Submission"}\n` +
+                              `*Date/Time:* ${new Date().toLocaleString()}\n` +
+                              `*Portal Link:* https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app`;
+                              
+          fetch(newsletterWebhookUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json; charset=UTF-8" },
+            body: JSON.stringify({ text: messageText })
+          }).catch(err => console.error("Newsletter webhook failed:", err));
+        }
+      } catch (webhookErr) {
+        console.error("Newsletter webhook trigger exception:", webhookErr);
+      }
+
       console.log(`[Newsletter Ingest] Registered subscriber: ${email} for company ${activeCompanyId}`);
       res.json({ success: true, subscriber: newSubscriber });
     } catch (err: any) {
@@ -2518,6 +2545,37 @@ async function startServer() {
         }
       } catch (firestoreErr: any) {
         console.error("[Firestore Rewards Ingest Direct Hook Exception]:", firestoreErr.message || firestoreErr);
+      }
+
+      // Notify Google Chat Rewards Webhook
+      try {
+        let rewardsWebhookUrl = "";
+        if (activeCompanyId === "ramada") {
+          rewardsWebhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Flm9AZapRbM1ELNS1IJg61a5Ojo_4Zvw4RBflbQZ6EE";
+        } else if (activeCompanyId === "wyndham") {
+          rewardsWebhookUrl = "https://chat.googleapis.com/v1/spaces/AAQAOj5WBis/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=WZ4oHyv2wkwXRangjrIB6Vjz_ff7Uev1T_m9WA9-si8";
+        }
+        
+        if (rewardsWebhookUrl) {
+          const propertyLabelName = activeCompanyId === "ramada" ? "Ramada Suites" : "Wyndham Garden";
+          const messageText = `★ *New CML Rewards Member Registered (${propertyLabelName})*\n\n` +
+                              `*Member Name:* ${fullName}\n` +
+                              `*Email:* ${email.toLowerCase()}\n` +
+                              `*Digital Card ID:* ${guestCardId}\n` +
+                              `*Phone:* ${phone || "+679"}\n` +
+                              `*Welcome Points:* ${initialPoints} PTS\n` +
+                              `*Source:* ${source || "WordPress Member Portal"}\n` +
+                              `*Date/Time:* ${new Date().toLocaleString()}\n` +
+                              `*Portal Link:* https://ais-pre-gcwictxbxhm26j2xpgqytj-300636305940.asia-southeast1.run.app`;
+                              
+          fetch(rewardsWebhookUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json; charset=UTF-8" },
+            body: JSON.stringify({ text: messageText })
+          }).catch(err => console.error("Rewards webhook failed:", err));
+        }
+      } catch (webhookErr) {
+        console.error("Rewards webhook trigger exception:", webhookErr);
       }
 
       console.log(`[Rewards Ingest] Registered member: ${email} with ID ${guestCardId}`);
