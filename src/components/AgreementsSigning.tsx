@@ -112,6 +112,19 @@ interface Agreement {
   };
   auditTrail: AuditLog[];
   supportingDocs: { id: string; name: string; size: string; date: string }[];
+  ownerDetails?: string;
+  managerDetails?: string;
+  franchiseAgreement?: string;
+  developmentType?: string;
+  rentalProgram?: string;
+  milestoneDates?: string;
+  ffeReserve?: string;
+  sinkingFund?: string;
+  ownerResponsibilities?: string;
+  currency?: string;
+  ownerAddress?: string;
+  hotelBrand?: string;
+  proposedHotelName?: string;
 }
 
 const INITIAL_AGREEMENTS: Agreement[] = [
@@ -344,6 +357,24 @@ const INITIAL_AGREEMENTS: Agreement[] = [
   }
 ];
 
+const getOwnerDetails = (ag: Agreement) => ag.ownerDetails || `${ag.ownerCompany}\n${ag.hotelAddress || ""}`;
+const getManagerDetails = (ag: Agreement) => ag.managerDetails || "Cove Management Pte Ltd\nLot 14, Wasawasa Rd, Wailoaloa Beach, Nadi";
+const getHotelBrand = (ag: Agreement) => ag.hotelBrand || (ag.templateType?.includes("Wyndham") ? "Wyndham Garden - subject to final approval by Wyndham" : "Ramada Plaza- subject to final approval by Wyndham Hotels and Resorts");
+const getProposedHotelName = (ag: Agreement) => ag.proposedHotelName || ag.hotelName;
+const getFranchiseAgreement = (ag: Agreement) => ag.franchiseAgreement || "Owner acknowledges and agrees that Manager will enter into a Franchise Agreement with Wyndham Hotel Asia Pacific Co. Ltd (Wyndham)- the terms of which will be negotiated between Manager and Wyndham. All costs associated with the Franchise Agreement shall be operational costs of the hotel";
+const getHotelAddress = (ag: Agreement) => ag.hotelAddress;
+const getDevelopmentType = (ag: Agreement) => ag.developmentType || "New Build";
+const getRentalProgram = (ag: Agreement) => ag.rentalProgram || "Owner will continue to own all Facilities in the hotel and will not individually sell any of the guest rooms – all bookings are to go through Management reservations systems";
+const getInitialTerm = (ag: Agreement) => ag.initialTerm || "Commencing on the Effective Date and expiring at XXX pm (local time at the Hotel) on XXXX of the year in which the tenth (10th) anniversary of the Opening Date occurs.";
+const getRenewalTerm = (ag: Agreement) => ag.renewalTerm || "One (1) further term of Ten (10) Operating Years by mutual agreement]";
+const getMilestoneDates = (ag: Agreement) => ag.milestoneDates || "Construction Commencement: Commenced\nConstruction Completion: xxxx\nOpening Date: xxxxx";
+const getManagementFee = (ag: Agreement) => ag.managementFee || "Owner agrees to allocate 20% of the Gross Operating Profit (GOP) of the hotel to Manager as a Management Fee payable monthly in arrears. For the avoidance of doubt, GOP is defined as per Definitions Schedule below";
+const getTechFee = (ag: Agreement) => ag.techFee || "Owner shall pay Manager (which funds will subsequently be distributed to Wyndham) a Technical Services Fee of US$15,000- payable upon contract execution to ensure compliance with applicable Days Inn brand standards";
+const getFfeReserve = (ag: Agreement) => ag.ffeReserve || "The following amounts will be transferred monthly from the operating account of the Hotel to a reserve fund for the Hotel:\n1. 5% of Gross Revenues for the first Operating Year;\n2. 6% of Gross Revenues for the second and third Operating Year; and\n3. 7% of Gross Revenues for the fourth Operating Year and each subsequent Operating Year.\n\nAmounts in such Reserve fund will be used for routine capital and FF&E improvements.";
+const getSinkingFund = (ag: Agreement) => ag.sinkingFund || "Manager will reserve monthly Sinking Fund for the Hotel at rate of 5% off the Gross Revenue, capped at $250k for any major upkeep, renovation & replacement works and to be utilized as a working capital under unseen circumstances situations.\n\nOwner will be contributing $150k initially towards to this Reserve Sinking fund account to be utilized as working capital by the Manager to start its hotel operations and Manager to build up Sinking fund account monthly by said deduction process.";
+const getOwnerResponsibilities = (ag: Agreement) => ag.ownerResponsibilities || "Open Hotel by no later than the agreed Opening Date.\nAcquire and construct the Hotel in compliance with all applicable laws and regulations and according to the Hotel Brand Standards.\nApprove the annual plan in accordance with the procedures of the Management Agreement.\nRetain responsibility for working capital, property taxes, debt services and the like.\nObtain and maintain appropriate insurance.\nWyndham initial design set up fee.\nProvide working capital in the sinking fund account as per above Reserve Sinking Fund clause.";
+const getCurrency = (ag: Agreement) => ag.currency || "All payments to Manager under the Management Agreement shall be made in Fijian Dollars";
+
 export function AgreementsSigning() {
   // --- STATE ---
   const [agreements, setAgreements] = useState<Agreement[]>(() => {
@@ -354,7 +385,9 @@ export function AgreementsSigning() {
   const [activeSubView, setActiveSubView] = useState<"dashboard" | "builder" | "viewer" | "storage">("storage");
   const [role, setRole] = useState<"admin" | "owner">("admin"); // Default to CML Admin with full control, owner portal toggle removed
   const [selectedAgreement, setSelectedAgreement] = useState<Agreement | null>(null);
-  const [docViewTab, setDocViewTab] = useState<"designed" | "legal">("legal");
+  const [docViewTab, setDocViewTab] = useState<"designed" | "legal" | "excel">("legal");
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [isSheetEditorOpen, setIsSheetEditorOpen] = useState(true);
   
   // Builder state
   const [selectedTemplate, setSelectedTemplate] = useState<string>("Hotel Management LOI");
@@ -363,6 +396,7 @@ export function AgreementsSigning() {
     title: "",
     ownerName: "Charles",
     ownerCompany: "Koro Fiji-Nadi Bay Sands Investment Limited",
+    ownerDetails: "Koro Fiji-Nadi Bay Sands Investment Limited\nLot 2 Northern Press Rd, Martintar, Nadi Fiji",
     ownerEmail: "digitalmedia@cml.com.fj",
     ownerPhone: "+679 672 8885",
     hotelName: "Ramada Plaza by Wyndham & Suites",
@@ -413,6 +447,7 @@ export function AgreementsSigning() {
         title: `${selectedTemplate} – Ramada Plaza & Suites Nadi`,
         ownerName: "Charles",
         ownerCompany: "Koro Fiji-Nadi Bay Sands Investment Limited",
+        ownerDetails: "Koro Fiji-Nadi Bay Sands Investment Limited\nLot 2 Northern Press Rd, Martintar, Nadi Fiji",
         ownerEmail: "digitalmedia@cml.com.fj",
         ownerPhone: "+679 672 8885",
         hotelName: "Ramada Plaza by Wyndham & Suites",
@@ -430,6 +465,7 @@ export function AgreementsSigning() {
         title: `${selectedTemplate} – Wyndham Garden Wailoaloa`,
         ownerName: "Charles",
         ownerCompany: "Koro Fiji-Nadi Bay Sands Investment Limited",
+        ownerDetails: "Koro Fiji-Nadi Bay Sands Investment Limited\nLot 3 Wailoaloa Beach Road, Nadi, Fiji",
         ownerEmail: "digitalmedia@cml.com.fj",
         ownerPhone: "+679 672 8885",
         hotelName: "Wyndham Garden Wailoaloa Beach",
@@ -447,6 +483,7 @@ export function AgreementsSigning() {
         title: `${selectedTemplate} – Custom Development`,
         ownerName: "",
         ownerCompany: "",
+        ownerDetails: "",
         ownerEmail: "",
         ownerPhone: "",
         hotelName: "New Hotel Resort",
@@ -490,7 +527,8 @@ ${ag.completedDate ? `COMPLETED DATE:  ${ag.completedDate}` : ""}
 --------------------------------------------------------------------------------
 OWNER:           ${ag.ownerCompany}
 Owner Contact:   ${ag.ownerName} (${ag.ownerEmail} / ${ag.ownerPhone})
-Owner Address:   ${ag.hotelAddress}
+Owner Details:
+${getOwnerDetails(ag)}
 
 MANAGER:         Cove Management Pte Ltd
 Manager Address: Lot 14, Wasawasa Rd, Wailoaloa Beach, Nadi, Fiji
@@ -498,10 +536,10 @@ Manager Address: Lot 14, Wasawasa Rd, Wailoaloa Beach, Nadi, Fiji
 --------------------------------------------------------------------------------
 2. HOTEL PROPERTY DETAILS
 --------------------------------------------------------------------------------
-Hotel Brand:     Ramada Plaza (subject to Wyndham Hotels and Resorts approval)
-Hotel Name:      ${ag.hotelName} (or as agreed between parties)
+Hotel Brand:     ${getHotelBrand(ag)}
+Hotel Name:      ${getProposedHotelName(ag)} (or as agreed between parties)
 Hotel Address:   ${ag.hotelAddress}
-Development:     New Build
+Development:     ${getDevelopmentType(ag)}
 Inventory:       ${ag.inventory}
 
 DESIGNATED FACILITIES:
@@ -510,29 +548,33 @@ ${ag.facilities.map((fac, idx) => `  [${String(idx + 1).padStart(2, '0')}] ${fac
 --------------------------------------------------------------------------------
 3. COMMERCIAL COVENANTS & FEES
 --------------------------------------------------------------------------------
-Initial Term:    ${ag.initialTerm}
-Renewal Term:    ${ag.renewalTerm}
-Management Fee:  20% of Gross Operating Profit (GOP) payable monthly in arrears
-Technical Fee:   ${ag.techFee}
+Initial Term:    ${getInitialTerm(ag)}
+Renewal Term:    ${getRenewalTerm(ag)}
+Management Fee:  ${getManagementFee(ag)}
+Technical Fee:   ${getTechFee(ag)}
 
 FF&E Reserve Fund:
-  - 5% of Gross Revenues for the first Operating Year;
-  - 6% of Gross Revenues for the second and third Operating Years; and
-  - 7% of Gross Revenues for the fourth Operating Year and thereafter.
+${getFfeReserve(ag)}
 
 Reserve Sinking Fund:
-  - Monthly Sinking Fund reserve of 5% of Gross Revenue (capped at $250k FJD)
-  - Owner to contribute $150k FJD initially toward the fund.
+${getSinkingFund(ag)}
+
+Owner Responsibilities & Covenants:
+${getOwnerResponsibilities(ag)}
 
 Settlement Currency:
-  - All transactions and payments shall be settled in Fijian Dollars (FJD).
+${getCurrency(ag)}
+
+Franchise Covenants:
+${getFranchiseAgreement(ag)}
+
+Rental Pool Program Covenants:
+${getRentalProgram(ag)}
 
 --------------------------------------------------------------------------------
-4. KEY COVENANT DATES
+4. KEY COVENANT DATES & MILESTONES
 --------------------------------------------------------------------------------
-Construction Commencement: Commenced
-Construction Completion:   To be finalized (XXXX)
-Opening Date:              To be finalized (XXXXX)
+${getMilestoneDates(ag)}
 
 --------------------------------------------------------------------------------
 5. DIGITAL SIGNATURES & SECURITY METADATA
@@ -563,16 +605,29 @@ This is a secure electronic copy generated from the CML Digital Vault.
 ================================================================================
 `;
 
-    const blob = new Blob([fileContent], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${ag.id}_${ag.title.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    triggerNotification(`Successfully downloaded ${ag.id} to your PC.`, "success");
+    // Use full-stack native POST form submit to bypass sandboxed iframe download restrictions
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = "/api/download-text";
+    form.target = "_self";
+
+    const filenameInput = document.createElement("input");
+    filenameInput.type = "hidden";
+    filenameInput.name = "filename";
+    filenameInput.value = `${ag.id}_${ag.title.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.txt`;
+    form.appendChild(filenameInput);
+
+    const contentInput = document.createElement("input");
+    contentInput.type = "hidden";
+    contentInput.name = "content";
+    contentInput.value = fileContent;
+    form.appendChild(contentInput);
+
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+
+    triggerNotification(`Downloading CML secured copy of ${ag.id} to your PC...`, "success");
   };
 
   // Download supporting attachments to local PC
@@ -588,16 +643,29 @@ Status:        Secured & Certified
 This is a verified secure copy of the contract annexure "${docItem.name}".
 ================================================================================
 `;
-    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = docItem.name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    triggerNotification(`Successfully downloaded "${docItem.name}" to your PC.`, "success");
+    // Use full-stack native POST form submit to bypass sandboxed iframe download restrictions
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = "/api/download-text";
+    form.target = "_self";
+
+    const filenameInput = document.createElement("input");
+    filenameInput.type = "hidden";
+    filenameInput.name = "filename";
+    filenameInput.value = docItem.name;
+    form.appendChild(filenameInput);
+
+    const contentInput = document.createElement("input");
+    contentInput.type = "hidden";
+    contentInput.name = "content";
+    contentInput.value = content;
+    form.appendChild(contentInput);
+
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+
+    triggerNotification(`Downloading attachment "${docItem.name}" to your PC...`, "success");
   };
 
   // --- SIGNATURE DRAW CANVAS LOGIC ---
@@ -685,6 +753,33 @@ This is a verified secure copy of the contract annexure "${docItem.name}".
   };
 
   // --- ACTIONS ---
+  const getOwnerDetails = (ag: Agreement) => ag.ownerDetails || `${ag.ownerCompany}\n${ag.ownerAddress || "Lot 2 Northern Press Rd, Martintar, Nadi Fiji"}`;
+  const getManagerDetails = (ag: Agreement) => ag.managerDetails || `Cove Management Pte Ltd\nLot 14, Wasawasa Rd, Wailoaloa Beach, Nadi`;
+  const getHotelBrand = (ag: Agreement) => ag.hotelBrand || "Ramada Plaza - subject to final approval by Wyndham Hotels and Resorts";
+  const getProposedHotelName = (ag: Agreement) => ag.hotelName || "Ramada Plaza by Wyndham";
+  const getFranchiseAgreement = (ag: Agreement) => ag.franchiseAgreement || "Owner acknowledges and agrees that Manager will enter into a Franchise Agreement directly with Wyndham Hotels and Resorts to flag the establishment.";
+  const getHotelAddress = (ag: Agreement) => ag.hotelAddress || "Martintar, Nadi Fiji";
+  const getDevelopmentType = (ag: Agreement) => ag.developmentType || "New Build & Managed Luxury Resort";
+  const getRentalProgram = (ag: Agreement) => ag.rentalProgram || "Owner and Manager will establish a rental pool program for privately owned villas/units in the resort, managed exclusively by Manager under a 50/50 net revenue split covenant.";
+  const getInitialTerm = (ag: Agreement) => ag.initialTerm || "15 Years from opening";
+  const getRenewalTerm = (ag: Agreement) => ag.renewalTerm || "5 Years (Two terms)";
+  const getMilestoneDates = (ag: Agreement) => ag.milestoneDates || "Construction Start: Q4 2026\nHotel Opening: Q4 2028";
+  const getManagementFee = (ag: Agreement) => ag.managementFee || "20% of Gross Operating Profit (GOP) payable monthly in arrears";
+  const getTechFee = (ag: Agreement) => ag.techFee || "One-time Technical Services Fee of US$15,000";
+  const getFfeReserve = (ag: Agreement) => ag.ffeReserve || "5% of Gross Revenues for Year 1, 6% for Years 2-3, and 7% for Year 4 onwards.";
+  const getSinkingFund = (ag: Agreement) => ag.sinkingFund || "5% of Gross Revenue capped at $250,000 for major upkeep and replacement works. Owner to make $150,000 initial contribution.";
+  const getCurrency = (ag: Agreement) => ag.currency || "Fijian Dollars";
+
+  const updateAgreementField = (field: keyof Agreement, value: any) => {
+    if (!selectedAgreement) return;
+    const updatedAg = {
+      ...selectedAgreement,
+      [field]: value
+    };
+    setSelectedAgreement(updatedAg);
+    setAgreements(prev => prev.map(ag => ag.id === selectedAgreement.id ? updatedAg : ag));
+  };
+
   const handleCreateAgreement = (e: React.FormEvent) => {
     e.preventDefault();
     if (!builderForm.title || !builderForm.ownerName || !builderForm.hotelName) {
@@ -700,6 +795,7 @@ This is a verified secure copy of the contract annexure "${docItem.name}".
       status: "Draft",
       ownerName: builderForm.ownerName,
       ownerCompany: builderForm.ownerCompany,
+      ownerDetails: builderForm.ownerDetails,
       ownerEmail: builderForm.ownerEmail,
       ownerPhone: builderForm.ownerPhone,
       hotelName: builderForm.hotelName,
@@ -713,6 +809,10 @@ This is a verified secure copy of the contract annexure "${docItem.name}".
       version: "1.0",
       facilities: builderForm.facilitiesText.split('\n').filter(l => l.trim().length > 0),
       supportingDocs: [],
+      ownerResponsibilities: `Open Hotel by no later than the agreed Opening Date.\nAcquire and construct the Hotel in compliance with all applicable laws and regulations and according to the Hotel Brand Standards.\nApprove the annual plan in accordance with the procedures of the Management Agreement.\nRetain responsibility for working capital, property taxes, debt services and the like.\nObtain and maintain appropriate insurance.\nWyndham initial design set up fee.\nProvide working capital in the sinking fund account as per above Reserve Sinking Fund clause.`,
+      ffeReserve: `The following amounts will be transferred monthly from the operating account of the Hotel to a reserve fund for the Hotel:\n1. 5% of Gross Revenues for the first Operating Year;\n2. 6% of Gross Revenues for the second and third Operating Year; and\n3. 7% of Gross Revenues for the fourth Operating Year and each subsequent Operating Year.\n\nAmounts in such Reserve fund will be used for routine capital and FF&E improvements.`,
+      sinkingFund: `Manager will reserve monthly Sinking Fund for the Hotel at rate of 5% off the Gross Revenue, capped at $250k for any major upkeep, renovation & replacement works and to be utilized as a working capital under unseen circumstances situations.\n\nOwner will be contributing $150k initially towards to this Reserve Sinking fund account to be utilized as working capital by the Manager to start its hotel operations and Manager to build up Sinking fund account monthly by said deduction process.`,
+      currency: "All payments to Manager under the Management Agreement shall be made in Fijian Dollars",
       auditTrail: [
         {
           id: `log-${Date.now()}`,
@@ -1470,16 +1570,23 @@ This is a verified secure copy of the contract annexure "${docItem.name}".
                   />
                 </div>
 
-                {/* Owner Company */}
+                {/* Owner Company & Address */}
                 <div className="space-y-1">
-                  <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Owner Corporate Entity Name</label>
-                  <input
-                    type="text"
+                  <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Owner Corporate Entity Name & Address (One unified entry)</label>
+                  <textarea
                     required
-                    value={builderForm.ownerCompany}
-                    onChange={(e) => setBuilderForm({ ...builderForm, ownerCompany: e.target.value })}
+                    rows={2}
+                    value={builderForm.ownerDetails}
+                    onChange={(e) => {
+                      const lines = e.target.value.split('\n');
+                      setBuilderForm({ 
+                        ...builderForm, 
+                        ownerDetails: e.target.value,
+                        ownerCompany: lines[0] || ""
+                      });
+                    }}
                     className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
-                    placeholder="Koro Fiji-Nadi Bay Sands Investment Limited"
+                    placeholder="Koro Fiji-Nadi Bay Sands Investment Limited&#10;Lot 2 Northern Press Rd, Martintar, Nadi Fiji"
                   />
                 </div>
 
@@ -1681,6 +1788,17 @@ This is a verified secure copy of the contract annexure "${docItem.name}".
                 )}
               >
                 ✨ Premium Presentation Slides
+              </button>
+              <button
+                onClick={() => setDocViewTab("excel")}
+                className={cn(
+                  "px-6 py-3.5 text-[10px] font-display uppercase tracking-[0.15em] font-bold transition-all relative border-t-2 flex items-center gap-2",
+                  docViewTab === "excel"
+                    ? "border-t-[#0B1C33] text-[#0B1C33] bg-white font-black"
+                    : "border-t-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50/50"
+                )}
+              >
+                📋 Interactive Label Form (Live Excel)
               </button>
             </div>
 
@@ -1993,6 +2111,110 @@ This is a verified secure copy of the contract annexure "${docItem.name}".
                       </div>
                     </div>
 
+                  </div>
+                ) : docViewTab === "excel" ? (
+                  /* ==================== INTERACTIVE LABELED SPREADSHEET FORM ==================== */
+                  <div className="bg-slate-50 border border-slate-200 p-2 md:p-4 shadow-sm text-slate-800 rounded-sm">
+                    {/* Excel Bar */}
+                    <div className="flex items-center justify-between bg-[#107C41] text-white px-4 py-2 font-display uppercase tracking-wider text-[11px] font-bold shadow-sm mb-4 rounded-t-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="bg-white text-[#107C41] font-black px-1.5 py-0.5 rounded-sm text-[10px]">XLS</span>
+                        <span>CML_LOI_Term_Sheet_Template.xlsx (Live Sync)</span>
+                      </div>
+                      <span className="text-[9px] bg-emerald-800 px-2 py-0.5 rounded-full text-emerald-100 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        LIVE FORM FILLING ACTIVE
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto border border-slate-200 bg-white shadow-inner">
+                      <table className="w-full border-collapse font-sans text-xs">
+                        <thead>
+                          <tr className="bg-slate-100 border-b border-slate-200 text-slate-500 font-bold select-none text-[11px]">
+                            <th className="w-10 border-r border-slate-200 py-1.5 text-center font-normal"></th>
+                            <th className="w-1/3 border-r border-slate-200 px-4 text-left font-semibold">Column A: Label Form Fields</th>
+                            <th className="px-4 text-left font-semibold">Column B: Sheet Values (Click and Edit Live)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            { key: "ownerDetails", label: "Owner Party (Corporate Entity & Address)", category: "PARTIES", isLong: true },
+                            { key: "managerDetails", label: "Manager Party (Corporate Entity & Address)", category: "PARTIES", isLong: true },
+                            { key: "hotelBrand", label: "Hotel Brand Approval", category: "HOTEL DETAILS" },
+                            { key: "hotelName", label: "Proposed Hotel Name", category: "HOTEL DETAILS" },
+                            { key: "franchiseAgreement", label: "Franchise Agreement Terms", category: "HOTEL DETAILS", isLong: true },
+                            { key: "hotelAddress", label: "Hotel Location Address", category: "HOTEL DETAILS" },
+                            { key: "developmentType", label: "Development / Build Type", category: "HOTEL DETAILS" },
+                            { key: "facilitiesText", label: "Facilities (One item per line)", category: "HOTEL DETAILS", isLong: true, isList: true },
+                            { key: "rentalProgram", label: "Rental / Residential Program", category: "HOTEL DETAILS", isLong: true },
+                            { key: "initialTerm", label: "Initial Agreement Term", category: "DATES & TERM", isLong: true },
+                            { key: "renewalTerm", label: "Renewal Option Covenants", category: "DATES & TERM" },
+                            { key: "milestoneDates", label: "Milestone Target Dates", category: "DATES & TERM", isLong: true },
+                            { key: "managementFee", label: "Management Fee (GOP %)", category: "FEES & COMMERCIALS", isLong: true },
+                            { key: "techFee", label: "Technical Services Fee", category: "FEES & COMMERCIALS", isLong: true },
+                            { key: "ffeReserve", label: "FF&E Reserve Account Terms", category: "OTHER COVENANTS", isLong: true },
+                            { key: "sinkingFund", label: "Operating Sinking Fund Terms", category: "OTHER COVENANTS", isLong: true },
+                            { key: "ownerResponsibilities", label: "Key Owner Obligations", category: "OTHER COVENANTS", isLong: true },
+                            { key: "currency", label: "Transaction / Operating Currency", category: "OTHER COVENANTS" }
+                          ].reduce((acc: any[], item, idx) => {
+                            if (idx === 0 || item.category !== acc[acc.length - 1]?.categoryName) {
+                              acc.push({ isHeader: true, categoryName: item.category });
+                            }
+                            acc.push({ ...item, rowNum: acc.length + 1 });
+                            return acc;
+                          }, []).map((row, index) => {
+                            if (row.isHeader) {
+                              return (
+                                <tr key={`hdr-${index}`} className="bg-slate-100 border-b border-slate-200">
+                                  <td className="border-r border-slate-200 bg-slate-100 py-1 text-center font-mono text-[10px] text-slate-400 select-none">{index + 1}</td>
+                                  <td colSpan={2} className="px-4 py-1.5 font-display text-[9px] uppercase tracking-widest font-black text-[#C5A02D] bg-[#0B1C33]/90">
+                                    ✦ {row.categoryName}
+                                  </td>
+                                </tr>
+                              );
+                            }
+
+                            const val = row.isList
+                              ? (selectedAgreement.facilities || []).join("\n")
+                              : ((selectedAgreement as any)[row.key] || "");
+
+                            return (
+                              <tr key={`row-${index}`} className="border-b border-slate-200 hover:bg-slate-50/40 group">
+                                <td className="border-r border-slate-200 bg-slate-100 text-center font-mono text-[10px] text-slate-400 select-none py-2">{index + 1}</td>
+                                <td className="border-r border-slate-200 px-4 py-2 font-display text-[10px] tracking-wider text-slate-600 font-bold bg-slate-50/30">
+                                  {row.label}
+                                </td>
+                                <td className="px-3 py-1 font-mono text-xs">
+                                  {row.isLong ? (
+                                    <textarea
+                                      rows={row.isList ? 8 : 3}
+                                      value={val}
+                                      onChange={(e) => {
+                                        if (row.isList) {
+                                          updateAgreementField("facilities", e.target.value.split("\n"));
+                                        } else {
+                                          updateAgreementField(row.key as keyof Agreement, e.target.value);
+                                        }
+                                      }}
+                                      className="w-full bg-transparent p-1.5 outline-none font-mono text-xs text-slate-800 border border-transparent focus:border-[#107C41] focus:bg-white focus:ring-1 focus:ring-[#107C41] transition-all rounded-sm resize-y"
+                                      placeholder={`Enter ${row.label.toLowerCase()}...`}
+                                    />
+                                  ) : (
+                                    <input
+                                      type="text"
+                                      value={val}
+                                      onChange={(e) => updateAgreementField(row.key as keyof Agreement, e.target.value)}
+                                      className="w-full bg-transparent p-1.5 outline-none font-mono text-xs text-slate-800 border border-transparent focus:border-[#107C41] focus:bg-white focus:ring-1 focus:ring-[#107C41] transition-all rounded-sm"
+                                      placeholder={`Enter ${row.label.toLowerCase()}...`}
+                                    />
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 ) : (
                   <>

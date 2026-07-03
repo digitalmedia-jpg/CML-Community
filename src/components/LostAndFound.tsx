@@ -55,6 +55,7 @@ interface LostItem {
   imageUrls?: string[];
   status: "Found" | "Received at Office" | "Secured in Office" | "Claimed" | "Disposed";
   authorId: string;
+  propertyId?: string;
   createdAt: any;
   isArchived?: boolean;
   isHighValue?: boolean;
@@ -363,7 +364,8 @@ export const LostAndFound: React.FC<{
     staffName: "",
     staffPosition: "",
     imageUrls: [] as string[],
-    isHighValue: false
+    isHighValue: false,
+    propertyId: ""
   });
 
   const [manuallyHighValue, setManuallyHighValue] = useState<boolean | null>(null);
@@ -399,7 +401,8 @@ export const LostAndFound: React.FC<{
       staffName: auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || "",
       staffPosition: "",
       imageUrls: [],
-      isHighValue: false
+      isHighValue: false,
+      propertyId: activeCompanyId === "all" ? "wyndham" : activeCompanyId
     });
     setManuallyHighValue(null);
     setEditingItem(null);
@@ -412,96 +415,129 @@ export const LostAndFound: React.FC<{
   const hasSeededRef = useRef(false);
 
   useEffect(() => {
-    // Collect from property-specific database as requested by Charles
-    const q = query(
-      collection(db, `lost-and-found-${activeCompanyId}`), 
-      orderBy("createdAt", "desc")
-    );
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as LostItem[];
+    if (activeCompanyId === "all") {
+      setLoading(true);
+      const companies = ["wyndham", "ramada", "cml"];
+      const results: Record<string, LostItem[]> = {};
+      
+      const unsubscribes = companies.map((comp) => {
+        const q = query(
+          collection(db, `lost-and-found-${comp}`), 
+          orderBy("createdAt", "desc")
+        );
+        return onSnapshot(q, (snapshot) => {
+          const docs = snapshot.docs.map(doc => ({
+            id: doc.id,
+            propertyId: comp,
+            ...doc.data()
+          })) as LostItem[];
+          
+          results[comp] = docs;
+          
+          // Flatten all lists
+          const allDocs = Object.values(results).flat();
+          setItems(allDocs);
+          setLoading(false);
+        }, (error) => {
+          console.error(`Firestore listener error for ${comp}:`, error);
+        });
+      });
+      
+      return () => {
+        unsubscribes.forEach(unsub => unsub());
+      };
+    } else {
+      // Collect from property-specific database as requested by Charles
+      const q = query(
+        collection(db, `lost-and-found-${activeCompanyId}`), 
+        orderBy("createdAt", "desc")
+      );
+      const unsubscribe = onSnapshot(q, async (snapshot) => {
+        const docs = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as LostItem[];
 
-      if (docs.length === 0 && !hasSeededRef.current) {
-        hasSeededRef.current = true;
-        console.log("[LostAndFound] Collection empty. Seeding defaults for:", activeCompanyId);
-        const colRef = collection(db, `lost-and-found-${activeCompanyId}`);
-        const seeds = [
-          {
-            itemName: "iPhone 14 Pro Max",
-            description: "Deep Purple, found near the Reception lift lobby. Locked screen with a beach wallpaper.",
-            locationFound: "Reception Lobby",
-            staffName: "Charlene Nand",
-            staffPosition: "Duty Manager",
-            imageUrls: ["https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?q=80&w=300&auto=format&fit=crop"],
-            propertyId: activeCompanyId,
-            isHighValue: true,
-            status: "Secured in Office",
-            createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
-            reportedBy: "Charlene Nand",
-            disposalMethod: "",
-            recipientName: "",
-            carrierName: "",
-            trackingNumber: "",
-            courierFee: 0,
-            dispatchDate: ""
-          },
-          {
-            itemName: "Black Leather Wallet",
-            description: "Saddleback leather wallet containing cards and local Fijian currency notes. Found on a pool deck chair.",
-            locationFound: "Restaurant Poolside",
-            staffName: "Nolau Malo",
-            staffPosition: "Rooms Division Manager",
-            imageUrls: ["https://images.unsplash.com/photo-1627124357128-5a15cf37b586?q=80&w=300&auto=format&fit=crop"],
-            propertyId: activeCompanyId,
-            isHighValue: true,
-            status: "Found",
-            createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-            reportedBy: "Nolau Malo",
-            disposalMethod: "",
-            recipientName: "",
-            carrierName: "",
-            trackingNumber: "",
-            courierFee: 0,
-            dispatchDate: ""
-          },
-          {
-            itemName: "Designer Sunglasses",
-            description: "Tom Ford aviator sunglasses with gold frames, inside a brown velvet case.",
-            locationFound: "Gym Area",
-            staffName: "Priyesh Narayan",
-            staffPosition: "Staff Member",
-            imageUrls: ["https://images.unsplash.com/photo-1511499767150-a48a237f0083?q=80&w=300&auto=format&fit=crop"],
-            propertyId: activeCompanyId,
-            isHighValue: false,
-            status: "Found",
-            createdAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-            reportedBy: "Priyesh Narayan",
-            disposalMethod: "",
-            recipientName: "",
-            carrierName: "",
-            trackingNumber: "",
-            courierFee: 0,
-            dispatchDate: ""
+        if (docs.length === 0 && !hasSeededRef.current) {
+          hasSeededRef.current = true;
+          console.log("[LostAndFound] Collection empty. Seeding defaults for:", activeCompanyId);
+          const colRef = collection(db, `lost-and-found-${activeCompanyId}`);
+          const seeds = [
+            {
+              itemName: "iPhone 14 Pro Max",
+              description: "Deep Purple, found near the Reception lift lobby. Locked screen with a beach wallpaper.",
+              locationFound: "Reception Lobby",
+              staffName: "Charlene Nand",
+              staffPosition: "Duty Manager",
+              imageUrls: ["https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?q=80&w=300&auto=format&fit=crop"],
+              propertyId: activeCompanyId,
+              isHighValue: true,
+              status: "Secured in Office",
+              createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+              reportedBy: "Charlene Nand",
+              disposalMethod: "",
+              recipientName: "",
+              carrierName: "",
+              trackingNumber: "",
+              courierFee: 0,
+              dispatchDate: ""
+            },
+            {
+              itemName: "Black Leather Wallet",
+              description: "Saddleback leather wallet containing cards and local Fijian currency notes. Found on a pool deck chair.",
+              locationFound: "Restaurant Poolside",
+              staffName: "Nolau Malo",
+              staffPosition: "Rooms Division Manager",
+              imageUrls: ["https://images.unsplash.com/photo-1627124357128-5a15cf37b586?q=80&w=300&auto=format&fit=crop"],
+              propertyId: activeCompanyId,
+              isHighValue: true,
+              status: "Found",
+              createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+              reportedBy: "Nolau Malo",
+              disposalMethod: "",
+              recipientName: "",
+              carrierName: "",
+              trackingNumber: "",
+              courierFee: 0,
+              dispatchDate: ""
+            },
+            {
+              itemName: "Designer Sunglasses",
+              description: "Tom Ford aviator sunglasses with gold frames, inside a brown velvet case.",
+              locationFound: "Gym Area",
+              staffName: "Priyesh Narayan",
+              staffPosition: "Staff Member",
+              imageUrls: ["https://images.unsplash.com/photo-1511499767150-a48a237f0083?q=80&w=300&auto=format&fit=crop"],
+              propertyId: activeCompanyId,
+              isHighValue: false,
+              status: "Found",
+              createdAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+              reportedBy: "Priyesh Narayan",
+              disposalMethod: "",
+              recipientName: "",
+              carrierName: "",
+              trackingNumber: "",
+              courierFee: 0,
+              dispatchDate: ""
+            }
+          ];
+          for (const item of seeds) {
+            try {
+              await addDoc(colRef, item);
+            } catch (err) {
+              console.error("Seeding lost-and-found failed:", err);
+            }
           }
-        ];
-        for (const item of seeds) {
-          try {
-            await addDoc(colRef, item);
-          } catch (err) {
-            console.error("Seeding lost-and-found failed:", err);
-          }
+        } else {
+          setItems(docs);
+          setLoading(false);
         }
-      } else {
-        setItems(docs);
+      }, (error) => {
+        console.error("Firestore listener error:", error);
         setLoading(false);
-      }
-    }, (error) => {
-      console.error("Firestore listener error:", error);
-      setLoading(false);
-    });
-    return () => unsubscribe();
+      });
+      return () => unsubscribe();
+    }
   }, [activeCompanyId]);
 
   const handleAddItem = async (e: React.FormEvent) => {
@@ -512,7 +548,8 @@ export const LostAndFound: React.FC<{
       setLoading(true);
       const filteredUrls = newItem.imageUrls.filter(url => url && typeof url === 'string' && url.trim() !== "");
       
-      const targetCollection = collection(db, `lost-and-found-${activeCompanyId}`);
+      const targetCompany = newItem.propertyId || (activeCompanyId === "all" ? "wyndham" : activeCompanyId);
+      const targetCollection = collection(db, `lost-and-found-${targetCompany}`);
 
       const itemData = {
         itemName: newItem.itemName,
@@ -521,7 +558,7 @@ export const LostAndFound: React.FC<{
         staffName: newItem.staffName,
         staffPosition: newItem.staffPosition,
         imageUrls: filteredUrls,
-        propertyId: activeCompanyId,
+        propertyId: targetCompany,
         isHighValue: newItem.isHighValue
       };
 
@@ -530,7 +567,8 @@ export const LostAndFound: React.FC<{
           alert("Only Administrators and Managers are permitted to edit records.");
           return;
         }
-        await updateDoc(doc(db, `lost-and-found-${activeCompanyId}`, editingItem.id), {
+        const editCompany = editingItem.propertyId || targetCompany;
+        await updateDoc(doc(db, `lost-and-found-${editCompany}`, editingItem.id), {
           ...itemData,
           updatedAt: serverTimestamp()
         });
@@ -622,7 +660,8 @@ export const LostAndFound: React.FC<{
         staffName: auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || "",
         staffPosition: "",
         imageUrls: [],
-        isHighValue: false
+        isHighValue: false,
+        propertyId: activeCompanyId === "all" ? "wyndham" : activeCompanyId
       });
       setManuallyHighValue(null);
     } catch (error) {
@@ -643,7 +682,8 @@ export const LostAndFound: React.FC<{
       staffName: item.staffName,
       staffPosition: item.staffPosition || "",
       imageUrls: item.imageUrls || [],
-      isHighValue: item.isHighValue || false
+      isHighValue: item.isHighValue || false,
+      propertyId: item.propertyId || activeCompanyId
     });
     setManuallyHighValue(item.isHighValue !== undefined ? item.isHighValue : null);
     setIsAdding(true);
@@ -651,7 +691,9 @@ export const LostAndFound: React.FC<{
 
   const handleUpdateStatus = async (id: string, newStatus: "Found" | "Received at Office" | "Claimed" | "Disposed") => {
     try {
-      await updateDoc(doc(db, `lost-and-found-${activeCompanyId}`, id), {
+      const item = items.find(i => i.id === id);
+      const itemCompany = item?.propertyId || activeCompanyId;
+      await updateDoc(doc(db, `lost-and-found-${itemCompany}`, id), {
         status: newStatus,
         updatedAt: serverTimestamp(),
         ...(newStatus === "Received at Office" ? {
@@ -669,7 +711,8 @@ export const LostAndFound: React.FC<{
     if (!selectedItemForDispose || !auth.currentUser) return;
     try {
       setLoading(true);
-      await updateDoc(doc(db, `lost-and-found-${activeCompanyId}`, selectedItemForDispose.id), {
+      const itemCompany = selectedItemForDispose.propertyId || activeCompanyId;
+      await updateDoc(doc(db, `lost-and-found-${itemCompany}`, selectedItemForDispose.id), {
         status: "Disposed",
         isArchived: true,
         archivedAt: serverTimestamp(),
@@ -727,7 +770,8 @@ export const LostAndFound: React.FC<{
     if (!selectedItemForLogReceived || !auth.currentUser) return;
     try {
       setLoading(true);
-      await updateDoc(doc(db, `lost-and-found-${activeCompanyId}`, selectedItemForLogReceived.id), {
+      const itemCompany = selectedItemForLogReceived.propertyId || activeCompanyId;
+      await updateDoc(doc(db, `lost-and-found-${itemCompany}`, selectedItemForLogReceived.id), {
         status: "Secured in Office",
         receivedDetails: {
           ...logReceivedForm,
@@ -828,8 +872,9 @@ export const LostAndFound: React.FC<{
     try {
       setLoading(true);
       const autoNote = `[AUTOMATIC SYSTEM NOTE: Item already released/dispatched to ${dispatchForm.guestName} on ${dispatchForm.releaseDate}]`;
+      const itemCompany = selectedItemForDispatch.propertyId || activeCompanyId;
 
-      await updateDoc(doc(db, `lost-and-found-${activeCompanyId}`, selectedItemForDispatch.id), {
+      await updateDoc(doc(db, `lost-and-found-${itemCompany}`, selectedItemForDispatch.id), {
         status: "Claimed",
         isArchived: true,
         archivedAt: serverTimestamp(),
@@ -894,7 +939,9 @@ export const LostAndFound: React.FC<{
   const handleDeleteConfirm = async () => {
     if (!deleteTargetId) return;
     try {
-      await updateDoc(doc(db, `lost-and-found-${activeCompanyId}`, deleteTargetId), {
+      const item = items.find(i => i.id === deleteTargetId);
+      const itemCompany = item?.propertyId || activeCompanyId;
+      await updateDoc(doc(db, `lost-and-found-${itemCompany}`, deleteTargetId), {
         isArchived: true,
         archivedAt: serverTimestamp(),
         archivedBy: auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || "Administrator",
@@ -911,7 +958,9 @@ export const LostAndFound: React.FC<{
     if (!restoreTargetId) return;
     try {
       setLoading(true);
-      await updateDoc(doc(db, `lost-and-found-${activeCompanyId}`, restoreTargetId), {
+      const item = items.find(i => i.id === restoreTargetId);
+      const itemCompany = item?.propertyId || activeCompanyId;
+      await updateDoc(doc(db, `lost-and-found-${itemCompany}`, restoreTargetId), {
         isArchived: false,
         archivedAt: null,
         archivedBy: null,
@@ -1006,6 +1055,7 @@ export const LostAndFound: React.FC<{
       {/* Property Registry Selector */}
       <div className="flex border-b border-slate-100 pb-2 gap-6 text-[10px] font-display uppercase tracking-widest overflow-x-auto scrollbar-none">
         {[
+          { id: "all", label: "All Properties Combined" },
           { id: "wyndham", label: "Wyndham Garden Wailoaloa" },
           { id: "ramada", label: "Ramada Suites Wailoaloa" },
           { id: "cml", label: "CML Corporate Office" }
@@ -1170,13 +1220,18 @@ export const LostAndFound: React.FC<{
                     </div>
                   )}
                   
-                  <div className="absolute top-4 left-4">
+                  <div className="absolute top-4 left-4 flex flex-col gap-1.5 items-start">
                     <span className={cn(
                       "px-3 py-1 text-[8px] font-display uppercase tracking-[0.2em] font-black border backdrop-blur-md shadow-sm",
                       getStatusColor(item.status)
                     )}>
                       {item.status}
                     </span>
+                    {activeCompanyId === "all" && (
+                      <span className="px-2 py-0.5 text-[7px] font-display uppercase tracking-[0.15em] font-black bg-slate-900/95 text-white border border-white/10 shadow-sm rounded-sm">
+                        {item.propertyId === "wyndham" ? "Wyndham" : item.propertyId === "ramada" ? "Ramada" : "CML Office"}
+                      </span>
+                    )}
                   </div>
 
                   {isAdministrator && (
@@ -1539,13 +1594,18 @@ export const LostAndFound: React.FC<{
                       </div>
                     )}
                     
-                    <div className="absolute top-4 left-4">
+                    <div className="absolute top-4 left-4 flex flex-col gap-1.5 items-start">
                       <span className={cn(
                         "px-3 py-1 text-[8px] font-display uppercase tracking-[0.2em] font-black border backdrop-blur-md shadow-sm",
                         getStatusColor(item.status)
                       )}>
                         {item.status}
                       </span>
+                      {activeCompanyId === "all" && (
+                        <span className="px-2 py-0.5 text-[7px] font-display uppercase tracking-[0.15em] font-black bg-slate-900/95 text-white border border-white/10 shadow-sm rounded-sm">
+                          {item.propertyId === "wyndham" ? "Wyndham" : item.propertyId === "ramada" ? "Ramada" : "CML Office"}
+                        </span>
+                      )}
                     </div>
 
                     {isAdministrator && (
@@ -1877,6 +1937,22 @@ export const LostAndFound: React.FC<{
               </div>
 
               <form onSubmit={handleAddItem} className="space-y-8">
+                {activeCompanyId === "all" && (
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-display uppercase tracking-widest text-gold font-black opacity-80">Select Property Registry</label>
+                    <select 
+                      required
+                      className="w-full bg-[#1a1a1a] border border-white/10 px-4 py-3 text-sm text-white outline-none focus:border-gold/30 transition-all cursor-pointer"
+                      value={newItem.propertyId}
+                      onChange={e => setNewItem({...newItem, propertyId: e.target.value})}
+                    >
+                      <option value="wyndham" className="bg-[#1a1a1a] text-white">Wyndham Garden Wailoaloa</option>
+                      <option value="ramada" className="bg-[#1a1a1a] text-white">Ramada Suites Wailoaloa</option>
+                      <option value="cml" className="bg-[#1a1a1a] text-white">CML Corporate Office</option>
+                    </select>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-2">
                     <label className="text-[9px] font-display uppercase tracking-widest text-gold font-black opacity-80">Item Designation</label>

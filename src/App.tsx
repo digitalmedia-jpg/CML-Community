@@ -3021,6 +3021,30 @@ export default function App() {
       ]
     },
     {
+      id: "guest-experience",
+      label: "Guest Experience",
+      icon: Users,
+      subItems: [
+        { id: "guest-recovery", label: "Customer Recovery", icon: RefreshCw },
+        { id: "lost-and-found", label: "Lost & Found", icon: Package },
+        { id: "customer-care", label: "Customer Care", icon: MessageSquare, disabled: true },
+        { id: "cml-connect", label: "CML Connect", icon: Globe, disabled: true },
+        { id: "count-on-me", label: "Count on Me", icon: CheckCircle2, disabled: true }
+      ]
+    },
+    {
+      id: "loyalty-marketing",
+      label: "Loyalty, Sales & Marketing",
+      icon: TrendingUp,
+      subItems: [
+        { id: "dining-loyalty", label: "CML Rewards", icon: Award },
+        { id: "newsletter-subscribers", label: "Newsletter Subscribers", icon: Mail },
+        { id: "cml-sales", label: "CML Sales", icon: TrendingUp, disabled: true },
+        { id: "local-sales", label: "Local Sales", icon: Users, disabled: true },
+        { id: "brand-kit", label: "Marketing Materials", icon: Gift, disabled: true },
+      ]
+    },
+    {
       id: "owners-section",
       label: "Owners",
       icon: Users,
@@ -5893,6 +5917,7 @@ export default function App() {
                 {/* Real-time Property Syndicate Navigator */}
                 <div className="flex border-b border-slate-100 pb-2 mb-6 gap-6 text-[10px] font-display uppercase tracking-widest overflow-x-auto scrollbar-none">
                   {[
+                    { id: "all", label: "All Properties Combined" },
                     { id: "wyndham", label: "Wyndham Garden Active Logs" },
                     { id: "ramada", label: "Ramada Suites Active Logs" },
                     { id: "cml", label: "CML Corporate Active Logs" },

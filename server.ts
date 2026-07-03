@@ -200,6 +200,17 @@ async function startServer() {
     }
   });
 
+  // Secure full-stack text downloader to bypass sandbox iframe download restrictions
+  app.post("/api/download-text", (req, res) => {
+    const { filename, content } = req.body;
+    if (!filename || !content) {
+      return res.status(400).send("filename and content parameters are required");
+    }
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.send(content);
+  });
+
   // Centralized In-Memory Business Card Registry for multi-device QR alignment
   const cardsMemoryStore: Record<string, any> = {};
 
