@@ -37,7 +37,11 @@ import {
   FileCheck2,
   ExternalLink,
   MessageSquare,
-  Award
+  Award,
+  LayoutGrid,
+  List,
+  Columns,
+  Printer
 } from "lucide-react";
 import { 
   AreaChart, 
@@ -131,14 +135,48 @@ const INITIAL_AGREEMENTS: Agreement[] = [
     viewedDate: "2026-07-01 14:22",
     version: "1.0",
     facilities: [
-      "Fully fitted 88 Apartments with 210 key hotel room",
-      "Restaurants, Bar & Dining areas",
-      "Lobby, Front Office & Guest Lounge",
-      "Conference Room (350 pax) & Breakout Rooms",
-      "Swimming Pool, Spa & Fitness Centre",
-      "High Floor Bar, Restaurant & Kitchen",
-      "Power Generator with Automatic Changeover",
-      "Water Tank & Pressurised Water Systems"
+      "Fully fitted 88 Apartments with 210 key hotel room as per brand requirements",
+      "Fully fitted Kitchen, Restaurant & Bar and Dining area to meet brand standard",
+      "Fully fitted branded Front Office Reception as per brand standards",
+      "Designed lobby and Guest Luggage Room",
+      "Car parking space",
+      "Maintenance Room",
+      "Fully functional Administration Office including Manager’s offices",
+      "Guest waiting Lounge Area",
+      "Swimming Pool and fully equipped pump room",
+      "Ground Floor Dining area",
+      "Outdoor guest Male and Female shower and toilets at the deck area",
+      "Recommended Brand quality silent power generator with Automatic changeover control system",
+      "Water pressuring pump system both installed on ground floor and rooftop water tank system",
+      "Fully equipped System Server Room including Servers with software to cater for IPTV Sky Channel & in room movie system, room and property Phones, Hotel PMS, CCTV control, Data Protection Firewall, Vingcard room door lock key control system",
+      "Staff Room and Staff area, toilet and shower",
+      "Branded and fully functional lift with emergency rescue device installed",
+      "Fully functional fire protection system, heat & smoke detectors, extinguishers and fire hose requirements as per local authorities",
+      "Linen rooms with storage space at all levels",
+      "Fully functional pressured Instant Hot water supply system for the entire building",
+      "Standard Wall paintings and coverings",
+      "Fully equipped and functional water storage tanks for fresh water supply to the entire building",
+      "Fully functional high floor Bar, Restaurant, Kitchen and Dining",
+      "Fully functional Conference room to handle around 350 people",
+      "Conference break-out meeting rooms at least 2 to handle 30pax in room",
+      "Entire property network and Wifi setup including all hardware",
+      "Vingcard door lock system for guest rooms and office doors",
+      "Concierge/Porter desk",
+      "Meet & Greet guest lobby for guest pickup and drop off",
+      "Proper Rubbish bin storage area with bins",
+      "Disable Toilet and shower room",
+      "Fully Functional Spa and Fitness Center",
+      "Maids Stations on each level",
+      "Amenity storage Room",
+      "Kitchen Dry Storage Room",
+      "Kitchen Freezer Room and Cooler Room",
+      "Beer Cooler Room",
+      "Maintenance Storage Rooms",
+      "Maintenance working area",
+      "Property Guest Transporting Vehicle",
+      "Gym",
+      "Spa",
+      "Shop"
     ],
     supportingDocs: [
       { id: "doc-1", name: "Land_Title_Koro_Fiji.pdf", size: "2.4 MB", date: "2026-06-25" },
@@ -313,9 +351,10 @@ export function AgreementsSigning() {
     return saved ? JSON.parse(saved) : INITIAL_AGREEMENTS;
   });
 
-  const [activeSubView, setActiveSubView] = useState<"dashboard" | "builder" | "viewer" | "storage">("dashboard");
-  const [role, setRole] = useState<"admin" | "owner">("owner"); // Charles is an Owner, but can switch to Admin to build/test!
+  const [activeSubView, setActiveSubView] = useState<"dashboard" | "builder" | "viewer" | "storage">("storage");
+  const [role, setRole] = useState<"admin" | "owner">("admin"); // Default to CML Admin with full control, owner portal toggle removed
   const [selectedAgreement, setSelectedAgreement] = useState<Agreement | null>(null);
+  const [docViewTab, setDocViewTab] = useState<"designed" | "legal">("legal");
   
   // Builder state
   const [selectedTemplate, setSelectedTemplate] = useState<string>("Hotel Management LOI");
@@ -333,13 +372,14 @@ export function AgreementsSigning() {
     techFee: "US$15,000 payable upon contract execution",
     initialTerm: "10 Years from Opening Date",
     renewalTerm: "One (1) further term of Ten (10) Operating Years",
-    facilitiesText: "Fully fitted 88 Apartments with 210 key hotel room\nRestaurants, Bar & Dining areas\nLobby, Front Office & Guest Lounge\nConference Room (350 pax) & Breakout Rooms\nSwimming Pool, Spa & Fitness Centre\nHigh Floor Bar, Restaurant & Kitchen",
+    facilitiesText: "Fully fitted 88 Apartments with 210 key hotel room as per brand requirements\nFully fitted Kitchen, Restaurant & Bar and Dining area to meet brand standard\nFully fitted branded Front Office Reception as per brand standards\nDesigned lobby and Guest Luggage Room\nCar parking space\nMaintenance Room\nFully functional Administration Office including Manager’s offices\nGuest waiting Lounge Area\nSwimming Pool and fully equipped pump room\nGround Floor Dining area\nOutdoor guest Male and Female shower and toilets at the deck area\nRecommended Brand quality silent power generator with Automatic changeover control system\nWater pressuring pump system both installed on ground floor and rooftop water tank system\nFully equipped System Server Room including Servers with software to cater for IPTV Sky Channel & in room movie system, room and property Phones, Hotel PMS, CCTV control, Data Protection Firewall, Vingcard room door lock key control system\nStaff Room and Staff area, toilet and shower\nBranded and fully functional lift with emergency rescue device installed\nFully functional fire protection system, heat & smoke detectors, extinguishers and fire hose requirements as per local authorities\nLinen rooms with storage space at all levels\nFully functional pressured Instant Hot water supply system for the entire building\nStandard Wall paintings and coverings\nFully equipped and functional water storage tanks for fresh water supply to the entire building\nFully functional high floor Bar, Restaurant, Kitchen and Dining\nFully functional Conference room to handle around 350 people\nConference break-out meeting rooms at least 2 to handle 30pax in room\nEntire property network and Wifi setup including all hardware\nVingcard door lock system for guest rooms and office doors\nConcierge/Porter desk\nMeet & Greet guest lobby for guest pickup and drop off\nProper Rubbish bin storage area with bins\nDisable Toilet and shower room\nFully Functional Spa and Fitness Center\nMaids Stations on each level\nAmenity storage Room\nKitchen Dry Storage Room\nKitchen Freezer Room and Cooler Room\nBeer Cooler Room\nMaintenance Storage Rooms\nMaintenance working area\nProperty Guest Transporting Vehicle\nGym\nSpa\nShop",
     customNotes: ""
   });
 
   // Search/Filter state
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [viewMode, setViewMode] = useState<"grid" | "list" | "columns">("grid");
 
   // Signing state
   const [signMethod, setSignMethod] = useState<"draw" | "type" | "upload">("draw");
@@ -382,7 +422,7 @@ export function AgreementsSigning() {
         techFee: "US$15,000 payable upon contract execution",
         initialTerm: "10 Years from Opening Date",
         renewalTerm: "One (1) further term of Ten (10) Operating Years",
-        facilitiesText: "Fully fitted 88 Apartments with 210 key hotel room\nRestaurants, Bar & Dining areas\nLobby, Front Office & Guest Lounge\nConference Room (350 pax) & Breakout Rooms\nSwimming Pool, Spa & Fitness Centre\nHigh Floor Bar, Restaurant & Kitchen",
+        facilitiesText: "Fully fitted 88 Apartments with 210 key hotel room as per brand requirements\nFully fitted Kitchen, Restaurant & Bar and Dining area to meet brand standard\nFully fitted branded Front Office Reception as per brand standards\nDesigned lobby and Guest Luggage Room\nCar parking space\nMaintenance Room\nFully functional Administration Office including Manager’s offices\nGuest waiting Lounge Area\nSwimming Pool and fully equipped pump room\nGround Floor Dining area\nOutdoor guest Male and Female shower and toilets at the deck area\nRecommended Brand quality silent power generator with Automatic changeover control system\nWater pressuring pump system both installed on ground floor and rooftop water tank system\nFully equipped System Server Room including Servers with software to cater for IPTV Sky Channel & in room movie system, room and property Phones, Hotel PMS, CCTV control, Data Protection Firewall, Vingcard room door lock key control system\nStaff Room and Staff area, toilet and shower\nBranded and fully functional lift with emergency rescue device installed\nFully functional fire protection system, heat & smoke detectors, extinguishers and fire hose requirements as per local authorities\nLinen rooms with storage space at all levels\nFully functional pressured Instant Hot water supply system for the entire building\nStandard Wall paintings and coverings\nFully equipped and functional water storage tanks for fresh water supply to the entire building\nFully functional high floor Bar, Restaurant, Kitchen and Dining\nFully functional Conference room to handle around 350 people\nConference break-out meeting rooms at least 2 to handle 30pax in room\nEntire property network and Wifi setup including all hardware\nVingcard door lock system for guest rooms and office doors\nConcierge/Porter desk\nMeet & Greet guest lobby for guest pickup and drop off\nProper Rubbish bin storage area with bins\nDisable Toilet and shower room\nFully Functional Spa and Fitness Center\nMaids Stations on each level\nAmenity storage Room\nKitchen Dry Storage Room\nKitchen Freezer Room and Cooler Room\nBeer Cooler Room\nMaintenance Storage Rooms\nMaintenance working area\nProperty Guest Transporting Vehicle\nGym\nSpa\nShop",
         customNotes: "Proposed in accordance with Cove Management hospitality standards."
       });
     } else if (prefilledTarget === "wyndham") {
@@ -428,6 +468,136 @@ export function AgreementsSigning() {
     setTimeout(() => {
       setNotification(null);
     }, 5000);
+  };
+
+  // Download official text term sheet to local PC
+  const downloadAgreement = (ag: Agreement) => {
+    const fileContent = `================================================================================
+                        COVE MANAGEMENT LIMITED (CML)
+                        OFFICIAL HOTEL TERM SHEET COVENANT
+================================================================================
+
+DOCUMENT REF ID: ${ag.id}
+TITLE:           ${ag.title}
+TEMPLATE TYPE:   ${ag.templateType}
+STATUS:          ${ag.status.toUpperCase()}
+VERSION LIMIT:   v${ag.version}
+CREATED DATE:    ${ag.createdDate}
+${ag.completedDate ? `COMPLETED DATE:  ${ag.completedDate}` : ""}
+
+--------------------------------------------------------------------------------
+1. PARTIES
+--------------------------------------------------------------------------------
+OWNER:           ${ag.ownerCompany}
+Owner Contact:   ${ag.ownerName} (${ag.ownerEmail} / ${ag.ownerPhone})
+Owner Address:   ${ag.hotelAddress}
+
+MANAGER:         Cove Management Pte Ltd
+Manager Address: Lot 14, Wasawasa Rd, Wailoaloa Beach, Nadi, Fiji
+
+--------------------------------------------------------------------------------
+2. HOTEL PROPERTY DETAILS
+--------------------------------------------------------------------------------
+Hotel Brand:     Ramada Plaza (subject to Wyndham Hotels and Resorts approval)
+Hotel Name:      ${ag.hotelName} (or as agreed between parties)
+Hotel Address:   ${ag.hotelAddress}
+Development:     New Build
+Inventory:       ${ag.inventory}
+
+DESIGNATED FACILITIES:
+${ag.facilities.map((fac, idx) => `  [${String(idx + 1).padStart(2, '0')}] ${fac}`).join("\n")}
+
+--------------------------------------------------------------------------------
+3. COMMERCIAL COVENANTS & FEES
+--------------------------------------------------------------------------------
+Initial Term:    ${ag.initialTerm}
+Renewal Term:    ${ag.renewalTerm}
+Management Fee:  20% of Gross Operating Profit (GOP) payable monthly in arrears
+Technical Fee:   ${ag.techFee}
+
+FF&E Reserve Fund:
+  - 5% of Gross Revenues for the first Operating Year;
+  - 6% of Gross Revenues for the second and third Operating Years; and
+  - 7% of Gross Revenues for the fourth Operating Year and thereafter.
+
+Reserve Sinking Fund:
+  - Monthly Sinking Fund reserve of 5% of Gross Revenue (capped at $250k FJD)
+  - Owner to contribute $150k FJD initially toward the fund.
+
+Settlement Currency:
+  - All transactions and payments shall be settled in Fijian Dollars (FJD).
+
+--------------------------------------------------------------------------------
+4. KEY COVENANT DATES
+--------------------------------------------------------------------------------
+Construction Commencement: Commenced
+Construction Completion:   To be finalized (XXXX)
+Opening Date:              To be finalized (XXXXX)
+
+--------------------------------------------------------------------------------
+5. DIGITAL SIGNATURES & SECURITY METADATA
+--------------------------------------------------------------------------------
+OWNER SIGN-OFF:
+${ag.ownerSignature ? `  Signed By:   ${ag.ownerSignature.signedBy}
+  Title:       ${ag.ownerSignature.title}
+  Date Signed: ${ag.ownerSignature.date}
+  Method:      ${ag.ownerSignature.method.toUpperCase()}
+  Signature:   ${ag.ownerSignature.method === "type" ? ag.ownerSignature.data : "[STYLIZED SECURITY SIGNATURE / IMAGE REPRESENTATION]"}
+  Verification:✓ SECURED VIA DIGI-KEY SECURE VAULT` : "  STATUS:      PENDING OWNER SIGNATURE"}
+
+COVE MANAGER SIGN-OFF:
+${ag.managerSignature ? `  Signed By:   ${ag.managerSignature.signedBy}
+  Title:       ${ag.managerSignature.title}
+  Date Signed: ${ag.managerSignature.date}
+  Signature:   ${ag.managerSignature.signedBy} (Cove Management Pte Ltd)
+  Verification:✓ SSL CERTIFICATE ENCRYPTED LOCK` : "  STATUS:      PENDING COVE MANAGER COUNTER-SIGNATURE"}
+
+--------------------------------------------------------------------------------
+6. AUDIT TRAIL LOGS
+--------------------------------------------------------------------------------
+${ag.auditTrail.map(log => `[${log.timestamp}] [${log.action.toUpperCase()}] By: ${log.user}
+  IP: ${log.ip} | Browser: ${log.browser} | Device: ${log.device} | Location: ${log.location || "Nadi, Fiji"}`).join("\n\n")}
+
+================================================================================
+This is a secure electronic copy generated from the CML Digital Vault.
+================================================================================
+`;
+
+    const blob = new Blob([fileContent], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${ag.id}_${ag.title.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    triggerNotification(`Successfully downloaded ${ag.id} to your PC.`, "success");
+  };
+
+  // Download supporting attachments to local PC
+  const downloadAttachmentFile = (docItem: { id: string; name: string; size: string; date: string }) => {
+    const content = `================================================================================
+                     COVE MANAGEMENT LIMITED SECURE FILE VAULT
+================================================================================
+File Name:     ${docItem.name}
+Size:          ${docItem.size}
+Date Uploaded: ${docItem.date}
+Status:        Secured & Certified
+
+This is a verified secure copy of the contract annexure "${docItem.name}".
+================================================================================
+`;
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = docItem.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    triggerNotification(`Successfully downloaded "${docItem.name}" to your PC.`, "success");
   };
 
   // --- SIGNATURE DRAW CANVAS LOGIC ---
@@ -558,7 +728,7 @@ export function AgreementsSigning() {
     };
 
     setAgreements([newAg, ...agreements]);
-    setActiveSubView("dashboard");
+    setActiveSubView("storage");
     triggerNotification(`Successfully drafted "${builderForm.title}".`, "success");
   };
 
@@ -865,33 +1035,13 @@ export function AgreementsSigning() {
             </p>
           </div>
 
-          {/* PORTAL SWITCHER & QUICK STATS */}
-          <div className="flex flex-col items-end gap-3 shrink-0">
-            <div className="bg-[#142642] p-1.5 border border-[#C5A02D]/30 flex items-center gap-1 rounded-none shadow-inner">
-              <span className="text-[9px] font-display uppercase tracking-widest text-[#C5A02D] font-bold px-3">Role Switcher:</span>
-              <button 
-                onClick={() => { setRole("owner"); triggerNotification("Switched to Owner Portal View", "info"); }}
-                className={cn(
-                  "px-4 py-1.5 text-[10px] font-display uppercase tracking-wider font-black transition-all",
-                  role === "owner" ? "bg-[#C5A02D] text-[#0B1C33] shadow" : "text-slate-300 hover:text-white"
-                )}
-              >
-                Owner Portal
-              </button>
-              <button 
-                onClick={() => { setRole("admin"); triggerNotification("Switched to Cove Admin Portal View", "info"); }}
-                className={cn(
-                  "px-4 py-1.5 text-[10px] font-display uppercase tracking-wider font-black transition-all",
-                  role === "admin" ? "bg-[#C5A02D] text-[#0B1C33] shadow" : "text-slate-300 hover:text-white"
-                )}
-              >
-                CML Admin
-              </button>
+          {/* SECURE STATUS BADGE */}
+          <div className="flex flex-col items-end gap-1.5 shrink-0">
+            <div className="bg-[#142642] px-4 py-2 border border-[#C5A02D]/30 flex items-center gap-2 rounded-none shadow-sm">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-white text-[10px] font-display uppercase tracking-wider font-bold">SHA-256 Vault Secure</span>
             </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="h-2 w-2 rounded-full bg-[#10B981] animate-pulse" />
-              <span className="text-slate-400">Secure SHA-256 Vault Connected</span>
-            </div>
+            <span className="text-[9px] text-[#C5A02D] font-mono">CML Authorized Desk</span>
           </div>
         </div>
       </div>
@@ -928,42 +1078,27 @@ export function AgreementsSigning() {
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4 mb-8">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => { setActiveSubView("dashboard"); setSelectedAgreement(null); }}
-              className={cn(
-                "px-5 py-2.5 text-xs font-display uppercase tracking-wider font-bold transition-all border-b-2",
-                activeSubView === "dashboard" ? "border-[#C5A02D] text-[#0B1C33] font-black" : "border-transparent text-slate-500 hover:text-[#0B1C33]"
-              )}
-            >
-              Document Dashboard
-            </button>
-            <button
               onClick={() => { setActiveSubView("storage"); setSelectedAgreement(null); }}
               className={cn(
                 "px-5 py-2.5 text-xs font-display uppercase tracking-wider font-bold transition-all border-b-2",
                 activeSubView === "storage" ? "border-[#C5A02D] text-[#0B1C33] font-black" : "border-transparent text-slate-500 hover:text-[#0B1C33]"
               )}
             >
-              Vault Archives
+              Secure Vault Archives (Client & Contract Database)
             </button>
-            {role === "admin" && (
-              <button
-                onClick={() => { setActiveSubView("builder"); setSelectedAgreement(null); }}
-                className={cn(
-                  "px-5 py-2.5 text-xs font-display uppercase tracking-wider font-bold transition-all border-b-2 flex items-center gap-1.5 text-amber-700",
-                  activeSubView === "builder" ? "border-amber-600 text-amber-900 font-black" : "border-transparent hover:text-amber-900"
-                )}
-              >
-                <Plus size={14} /> Create Agreement
-              </button>
-            )}
+            <button
+              onClick={() => { setActiveSubView("builder"); setSelectedAgreement(null); }}
+              className={cn(
+                "px-5 py-2.5 text-xs font-display uppercase tracking-wider font-bold transition-all border-b-2 flex items-center gap-1.5 text-[#C5A02D]",
+                activeSubView === "builder" ? "border-[#C5A02D] text-[#0B1C33] font-black" : "border-transparent hover:text-[#0B1C33]"
+              )}
+            >
+              <Plus size={14} /> Fill & Draft New Agreement Form
+            </button>
           </div>
 
           <div className="text-xs font-serif italic text-slate-500">
-            {role === "owner" ? (
-              <span>Viewing as: <strong className="text-[#0B1C33] font-medium font-sans">Charles</strong> (Koro Fiji MD)</span>
-            ) : (
-              <span className="text-amber-800">Cove Management Admin Controls Active</span>
-            )}
+            <span className="text-amber-850 bg-amber-50 px-2 py-1 rounded border border-amber-100">Cove Management Admin Desk</span>
           </div>
         </div>
 
@@ -1504,15 +1639,49 @@ export function AgreementsSigning() {
                   {selectedAgreement.status === "Completed" ? "DOCUMENT SECURED & locked" : "AWAITING DIGITAL signatures"}
                 </span>
 
-                {selectedAgreement.status === "Completed" && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => downloadAgreement(selectedAgreement)}
+                    className="px-3 py-1.5 bg-[#FAF7F2] text-[#0B1C33] text-[10px] font-display uppercase tracking-widest font-bold flex items-center gap-1.5 border border-slate-300 hover:bg-[#0B1C33] hover:text-[#C5A02D] transition-all"
+                    title="Download Term Sheet as a file"
+                  >
+                    <Download size={12} /> Download PC Copy
+                  </button>
                   <button
                     onClick={() => window.print()}
-                    className="px-4 py-2 bg-[#0B1C33] text-[#C5A02D] text-xs font-display uppercase tracking-widest font-bold flex items-center gap-1 border border-[#0B1C33] hover:bg-[#C5A02D] hover:text-[#0B1C33] transition-all"
+                    className="px-3 py-1.5 bg-[#0B1C33] text-[#C5A02D] text-[10px] font-display uppercase tracking-widest font-bold flex items-center gap-1.5 border border-[#0B1C33] hover:bg-[#C5A02D] hover:text-[#0B1C33] transition-all"
+                    title="Open print panel / save PDF"
                   >
-                    <Download size={13} /> Print / Export
+                    <Printer size={12} /> Print / Save PDF
                   </button>
-                )}
+                </div>
               </div>
+            </div>
+
+            {/* DOCUMENT VIEW STYLE TAB SWITCHER */}
+            <div className="flex border-b border-slate-200 bg-white">
+              <button
+                onClick={() => setDocViewTab("legal")}
+                className={cn(
+                  "px-6 py-3.5 text-[10px] font-display uppercase tracking-[0.15em] font-bold transition-all relative border-t-2 flex items-center gap-2",
+                  docViewTab === "legal"
+                    ? "border-t-[#0B1C33] text-[#0B1C33] bg-white font-black"
+                    : "border-t-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50/50"
+                )}
+              >
+                📜 Official Legal Term Sheet
+              </button>
+              <button
+                onClick={() => setDocViewTab("designed")}
+                className={cn(
+                  "px-6 py-3.5 text-[10px] font-display uppercase tracking-[0.15em] font-bold transition-all relative border-t-2 flex items-center gap-2",
+                  docViewTab === "designed"
+                    ? "border-t-[#0B1C33] text-[#0B1C33] bg-white font-black"
+                    : "border-t-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50/50"
+                )}
+              >
+                ✨ Premium Presentation Slides
+              </button>
             </div>
 
             {/* TWO-COLUMN LAYOUT: DOCUMENT VS SIGN PANEL */}
@@ -1521,8 +1690,314 @@ export function AgreementsSigning() {
               {/* LUXURY INVESTMENT-STYLE DOCUMENT VIEWER (2 cols) */}
               <div className="lg:col-span-2 space-y-12 overflow-y-auto max-h-[80vh] pr-4 custom-scrollbar bg-white border border-slate-200/80 p-8 shadow-md">
                 
-                {/* PAGE 1: COVER PAGE */}
-                <div className="min-h-[75vh] border-4 border-double border-[#C5A02D]/20 p-8 flex flex-col justify-between bg-gradient-to-b from-[#0B1C33] to-[#122846] text-white relative overflow-hidden">
+                {docViewTab === "legal" ? (
+                  /* ==================== OFFICIAL LEGAL TERM SHEET DRAFT ==================== */
+                  <div className="bg-[#FAF8F5] border-2 border-slate-200 p-6 md:p-10 shadow-inner text-[#1A2536] space-y-8 font-serif leading-relaxed text-[13px] rounded-sm">
+                    
+                    {/* Header */}
+                    <div className="text-center space-y-2 border-b-2 border-slate-300 pb-6">
+                      <h2 className="text-xl font-bold tracking-tight font-sans uppercase text-[#0B1C33]">TERM SHEET</h2>
+                      <h3 className="text-sm font-bold font-sans uppercase text-[#C5A02D] tracking-widest">HOTEL AGREEMENTS</h3>
+                      <p className="text-[11px] italic text-slate-500 max-w-xl mx-auto leading-normal">
+                        This Term Sheet is a summary of key terms for discussion purposes only, and is not a comprehensive list of all terms and fees applicable to the definitive agreements. It is a non-binding summary subject to negotiation and change. No legally binding obligations will be created, implied or inferred with respect to either party until appropriate documents in final form regarding the terms are duly executed.
+                      </p>
+                    </div>
+
+                    {/* Parties Section */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 border-b border-slate-200 pb-6">
+                      <div className="space-y-1">
+                        <h4 className="font-sans font-bold uppercase text-[10px] tracking-wider text-slate-500">Owner</h4>
+                        <p className="font-bold text-[#0B1C33]">{selectedAgreement.ownerCompany}</p>
+                        <p className="text-xs text-slate-600">{selectedAgreement.hotelAddress}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="font-sans font-bold uppercase text-[10px] tracking-wider text-slate-500">Manager</h4>
+                        <p className="font-bold text-[#0B1C33]">Cove Management Pte Ltd</p>
+                        <p className="text-xs text-slate-600">Lot 14, Wasawasa Rd, Wailoaloa Beach, Nadi</p>
+                      </div>
+                    </div>
+
+                    {/* Hotel Details */}
+                    <div className="space-y-4">
+                      <h4 className="font-sans font-bold uppercase text-xs tracking-wider text-[#0B1C33] border-b-2 border-[#C5A02D]/40 pb-1 flex items-center justify-between">
+                        <span>HOTEL DETAILS</span>
+                        <span className="text-[9px] text-slate-400 font-mono">SECTION I</span>
+                      </h4>
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-3 gap-2 border-b border-slate-100 pb-2">
+                          <span className="font-sans font-semibold text-xs text-slate-500">Hotel Brand</span>
+                          <span className="col-span-2 text-slate-800">Ramada Plaza - subject to final approval by Wyndham Hotels and Resorts</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 border-b border-slate-100 pb-2">
+                          <span className="font-sans font-semibold text-xs text-slate-500">Proposed Hotel Name</span>
+                          <span className="col-span-2 text-slate-800 font-bold">{selectedAgreement.hotelName} – or as agreed between the parties and subject to board approval of Manager.</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 border-b border-slate-100 pb-2">
+                          <span className="font-sans font-semibold text-xs text-slate-500">Franchise Agreement</span>
+                          <span className="col-span-2 text-slate-700 text-xs">
+                            Owner acknowledges and agrees that Manager will enter into a Franchise Agreement with Wyndham Hotel Asia Pacific Co. Ltd (Wyndham) - the terms of which will be negotiated between Manager and Wyndham. All costs associated with the Franchise Agreement shall be operational costs of the hotel.
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 border-b border-slate-100 pb-2">
+                          <span className="font-sans font-semibold text-xs text-slate-500">Hotel Address</span>
+                          <span className="col-span-2 text-slate-800">{selectedAgreement.hotelAddress}</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 border-b border-slate-100 pb-2">
+                          <span className="font-sans font-semibold text-xs text-slate-500">Development Type</span>
+                          <span className="col-span-2 text-slate-800">New Build</span>
+                        </div>
+                        
+                        {/* Facilities */}
+                        <div className="pt-2">
+                          <span className="font-sans font-bold text-xs text-[#0B1C33] block mb-2">Designated Facilities ({selectedAgreement.facilities.length} Items)</span>
+                          <div className="bg-white p-4 border border-slate-200 max-h-64 overflow-y-auto rounded-sm space-y-1.5 custom-scrollbar shadow-inner">
+                            {selectedAgreement.facilities.map((fac, index) => (
+                              <div key={index} className="flex gap-2 text-xs text-slate-700 hover:bg-slate-50 p-1 rounded-sm transition-all">
+                                <span className="font-mono text-[10px] text-[#C5A02D] font-bold shrink-0">[{String(index + 1).padStart(2, '0')}]</span>
+                                <span>{fac}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Rental Program */}
+                    <div className="space-y-2 pt-2">
+                      <h4 className="font-sans font-bold uppercase text-xs tracking-wider text-[#0B1C33] border-b-2 border-[#C5A02D]/40 pb-1 flex items-center justify-between">
+                        <span>RENTAL PROGRAM / RESIDENTIAL SALES</span>
+                        <span className="text-[9px] text-slate-400 font-mono">SECTION II</span>
+                      </h4>
+                      <p className="text-slate-700 italic bg-white p-3 border border-slate-100 text-xs shadow-sm">
+                        Owner will continue to own all Facilities in the hotel and will not individually sell any of the guest rooms – all bookings are to go through Management reservations systems.
+                      </p>
+                    </div>
+
+                    {/* Dates & Milestones */}
+                    <div className="space-y-3 pt-2">
+                      <h4 className="font-sans font-bold uppercase text-xs tracking-wider text-[#0B1C33] border-b-2 border-[#C5A02D]/40 pb-1 flex items-center justify-between">
+                        <span>DATES & TERM COVENANTS</span>
+                        <span className="text-[9px] text-slate-400 font-mono">SECTION III</span>
+                      </h4>
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-3 gap-2 border-b border-slate-100 pb-2">
+                          <span className="font-sans font-semibold text-xs text-slate-500">Initial Term</span>
+                          <span className="col-span-2 text-slate-800">{selectedAgreement.initialTerm}</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 border-b border-slate-100 pb-2">
+                          <span className="font-sans font-semibold text-xs text-slate-500">Renewal Term(s)</span>
+                          <span className="col-span-2 text-slate-800">{selectedAgreement.renewalTerm}</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <span className="font-sans font-semibold text-xs text-slate-500">Milestone Dates</span>
+                          <span className="col-span-2 text-xs text-slate-800 space-y-1 block">
+                            <p className="flex justify-between max-w-sm border-b border-slate-50 pb-1">
+                              <span className="text-slate-500">Construction Commencement:</span> 
+                              <strong className="text-[#0B1C33]">Commenced</strong>
+                            </p>
+                            <p className="flex justify-between max-w-sm border-b border-slate-50 pb-1">
+                              <span className="text-slate-500">Construction Completion:</span> 
+                              <strong className="text-slate-600">XXXX</strong>
+                            </p>
+                            <p className="flex justify-between max-w-sm">
+                              <span className="text-slate-500">Opening Date:</span> 
+                              <strong className="text-slate-600">XXXXX</strong>
+                            </p>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Management Fees */}
+                    <div className="space-y-2 pt-2">
+                      <h4 className="font-sans font-bold uppercase text-xs tracking-wider text-[#0B1C33] border-b-2 border-[#C5A02D]/40 pb-1 flex items-center justify-between">
+                        <span>MANAGEMENT FEES</span>
+                        <span className="text-[9px] text-slate-400 font-mono">SECTION IV</span>
+                      </h4>
+                      <div className="grid grid-cols-3 gap-2 bg-white p-3 border border-slate-100 shadow-sm">
+                        <span className="font-sans font-bold text-xs text-slate-600 self-center">Management Fee Structure</span>
+                        <span className="col-span-2 text-slate-800 text-xs">
+                          Owner agrees to allocate <strong>20% of the Gross Operating Profit (GOP)</strong> of the hotel to Manager as a Management Fee payable monthly in arrears. For the avoidance of doubt, GOP is defined as per Definitions Schedule below.
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Technical Services */}
+                    <div className="space-y-2 pt-2">
+                      <h4 className="font-sans font-bold uppercase text-xs tracking-wider text-[#0B1C33] border-b-2 border-[#C5A02D]/40 pb-1 flex items-center justify-between">
+                        <span>TECHNICAL SERVICES</span>
+                        <span className="text-[9px] text-slate-400 font-mono">SECTION V</span>
+                      </h4>
+                      <div className="grid grid-cols-3 gap-2 bg-white p-3 border border-slate-100 shadow-sm">
+                        <span className="font-sans font-bold text-xs text-slate-600 self-center">Technical Advisory Fee</span>
+                        <span className="col-span-2 text-slate-800 text-xs font-medium">
+                          {selectedAgreement.techFee}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Other Key Matters */}
+                    <div className="space-y-4 pt-2">
+                      <h4 className="font-sans font-bold uppercase text-xs tracking-wider text-[#0B1C33] border-b-2 border-[#C5A02D]/40 pb-1 flex items-center justify-between">
+                        <span>OTHER KEY MATTERS & COVENANTS</span>
+                        <span className="text-[9px] text-slate-400 font-mono">SECTION VI</span>
+                      </h4>
+                      <div className="space-y-3 text-xs">
+                        <div className="space-y-1 bg-white p-3 border border-slate-100 shadow-sm rounded-sm">
+                          <span className="font-sans font-bold text-xs text-[#0B1C33] block">FF&E Reserve Fund</span>
+                          <p className="text-slate-700 leading-normal">
+                            The following amounts will be transferred monthly from the operating account of the Hotel to a reserve fund for the Hotel: <br />
+                            • <strong className="text-[#0B1C33]">5%</strong> of Gross Revenues for the first Operating Year; <br />
+                            • <strong className="text-[#0B1C33]">6%</strong> of Gross Revenues for the second and third Operating Year; and <br />
+                            • <strong className="text-[#0B1C33]">7%</strong> of Gross Revenues for the fourth Operating Year and each subsequent Operating Year. <br />
+                            Amounts in such Reserve fund will be used for routine capital and FF&E improvements.
+                          </p>
+                        </div>
+                        <div className="space-y-1 bg-white p-3 border border-slate-100 shadow-sm rounded-sm">
+                          <span className="font-sans font-bold text-xs text-[#0B1C33] block">Reserve Sinking Fund</span>
+                          <p className="text-slate-700 leading-normal">
+                            Manager will reserve monthly Sinking Fund for the Hotel at rate of <strong>5% off the Gross Revenue</strong>, capped at <strong>$250k</strong> for any major upkeep, renovation & replacement works and to be utilized as a working capital under unseen circumstances situations. <br />
+                            Owner will be contributing <strong>$150k initially</strong> towards to this Reserve Sinking fund account to be utilized as working capital by the Manager to start its hotel operations and Manager to build up Sinking fund account monthly by said deduction process.
+                          </p>
+                        </div>
+                        <div className="space-y-1 bg-white p-3 border border-slate-100 shadow-sm rounded-sm">
+                          <span className="font-sans font-bold text-xs text-[#0B1C33] block">Key Owner Responsibilities</span>
+                          <ul className="text-slate-700 list-decimal pl-4 space-y-1">
+                            <li>Open Hotel by no later than the agreed Opening Date.</li>
+                            <li>Acquire and construct the Hotel in compliance with all applicable laws and regulations and according to the Hotel Brand Standards.</li>
+                            <li>Approve the annual plan in accordance with the procedures of the Management Agreement.</li>
+                            <li>Retain responsibility for working capital, property taxes, debt services and the like.</li>
+                            <li>Obtain and maintain appropriate insurance.</li>
+                            <li>Wyndham initial design set up fee.</li>
+                            <li>Provide working capital in the sinking fund account as per above Reserve Sinking Fund clause.</li>
+                          </ul>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 bg-white p-3 border border-slate-100 shadow-sm">
+                          <span className="font-sans font-bold text-xs text-slate-600">Settlement Currency</span>
+                          <span className="col-span-2 text-slate-800">All payments to Manager under the Management Agreement shall be made in <strong>Fijian Dollars (FJD)</strong></span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Definitions Schedule */}
+                    <div className="space-y-4 pt-2">
+                      <h4 className="font-sans font-bold uppercase text-xs tracking-wider text-[#0B1C33] border-b-2 border-[#C5A02D]/40 pb-1 flex items-center justify-between">
+                        <span>DEFINITIONS SCHEDULE</span>
+                        <span className="text-[9px] text-slate-400 font-mono">SCHEDULE I</span>
+                      </h4>
+                      <div className="space-y-4 text-xs text-slate-700">
+                        <div className="bg-white p-3 border border-slate-100 shadow-sm">
+                          <p className="font-bold font-sans text-slate-800">“Gross Operating Profit”</p>
+                          <p className="pl-3 border-l-2 border-[#C5A02D] italic text-slate-600 mt-1">
+                            means for any period, an amount by which Gross Revenue exceeds Operating Expenses for such period.
+                          </p>
+                        </div>
+                        
+                        <div className="bg-white p-3 border border-slate-100 shadow-sm space-y-2">
+                          <p className="font-bold font-sans text-slate-800">“Gross Revenues”</p>
+                          <p className="pl-3 border-l-2 border-[#C5A02D] text-slate-600 leading-relaxed text-[11px]">
+                            means, in respect of any period, all revenues, receipts and income of every kind derived directly or indirectly during such period from all or any part of the Hotel, as finally determined on an accrual basis in accordance with GAAP, including: (i) all Gross Room Revenues and all other rentals and charges for guest rooms, suites, meeting rooms, conference rooms, ballrooms and other public rooms, including all charges for room reservations and deposits not refunded to guests; (ii) all sales of food and beverages, whether served on or off the premises, including all charges for room service, banquets and catering fees; (iii) all sales or leases of miscellaneous and sundry merchandise and services including laundry, valet, garage, parking, telephone, telex, telecopy, e-mail, Internet, check room, vault and other miscellaneous services, cover and minimum charges for guest entertainment, fees charged for the temporary use of facilities at the Hotel, all sales through vending machines and all other receipts from business conducted by, through or under Manager at, in, on, about or from the Hotel; (iv) all business interruption insurance awards received in respect of the Hotel; (v) Condemnation awards for temporary use of the Hotel; (vi) all rentals, fees, commissions, concessions and other payments derived from lessees, licensees and concessionaires; (vii) all charges, rentals and other proceeds from any and all recreational and other activities and services conducted in connection with the Hotel; and (viii) any service charges charged to patrons or guests and not distributed to Hotel employees.
+                          </p>
+                          <div className="pt-1 border-t border-slate-100">
+                            <p className="font-sans font-bold text-slate-700 text-[11px]">Gross Revenues for any such period do not include:</p>
+                            <ul className="list-decimal pl-6 space-y-1 text-[11px] text-slate-500 mt-1">
+                              <li>Excise, sales and use taxes or similar impositions collected directly from patrons or guests or included as part of the sales price of any goods or services and paid to any Governmental Authority, such as gross receipts, admission or similar equivalent taxes;</li>
+                              <li>Sales and other receipts of tenants, licensees and concessionaires, except to the extent payable as rent under a lease or occupancy agreement;</li>
+                              <li>Insurance proceeds (subject, however, to the inclusion of business interruption insurance proceeds as provided in clause (iv) above);</li>
+                              <li>Condemnation awards, except as provided in clause (v) above.</li>
+                            </ul>
+                          </div>
+                        </div>
+
+                        <div className="bg-white p-3 border border-slate-100 shadow-sm space-y-2">
+                          <p className="font-bold font-sans text-slate-800">“Operating Expenses”</p>
+                          <p className="pl-3 border-l-2 border-[#C5A02D] text-slate-600 leading-relaxed text-[11px]">
+                            means all ordinary and necessary expenses incurred in the Operation of the Hotel in accordance with this Agreement, including all (a) costs of employees of Hotel and all other Reimbursable Expenses, (b) all expenses for maintenance and repair, (c) costs for utilities, (d) administrative expenses, including all costs and expenses relating to the Operating Accounts and preparation of financial statements, (e) costs and expenses for marketing, advertising and promotion of the Hotel, and (f) amounts payable to Manager as set forth in this Agreement, all as determined in accordance with Uniform Systems of Accounts.
+                          </p>
+                          <div className="pt-1 border-t border-slate-100">
+                            <p className="font-sans font-bold text-slate-700 text-[11px]">Operating Expenses expressly exclude the following:</p>
+                            <ul className="list-roman pl-6 space-y-1 text-[11px] text-slate-500 mt-1">
+                              <li>The Incentive Fees and Base Fees/License Fees;</li>
+                              <li>Taxes;</li>
+                              <li>All insurance costs as provided in Exhibit E;</li>
+                              <li>Reserve fund contributions and any expenditures for routine capital improvements and other capital improvements;</li>
+                              <li>Costs for the rental of real or personal property (except, with respect to personal property, rentals incurred directly in connection with revenue generating activities);</li>
+                              <li>Any depreciation and amortization of capital assets;</li>
+                              <li>Costs for the administration of Owner (including any board of shareholder meetings) or Owner’s personnel (other than Hotel employees), including salaries, wages, employee benefits and reimbursements of Owner’s directors, officers, employees or agents; and</li>
+                              <li>Fees and costs for professional services, including the fees and expenses of attorneys, accountants and appraisers, incurred directly or indirectly in connection with any category of expense that is not itself an Operating Expense.</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Execution blocks */}
+                    <div className="space-y-6 border-t-2 border-slate-300 pt-6">
+                      <h4 className="font-sans font-bold uppercase text-xs tracking-wider text-center text-slate-600">SIGNATURE PARTIES SIGN-OFF</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 text-xs">
+                        
+                        {/* Owner sign block */}
+                        <div className="space-y-2">
+                          <p className="font-bold font-sans uppercase text-[10px] text-slate-500">OWNER EXECUTION</p>
+                          <div className="bg-white border border-slate-200 p-4 min-h-[110px] flex flex-col justify-between shadow-sm">
+                            {selectedAgreement.ownerSignature ? (
+                              <>
+                                {selectedAgreement.ownerSignature.method === "type" ? (
+                                  <div className="font-serif italic text-xl border-b border-slate-200 pb-1 text-[#0B1C33]">
+                                    {selectedAgreement.ownerSignature.data}
+                                  </div>
+                                ) : (
+                                  <img src={selectedAgreement.ownerSignature.data} alt="Owner Signature" className="max-h-12 object-contain mr-auto" />
+                                )}
+                                <div className="text-[10px] font-mono mt-2 space-y-0.5 text-slate-500">
+                                  <p>By: <strong>{selectedAgreement.ownerSignature.signedBy}</strong></p>
+                                  <p>Title: {selectedAgreement.ownerSignature.title}</p>
+                                  <p>Date: {selectedAgreement.ownerSignature.date}</p>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="text-slate-400 italic text-xs my-auto">Awaiting Owner Signature</div>
+                            )}
+                          </div>
+                          <p className="font-sans font-bold text-xs text-slate-700">{selectedAgreement.ownerCompany}</p>
+                        </div>
+
+                        {/* Manager sign block */}
+                        <div className="space-y-2">
+                          <p className="font-bold font-sans uppercase text-[10px] text-slate-500">COVE MANAGER EXECUTION</p>
+                          <div className="bg-white border border-slate-200 p-4 min-h-[110px] flex flex-col justify-between shadow-sm">
+                            {selectedAgreement.managerSignature ? (
+                              <>
+                                <div className="font-serif italic text-xl border-b border-slate-200 pb-1 text-[#0B1C33]">
+                                  {selectedAgreement.managerSignature.signedBy}
+                                </div>
+                                <div className="text-[10px] font-mono mt-2 space-y-0.5 text-slate-500">
+                                  <p>By: <strong>{selectedAgreement.managerSignature.signedBy}</strong></p>
+                                  <p>Title: {selectedAgreement.managerSignature.title}</p>
+                                  <p>Date: {selectedAgreement.managerSignature.date}</p>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="text-slate-400 italic text-xs my-auto">
+                                {selectedAgreement.status === "Signed" ? (
+                                  <span className="text-amber-600 font-bold animate-pulse">Awaiting Counter-Signature</span>
+                                ) : (
+                                  "Awaiting Manager Counter-Sign"
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <p className="font-sans font-bold text-xs text-slate-700">Cove Management Pte Ltd</p>
+                        </div>
+
+                      </div>
+                    </div>
+
+                  </div>
+                ) : (
+                  <>
+                    {/* PAGE 1: COVER PAGE */}
+                    <div className="min-h-[75vh] border-4 border-double border-[#C5A02D]/20 p-8 flex flex-col justify-between bg-gradient-to-b from-[#0B1C33] to-[#122846] text-white relative overflow-hidden">
                   {/* Decorative curved shape resembling the gold frame in Image 1 */}
                   <div className="absolute right-0 bottom-0 w-80 h-80 bg-cover bg-center opacity-30 mix-blend-overlay" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&q=80&w=800')" }} />
                   <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(197,160,45,0.15)_0%,transparent_60%)] pointer-events-none" />
@@ -1795,6 +2270,8 @@ export function AgreementsSigning() {
                   </div>
                 </div>
 
+                  </>
+                )}
               </div>
 
 
@@ -2016,7 +2493,7 @@ export function AgreementsSigning() {
                           </div>
                           <button
                             type="button"
-                            onClick={() => triggerNotification(`Downloading "${docItem.name}"...`, "info")}
+                            onClick={() => downloadAttachmentFile(docItem)}
                             className="p-1 hover:bg-[#C5A02D]/10 text-[#0B1C33] transition-colors"
                             title="Download Attachment"
                           >
@@ -2080,20 +2557,44 @@ export function AgreementsSigning() {
         {/* ==================== 4. VAULT STORAGE ARCHIVE ==================== */}
         {activeSubView === "storage" && (
           <div className="bg-white border border-slate-200 p-8 shadow-md">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-100 mb-8">
+            
+            {/* Quick Audit / Statistics Bar */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 bg-[#0B1C33] text-white p-6 border border-[#C5A02D]/40">
+              <div className="flex flex-col">
+                <span className="text-[9px] font-display uppercase tracking-[0.2em] text-[#C5A02D] font-bold">TOTAL REGISTERED ARCHIVES</span>
+                <span className="text-3xl font-serif mt-1 font-bold">{agreements.length} <span className="text-xs text-slate-400 font-sans font-normal">Active Covenants</span></span>
+              </div>
+              <div className="flex flex-col border-t md:border-t-0 md:border-l border-white/15 pt-3 md:pt-0 md:pl-6">
+                <span className="text-[9px] font-display uppercase tracking-[0.2em] text-[#C5A02D] font-bold">PENDING COUNTER-SIGNATURE</span>
+                <span className="text-3xl font-serif mt-1 font-bold text-amber-400">
+                  {agreements.filter(a => a.status !== "Completed").length} <span className="text-xs text-slate-400 font-sans font-normal">Awaiting Action</span>
+                </span>
+              </div>
+              <div className="flex flex-col border-t md:border-t-0 md:border-l border-white/15 pt-3 md:pt-0 md:pl-6">
+                <span className="text-[9px] font-display uppercase tracking-[0.2em] text-[#C5A02D] font-bold">SHA-256 VAULT HEALTH</span>
+                <span className="text-3xl font-serif mt-1 font-bold text-emerald-400 flex items-center gap-2">
+                  100% <span className="text-xs text-slate-400 font-sans font-normal">Online Secure</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-slate-100 mb-8">
               <div>
                 <h3 className="text-xl font-serif italic text-[#0B1C33]">Secured CML Document Vault</h3>
                 <p className="text-xs text-[#C5A02D] font-display uppercase tracking-widest font-bold">Encrypted Archive Storage</p>
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
-                <input 
-                  type="text" 
-                  placeholder="Search secure documents..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="px-4 py-2 border border-slate-200 text-xs w-60 focus:outline-none focus:border-[#C5A02D] bg-[#FDFBF7]"
-                />
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 text-slate-400" size={13} />
+                  <input 
+                    type="text" 
+                    placeholder="Search secure documents..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-8 pr-4 py-2 border border-slate-200 text-xs w-56 focus:outline-none focus:border-[#C5A02D] bg-[#FDFBF7]"
+                  />
+                </div>
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
@@ -2104,6 +2605,43 @@ export function AgreementsSigning() {
                   <option value="Awaiting Signature">Awaiting Signature</option>
                   <option value="Completed">Completed Secure</option>
                 </select>
+
+                {/* VIEW SWITCHER COMPONENT */}
+                <div className="flex border border-slate-200 p-0.5 bg-[#FAF7F2]">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("grid")}
+                    className={cn(
+                      "p-1.5 px-3 text-[10px] font-display uppercase tracking-wider font-bold flex items-center gap-1.5 transition-all",
+                      viewMode === "grid" ? "bg-[#0B1C33] text-[#C5A02D]" : "text-slate-500 hover:text-slate-800"
+                    )}
+                    title="Grid View"
+                  >
+                    <LayoutGrid size={11} /> Grid
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("list")}
+                    className={cn(
+                      "p-1.5 px-3 text-[10px] font-display uppercase tracking-wider font-bold flex items-center gap-1.5 transition-all border-l border-r border-slate-200/60",
+                      viewMode === "list" ? "bg-[#0B1C33] text-[#C5A02D]" : "text-slate-500 hover:text-slate-800"
+                    )}
+                    title="List Table View"
+                  >
+                    <List size={11} /> List
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("columns")}
+                    className={cn(
+                      "p-1.5 px-3 text-[10px] font-display uppercase tracking-wider font-bold flex items-center gap-1.5 transition-all",
+                      viewMode === "columns" ? "bg-[#0B1C33] text-[#C5A02D]" : "text-slate-500 hover:text-slate-800"
+                    )}
+                    title="Pipeline Columns View"
+                  >
+                    <Columns size={11} /> Columns
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -2112,65 +2650,363 @@ export function AgreementsSigning() {
                 No matching legal documents stored in active partitions.
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredAgreements.map((ag) => (
-                  <div key={ag.id} className="border border-slate-200 hover:border-[#C5A02D]/60 p-5 bg-[#FAF7F2]/30 flex flex-col justify-between h-72 relative group transition-all hover:shadow-md">
-                    <div>
-                      <div className="flex items-center justify-between gap-3 mb-3">
-                        <span className="text-[9px] font-mono font-bold text-slate-400">{ag.id}</span>
-                        <span className={cn(
-                          "px-2 py-0.5 text-[8px] font-display uppercase tracking-wider font-bold border",
-                          ag.status === "Completed" ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
-                          ag.status === "Signed" ? "bg-purple-50 text-purple-700 border-purple-100" :
-                          "bg-amber-50 text-amber-700 border-amber-100"
-                        )}>
-                          {ag.status}
+              <div>
+                
+                {/* 1. GRID VIEW */}
+                {viewMode === "grid" && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredAgreements.map((ag) => (
+                      <div key={ag.id} className="border border-slate-200 hover:border-[#C5A02D]/60 p-5 bg-[#FAF7F2]/30 flex flex-col justify-between min-h-[385px] h-auto pb-6 relative group transition-all hover:shadow-md">
+                        <div>
+                          <div className="flex items-center justify-between gap-3 mb-3">
+                            <span className="text-[9px] font-mono font-bold text-slate-400">{ag.id}</span>
+                            <span className={cn(
+                              "px-2 py-0.5 text-[8px] font-display uppercase tracking-wider font-bold border",
+                              ag.status === "Completed" ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
+                              ag.status === "Signed" ? "bg-purple-50 text-purple-700 border-purple-100" :
+                              "bg-amber-50 text-amber-700 border-amber-100"
+                            )}>
+                              {ag.status}
+                            </span>
+                          </div>
+
+                          <h4 className="text-sm font-bold text-[#0B1C33] font-serif leading-snug group-hover:text-[#C5A02D] transition-colors">
+                            {ag.title}
+                          </h4>
+                          <p className="text-[11px] text-slate-500 font-serif italic mt-1">{ag.hotelName}</p>
+
+                          <div className="mt-4 pt-4 border-t border-slate-100 space-y-1.5 text-[10px] text-slate-600 font-mono">
+                            <p>Tenant Party: <strong>{ag.ownerCompany}</strong></p>
+                            <p>Version Limit: v{ag.version}</p>
+                            <p>Secured Date: {ag.completedDate || ag.createdDate}</p>
+                          </div>
+                        </div>
+
+                        <div className="pt-4 border-t border-slate-100/60 mt-4">
+                          {/* Premium Quick Action Desk Buttons */}
+                          <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-100/40 text-[9px] font-sans">
+                            <span className="text-[#C5A02D] font-bold">Quick Desk Actions:</span>
+                            <div className="flex items-center gap-1.5">
+                              {/* Email Straight to Person */}
+                              <a 
+                                href={`mailto:${ag.ownerEmail}?subject=Cove Management (CML) - Urgent Review Required: ${encodeURIComponent(ag.title)}&body=Dear ${ag.ownerName},%0A%0APlease review the attached framework agreement for ${encodeURIComponent(ag.hotelName)}: ${encodeURIComponent(ag.id)}.%0A%0AWarm regards,%0ACML Administration`}
+                                className="p-1 bg-slate-50 hover:bg-amber-100 hover:text-amber-800 text-slate-500 rounded transition-all border border-slate-200/50"
+                                title={`Email Straight to ${ag.ownerName} (${ag.ownerEmail})`}
+                              >
+                                <Mail size={11} />
+                              </a>
+
+                              {/* Contact Client Direct */}
+                              <a 
+                                href={`tel:${ag.ownerPhone}`}
+                                className="p-1 bg-slate-50 hover:bg-emerald-100 hover:text-emerald-800 text-slate-500 rounded transition-all border border-slate-200/50"
+                                title={`Call Client Direct (${ag.ownerPhone})`}
+                              >
+                                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                </svg>
+                              </a>
+
+                              {/* Direct message in CML Chat */}
+                              <button
+                                onClick={() => {
+                                  // Trigger notification & tell user they can chat in the widget
+                                  triggerNotification(`Initiating secure Workspace chat with ${ag.ownerName}...`, "info");
+                                  const openWidgetBtn = document.querySelector('button[title="Open Integrated CML Chat"]') as HTMLButtonElement;
+                                  if (openWidgetBtn) {
+                                    openWidgetBtn.click();
+                                    setTimeout(() => {
+                                      // Locate the DM button or presence to initiate chat
+                                      const dmId = `dm-${ag.ownerName.toLowerCase().replace(/\s+/g, '-')}`;
+                                      const savedSpaces = localStorage.getItem(`cml_custom_spaces_cml`);
+                                      let customArr = [];
+                                      try { customArr = savedSpaces ? JSON.parse(savedSpaces) : []; } catch(e){}
+                                      const exists = customArr.some((s: any) => s.id === dmId);
+                                      if (!exists) {
+                                        const newS = { id: dmId, name: `👤 ${ag.ownerName}`, description: `Private secure communication with ${ag.ownerName}`, unreadCount: 0 };
+                                        localStorage.setItem(`cml_custom_spaces_cml`, JSON.stringify([...customArr, newS]));
+                                      }
+                                    }, 300);
+                                  }
+                                }}
+                                className="p-1 bg-slate-50 hover:bg-indigo-100 hover:text-indigo-800 text-slate-500 rounded transition-all border border-slate-200/50"
+                                title={`Chat with ${ag.ownerName} immediately`}
+                              >
+                                <MessageSquare size={11} />
+                              </button>
+
+                              {/* Download copy */}
+                              <button
+                                onClick={() => downloadAgreement(ag)}
+                                className="p-1 bg-slate-50 hover:bg-blue-100 hover:text-blue-800 text-slate-500 rounded transition-all border border-slate-200/50"
+                                title="Download document package"
+                              >
+                                <Download size={11} />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-2 mt-2 text-[10px] font-display font-bold">
+                            <button
+                              onClick={() => handleViewAgreement(ag)}
+                              className="text-[#0B1C33] hover:text-[#C5A02D] transition-colors uppercase tracking-wider flex items-center gap-1"
+                            >
+                              <Eye size={12} /> REVIEW FRAMEWORK
+                            </button>
+
+                            {ag.status === "Completed" ? (
+                              <span className="text-[8px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100/50">✓ SIGNED & ARCHIVED</span>
+                            ) : (
+                              <button
+                                onClick={() => handleViewAgreement(ag)}
+                                className="text-[#C5A02D] hover:underline"
+                              >
+                                SIGN CONTRACT NOW
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 2. LIST VIEW (Detailed Corporate Registry Table) */}
+                {viewMode === "list" && (
+                  <div className="overflow-x-auto border border-slate-200 bg-white">
+                    <table className="w-full text-left text-xs divide-y divide-slate-100">
+                      <thead>
+                        <tr className="bg-[#FAF7F2] text-slate-500 font-display uppercase tracking-wider text-[9px] border-b border-slate-200">
+                          <th className="py-4 px-6 font-bold text-[#0B1C33]">Ref ID / Title</th>
+                          <th className="py-4 px-6 font-bold text-[#0B1C33]">Hotel Asset</th>
+                          <th className="py-4 px-6 font-bold text-[#0B1C33]">Tenant Party / Client</th>
+                          <th className="py-4 px-6 font-bold text-[#0B1C33]">Secured Date</th>
+                          <th className="py-4 px-6 font-bold text-[#0B1C33]">Status</th>
+                          <th className="py-4 px-6 font-bold text-right text-[#0B1C33]">Desk Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {filteredAgreements.map((ag) => (
+                          <tr key={ag.id} className="hover:bg-[#FAF8F4]/50 transition-colors group">
+                            <td className="py-4 px-6">
+                              <div className="font-mono text-[9px] font-bold text-slate-400 mb-1">{ag.id}</div>
+                              <div className="font-serif text-sm font-bold text-[#0B1C33] group-hover:text-[#C5A02D] transition-colors leading-tight">
+                                {ag.title}
+                              </div>
+                            </td>
+                            <td className="py-4 px-6 font-serif italic text-slate-600">
+                              {ag.hotelName}
+                            </td>
+                            <td className="py-4 px-6">
+                              <div className="text-slate-800 font-semibold">{ag.ownerCompany}</div>
+                              <div className="text-[10px] text-slate-500 mt-0.5 font-mono">Attn: {ag.ownerName}</div>
+                            </td>
+                            <td className="py-4 px-6 font-mono text-slate-500 text-[10px]">
+                              {ag.completedDate || ag.createdDate}
+                            </td>
+                            <td className="py-4 px-6">
+                              <span className={cn(
+                                "px-2.5 py-1 text-[9px] font-display uppercase tracking-wider font-bold border",
+                                ag.status === "Completed" ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
+                                ag.status === "Signed" ? "bg-purple-50 text-purple-700 border-purple-100" :
+                                "bg-amber-50 text-amber-700 border-amber-100"
+                              )}>
+                                {ag.status}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                {/* Email */}
+                                <a 
+                                  href={`mailto:${ag.ownerEmail}?subject=Cove Management (CML) - Urgent Review Required: ${encodeURIComponent(ag.title)}&body=Dear ${ag.ownerName},%0A%0APlease review the attached framework agreement for ${encodeURIComponent(ag.hotelName)}: ${encodeURIComponent(ag.id)}.%0A%0AWarm regards,%0ACML Administration`}
+                                  className="p-1.5 bg-slate-50 hover:bg-amber-100 hover:text-amber-800 text-slate-500 rounded transition-all border border-slate-200/50"
+                                  title={`Email ${ag.ownerName}`}
+                                >
+                                  <Mail size={12} />
+                                </a>
+                                {/* Phone */}
+                                <a 
+                                  href={`tel:${ag.ownerPhone}`}
+                                  className="p-1.5 bg-slate-50 hover:bg-emerald-100 hover:text-emerald-800 text-slate-500 rounded transition-all border border-slate-200/50"
+                                  title={`Call Direct`}
+                                >
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                  </svg>
+                                </a>
+                                {/* Chat */}
+                                <button
+                                  onClick={() => {
+                                    triggerNotification(`Initiating secure Workspace chat with ${ag.ownerName}...`, "info");
+                                    const openWidgetBtn = document.querySelector('button[title="Open Integrated CML Chat"]') as HTMLButtonElement;
+                                    if (openWidgetBtn) openWidgetBtn.click();
+                                  }}
+                                  className="p-1.5 bg-slate-50 hover:bg-indigo-100 hover:text-indigo-800 text-slate-500 rounded transition-all border border-slate-200/50"
+                                  title={`Chat with Client`}
+                                >
+                                  <MessageSquare size={12} />
+                                </button>
+                                {/* Download */}
+                                <button
+                                  onClick={() => downloadAgreement(ag)}
+                                  className="p-1.5 bg-slate-50 hover:bg-blue-100 hover:text-blue-800 text-slate-500 rounded transition-all border border-slate-200/50"
+                                  title="Download Copy"
+                                >
+                                  <Download size={12} />
+                                </button>
+
+                                {/* Review Button */}
+                                <button
+                                  onClick={() => handleViewAgreement(ag)}
+                                  className="px-3 py-1.5 bg-[#0B1C33] text-[#C5A02D] hover:bg-[#C5A02D] hover:text-[#0B1C33] transition-all text-[9px] font-display uppercase tracking-wider font-black ml-2"
+                                >
+                                  Review
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* 3. COLUMNS VIEW (Pipeline Progress Kanban) */}
+                {viewMode === "columns" && (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    
+                    {/* Pipeline 1: Drafts & Sent */}
+                    <div className="flex flex-col">
+                      <div className="bg-slate-100 border-b-2 border-slate-400 p-4 flex items-center justify-between mb-4">
+                        <span className="text-xs font-display uppercase tracking-wider font-extrabold text-slate-800">Drafts & Workspace</span>
+                        <span className="bg-slate-200 text-slate-800 px-2.5 py-0.5 text-[10px] font-mono font-bold">
+                          {filteredAgreements.filter(a => ["Draft", "Sent", "Viewed"].includes(a.status)).length}
                         </span>
                       </div>
-
-                      <h4 className="text-sm font-bold text-[#0B1C33] font-serif leading-snug group-hover:text-[#C5A02D] transition-colors">
-                        {ag.title}
-                      </h4>
-                      <p className="text-[11px] text-slate-500 font-serif italic mt-1">{ag.hotelName}</p>
-
-                      <div className="mt-4 pt-4 border-t border-slate-100 space-y-1.5 text-[10px] text-slate-600 font-mono">
-                        <p>Tenant Party: <strong>{ag.ownerCompany}</strong></p>
-                        <p>Version Limit: v{ag.version}</p>
-                        <p>Secured Date: {ag.completedDate || ag.createdDate}</p>
+                      <div className="space-y-4 bg-slate-50/50 p-3 border border-slate-200/60 min-h-[480px]">
+                        {filteredAgreements.filter(a => ["Draft", "Sent", "Viewed"].includes(a.status)).map(ag => (
+                          <div key={ag.id} className="bg-white border border-slate-200 p-4 hover:border-[#C5A02D] shadow-sm transition-all hover:shadow-md flex flex-col justify-between min-h-[200px]">
+                            <div>
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-[9px] font-mono text-slate-400 font-bold">{ag.id}</span>
+                                <span className="px-1.5 py-0.5 text-[8px] bg-slate-100 border border-slate-200 text-slate-600 font-bold tracking-wider uppercase font-display">{ag.status}</span>
+                              </div>
+                              <h5 className="text-xs font-bold text-[#0B1C33] font-serif leading-snug line-clamp-2">{ag.title}</h5>
+                              <p className="text-[10px] text-slate-500 font-serif italic mt-1">{ag.hotelName}</p>
+                              
+                              <div className="mt-3 text-[9px] text-slate-500 font-mono space-y-0.5">
+                                <p>Party: <span className="font-sans font-bold text-slate-700">{ag.ownerCompany.split(" ")[0]}...</span></p>
+                                <p>Created: {ag.createdDate.split(" ")[0]}</p>
+                              </div>
+                            </div>
+                            
+                            <div className="pt-3 border-t border-slate-100 mt-3 flex items-center justify-between gap-2">
+                              <div className="flex gap-1">
+                                <a href={`mailto:${ag.ownerEmail}`} className="p-1 bg-slate-50 border hover:bg-amber-50 text-slate-400 hover:text-amber-700" title="Email"><Mail size={10} /></a>
+                                <a href={`tel:${ag.ownerPhone}`} className="p-1 bg-slate-50 border hover:bg-emerald-50 text-slate-400 hover:text-emerald-700"><svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg></a>
+                              </div>
+                              <button onClick={() => handleViewAgreement(ag)} className="text-[10px] font-display font-black text-[#0B1C33] hover:text-[#C5A02D] uppercase tracking-wider flex items-center gap-0.5">
+                                Edit <ChevronRight size={10} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                        {filteredAgreements.filter(a => ["Draft", "Sent", "Viewed"].includes(a.status)).length === 0 && (
+                          <div className="text-center py-12 text-slate-400 italic text-[11px]">No matching documents in workspace.</div>
+                        )}
                       </div>
                     </div>
 
-                    <div className="pt-4 border-t border-slate-100/60 flex items-center justify-between gap-2 mt-4 text-[10px] font-display font-bold">
-                      <button
-                        onClick={() => handleViewAgreement(ag)}
-                        className="text-[#0B1C33] hover:text-[#C5A02D] transition-colors uppercase tracking-wider"
-                      >
-                        REVIEW ARCHIVE
-                      </button>
-
-                      {ag.status === "Completed" ? (
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => triggerNotification(`Dispatching copy of "${ag.title}" to registered email: ${ag.ownerEmail}...`, "info")}
-                            className="p-1 text-slate-400 hover:text-[#0B1C33]"
-                            title="Email Secure Copy"
-                          >
-                            <Mail size={13} />
-                          </button>
-                          <button
-                            onClick={() => triggerNotification(`Downloading secured contract package...`, "success")}
-                            className="p-1 text-slate-400 hover:text-[#0B1C33]"
-                            title="Download SECURE CML PDF"
-                          >
-                            <Download size={13} />
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-[9px] text-amber-600 font-mono">✓ IN-VAULT PENDING LOCK</span>
-                      )}
+                    {/* Pipeline 2: Awaiting Signature / Executable */}
+                    <div className="flex flex-col">
+                      <div className="bg-amber-500/10 border-b-2 border-amber-500 p-4 flex items-center justify-between mb-4">
+                        <span className="text-xs font-display uppercase tracking-wider font-extrabold text-amber-800">Awaiting Signature</span>
+                        <span className="bg-amber-500 text-white px-2.5 py-0.5 text-[10px] font-mono font-bold">
+                          {filteredAgreements.filter(a => ["Awaiting Signature", "Signed"].includes(a.status)).length}
+                        </span>
+                      </div>
+                      <div className="space-y-4 bg-amber-50/20 p-3 border border-amber-200/40 min-h-[480px]">
+                        {filteredAgreements.filter(a => ["Awaiting Signature", "Signed"].includes(a.status)).map(ag => (
+                          <div key={ag.id} className="bg-white border border-slate-200 p-4 hover:border-amber-500 shadow-sm transition-all hover:shadow-md flex flex-col justify-between min-h-[200px]">
+                            <div>
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-[9px] font-mono text-slate-400 font-bold">{ag.id}</span>
+                                <span className="px-1.5 py-0.5 text-[8px] bg-amber-50 border border-amber-150 text-amber-700 font-bold tracking-wider uppercase font-display">{ag.status}</span>
+                              </div>
+                              <h5 className="text-xs font-bold text-[#0B1C33] font-serif leading-snug line-clamp-2">{ag.title}</h5>
+                              <p className="text-[10px] text-slate-500 font-serif italic mt-1">{ag.hotelName}</p>
+                              
+                              <div className="mt-3 text-[9px] text-slate-500 font-mono space-y-0.5">
+                                <p>Signee: <span className="font-sans font-bold text-slate-700">{ag.ownerName}</span></p>
+                                <p>Covenant Date: {ag.createdDate.split(" ")[0]}</p>
+                              </div>
+                            </div>
+                            
+                            <div className="pt-3 border-t border-slate-100 mt-3 flex items-center justify-between gap-2">
+                              <div className="flex gap-1">
+                                <a href={`mailto:${ag.ownerEmail}`} className="p-1 bg-slate-50 border hover:bg-amber-50 text-slate-400 hover:text-amber-700" title="Email"><Mail size={10} /></a>
+                                <button onClick={() => {
+                                  triggerNotification(`Initiating secure Workspace chat with ${ag.ownerName}...`, "info");
+                                  const openWidgetBtn = document.querySelector('button[title="Open Integrated CML Chat"]') as HTMLButtonElement;
+                                  if (openWidgetBtn) openWidgetBtn.click();
+                                }} className="p-1 bg-slate-50 border hover:bg-indigo-50 text-slate-400 hover:text-indigo-700"><MessageSquare size={10} /></button>
+                              </div>
+                              <button onClick={() => handleViewAgreement(ag)} className="text-[10px] font-display font-black text-amber-700 hover:text-amber-800 uppercase tracking-wider flex items-center gap-0.5">
+                                Sign Now <ChevronRight size={10} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                        {filteredAgreements.filter(a => ["Awaiting Signature", "Signed"].includes(a.status)).length === 0 && (
+                          <div className="text-center py-12 text-slate-400 italic text-[11px]">No agreements pending signature.</div>
+                        )}
+                      </div>
                     </div>
+
+                    {/* Pipeline 3: Encrypted & Completed */}
+                    <div className="flex flex-col">
+                      <div className="bg-emerald-600/10 border-b-2 border-emerald-600 p-4 flex items-center justify-between mb-4">
+                        <span className="text-xs font-display uppercase tracking-wider font-extrabold text-emerald-800">Completed Vault Secure</span>
+                        <span className="bg-emerald-600 text-white px-2.5 py-0.5 text-[10px] font-mono font-bold">
+                          {filteredAgreements.filter(a => a.status === "Completed").length}
+                        </span>
+                      </div>
+                      <div className="space-y-4 bg-emerald-50/20 p-3 border border-emerald-200/40 min-h-[480px]">
+                        {filteredAgreements.filter(a => a.status === "Completed").map(ag => (
+                          <div key={ag.id} className="bg-white border border-slate-200 p-4 hover:border-emerald-600 shadow-sm transition-all hover:shadow-md flex flex-col justify-between min-h-[200px]">
+                            <div>
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-[9px] font-mono text-slate-400 font-bold">{ag.id}</span>
+                                <span className="px-1.5 py-0.5 text-[8px] bg-emerald-50 border border-emerald-150 text-emerald-700 font-bold tracking-wider uppercase font-display">Secured</span>
+                              </div>
+                              <h5 className="text-xs font-bold text-[#0B1C33] font-serif leading-snug line-clamp-2">{ag.title}</h5>
+                              <p className="text-[10px] text-slate-500 font-serif italic mt-1">{ag.hotelName}</p>
+                              
+                              <div className="mt-3 text-[9px] text-slate-500 font-mono space-y-0.5">
+                                <p>Secured Date: <span className="text-emerald-700 font-bold">{ag.completedDate?.split(" ")[0]}</span></p>
+                                <p>Certificate: <span className="text-[#C5A02D]">SHA-256 Vaulted</span></p>
+                              </div>
+                            </div>
+                            
+                            <div className="pt-3 border-t border-slate-100 mt-3 flex items-center justify-between gap-2">
+                              <div className="flex gap-1">
+                                <button onClick={() => downloadAgreement(ag)} className="p-1 bg-slate-50 border hover:bg-blue-50 text-slate-400 hover:text-blue-700" title="Download copy"><Download size={10} /></button>
+                              </div>
+                              <button onClick={() => handleViewAgreement(ag)} className="text-[10px] font-display font-black text-emerald-700 hover:text-emerald-800 uppercase tracking-wider flex items-center gap-0.5">
+                                Audit <ChevronRight size={10} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                        {filteredAgreements.filter(a => a.status === "Completed").length === 0 && (
+                          <div className="text-center py-12 text-slate-400 italic text-[11px]">No vaulted secure documents.</div>
+                        )}
+                      </div>
+                    </div>
+
                   </div>
-                ))}
+                )}
+
               </div>
             )}
           </div>

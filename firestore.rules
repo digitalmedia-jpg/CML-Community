@@ -241,6 +241,17 @@ service cloud.firestore {
     match /mailer-logs-ramada/{document=**} { allow read, write: if isSignedIn(); }
     match /mailer-logs-wyndham/{document=**} { allow read, write: if isSignedIn(); }
 
+    // Dynamic collections safety net for chat messages, newsletters, rewards configurations and custom forms
+    match /{collectionName}/{document=**} {
+      allow read, write: if isSignedIn() && (
+        collectionName.startsWith("google-chat-messages-") || 
+        collectionName.startsWith("newsletter-subscribers-") ||
+        collectionName.startsWith("rewards-config-") ||
+        collectionName.startsWith("forms-") ||
+        collectionName.startsWith("cml-forms-submissions-")
+      );
+    }
+
     match /login_logs/{logId} {
       allow create: if isSignedIn();
       allow read: if isAdmin();

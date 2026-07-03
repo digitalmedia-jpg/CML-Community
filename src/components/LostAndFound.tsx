@@ -409,19 +409,94 @@ export const LostAndFound: React.FC<{
   const isAdmin = userRole === "Administrator" || userRole === "Manager" || userRole === "Group Controller";
   const isAdministrator = userRole === "Administrator" || userRole === "admin" || userRole === "Manager" || userRole === "Group Controller";
 
+  const hasSeededRef = useRef(false);
+
   useEffect(() => {
     // Collect from property-specific database as requested by Charles
     const q = query(
       collection(db, `lost-and-found-${activeCompanyId}`), 
       orderBy("createdAt", "desc")
     );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
       const docs = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as LostItem[];
-      setItems(docs);
-      setLoading(false);
+
+      if (docs.length === 0 && !hasSeededRef.current) {
+        hasSeededRef.current = true;
+        console.log("[LostAndFound] Collection empty. Seeding defaults for:", activeCompanyId);
+        const colRef = collection(db, `lost-and-found-${activeCompanyId}`);
+        const seeds = [
+          {
+            itemName: "iPhone 14 Pro Max",
+            description: "Deep Purple, found near the Reception lift lobby. Locked screen with a beach wallpaper.",
+            locationFound: "Reception Lobby",
+            staffName: "Charlene Nand",
+            staffPosition: "Duty Manager",
+            imageUrls: ["https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?q=80&w=300&auto=format&fit=crop"],
+            propertyId: activeCompanyId,
+            isHighValue: true,
+            status: "Secured in Office",
+            createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+            reportedBy: "Charlene Nand",
+            disposalMethod: "",
+            recipientName: "",
+            carrierName: "",
+            trackingNumber: "",
+            courierFee: 0,
+            dispatchDate: ""
+          },
+          {
+            itemName: "Black Leather Wallet",
+            description: "Saddleback leather wallet containing cards and local Fijian currency notes. Found on a pool deck chair.",
+            locationFound: "Restaurant Poolside",
+            staffName: "Nolau Malo",
+            staffPosition: "Rooms Division Manager",
+            imageUrls: ["https://images.unsplash.com/photo-1627124357128-5a15cf37b586?q=80&w=300&auto=format&fit=crop"],
+            propertyId: activeCompanyId,
+            isHighValue: true,
+            status: "Found",
+            createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+            reportedBy: "Nolau Malo",
+            disposalMethod: "",
+            recipientName: "",
+            carrierName: "",
+            trackingNumber: "",
+            courierFee: 0,
+            dispatchDate: ""
+          },
+          {
+            itemName: "Designer Sunglasses",
+            description: "Tom Ford aviator sunglasses with gold frames, inside a brown velvet case.",
+            locationFound: "Gym Area",
+            staffName: "Priyesh Narayan",
+            staffPosition: "Staff Member",
+            imageUrls: ["https://images.unsplash.com/photo-1511499767150-a48a237f0083?q=80&w=300&auto=format&fit=crop"],
+            propertyId: activeCompanyId,
+            isHighValue: false,
+            status: "Found",
+            createdAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+            reportedBy: "Priyesh Narayan",
+            disposalMethod: "",
+            recipientName: "",
+            carrierName: "",
+            trackingNumber: "",
+            courierFee: 0,
+            dispatchDate: ""
+          }
+        ];
+        for (const item of seeds) {
+          try {
+            await addDoc(colRef, item);
+          } catch (err) {
+            console.error("Seeding lost-and-found failed:", err);
+          }
+        }
+      } else {
+        setItems(docs);
+        setLoading(false);
+      }
     }, (error) => {
       console.error("Firestore listener error:", error);
       setLoading(false);

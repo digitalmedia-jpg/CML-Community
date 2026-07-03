@@ -37,7 +37,8 @@ import {
   Video,
   VideoOff,
   Mic,
-  MicOff
+  MicOff,
+  Mail
 } from "lucide-react";
 import { toastService } from "../services/toastService";
 
@@ -290,16 +291,24 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
         setConnections(updated);
         const email = updated[companyId]?.email || "";
         const domain = email.trim().toLowerCase().split("@")[1] || "";
-        if (companyId === "ramada" && domain === "wyndhamgardenwailoaloafiji.com") {
-          disconnectGoogleWorkspaceProperty(companyId);
-          setConnections(getGoogleWorkspaceConnections());
-          toastService.error("Linking failed: @wyndhamgardenwailoaloafiji.com email is not allowed for Ramada Suites.");
-          return;
+        
+        let isValid = false;
+        if (companyId === "ramada" && domain === "ramadawailoaloafiji.com") {
+          isValid = true;
+        } else if (companyId === "wyndham" && domain === "wyndhamgardenwailoaloafiji.com") {
+          isValid = true;
+        } else if (companyId === "cml" && domain === "cml.com.fj") {
+          isValid = true;
         }
-        if (companyId === "wyndham" && domain === "ramadawailoaloafiji.com") {
+
+        if (!isValid) {
           disconnectGoogleWorkspaceProperty(companyId);
           setConnections(getGoogleWorkspaceConnections());
-          toastService.error("Linking failed: @ramadawailoaloafiji.com email is not allowed for Wyndham Garden.");
+          let expected = "";
+          if (companyId === "ramada") expected = "ramadawailoaloafiji.com";
+          else if (companyId === "wyndham") expected = "wyndhamgardenwailoaloafiji.com";
+          else expected = "cml.com.fj";
+          toastService.error(`Linking failed: Only @${expected} domain emails are authorized for this property's Google Chat Widget.`);
           return;
         }
         toastService.success(`Linked CML Chat (${email}) for ${getPropertyName(companyId)}!`);
@@ -364,8 +373,37 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     }
   };
 
-  // Real-time listener for current space messages
+  // Real-time listener for current space messages (with live staff forum sync integration)
   useEffect(() => {
+    if (activeSpaceId === "forum-discussions-sync") {
+      const colRef = collection(db, "posts");
+      const unsubscribe = onSnapshot(colRef, (snapshot) => {
+        const list: ChatMessage[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          const timestampDate = data.createdAt ? (data.createdAt.seconds ? new Date(data.createdAt.seconds * 1000) : new Date(data.createdAt)) : new Date();
+          list.push({
+            id: doc.id,
+            senderName: data.authorName || "CML Forum",
+            senderEmail: data.authorEmail || "forum@cml.com.fj",
+            content: `📢 [${data.category || 'Staff Forum'}] **${data.title}**\n\n${data.content}`,
+            timestamp: timestampDate.toISOString(),
+          } as ChatMessage);
+          knownMessageIdsRef.current.add(doc.id);
+        });
+
+        // Sort by timestamp
+        list.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        setMessages(list);
+
+        // Scroll to bottom
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }, 120);
+      });
+      return () => unsubscribe();
+    }
+
     const colRef = collection(db, `google-chat-messages-${companyId}-${activeSpaceId}`);
     const unsubscribe = onSnapshot(colRef, (snapshot) => {
       const list: ChatMessage[] = [];
@@ -718,6 +756,29 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     );
   });
 
+  // Extract clean space name helper
+  const getCleanSpaceName = (spaceName: string | undefined): string => {
+    if (!spaceName) return "CML Chat";
+    // safely strip leading emojis/symbols and spaces
+    const cleaned = spaceName.replace(/^[^\w\s]{1,4}\s*/gu, '').trim();
+    return cleaned || spaceName;
+  };
+
+  const getMemberEmail = (name: string): string => {
+    const n = name.toLowerCase();
+    if (n.includes("charles")) return "digitalmedia@cml.com.fj";
+    if (n.includes("priyesh")) return "graphics@cml.com.fj";
+    if (n.includes("rohit")) return "accounts@cml.com.fj";
+    if (n.includes("charlene")) return "dutymanager.ramada@cml.com.fj";
+    if (n.includes("nolau")) return "rooms@cml.com.fj";
+    if (n.includes("neetisa")) return "hr@cml.com.fj";
+    return "staff@cml.com.fj";
+  };
+
+  const activeSpace = spaces.find(s => s.id === activeSpaceId);
+  const isDM = activeSpaceId.startsWith("dm-");
+  const dmName = isDM ? (activeSpace ? getCleanSpaceName(activeSpace.name) : activeSpaceId.replace("dm-", "").split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")) : "";
+
   return (
     <>
       {/* Floating launcher button in the bottom-right corner */}
@@ -746,7 +807,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
       {isOpen && (
         <div 
           id="google-chat-panel"
-          className="fixed bottom-24 right-6 w-96 h-[550px] bg-white border border-slate-200 shadow-2xl flex flex-col z-[110] overflow-hidden"
+          className="fixed bottom-24 right-6 w-[480px] h-[600px] bg-white border border-slate-200 shadow-2xl flex flex-col z-[110] overflow-hidden"
         >
           {/* Header */}
           <div className="text-white px-4 py-3.5 flex items-center justify-between select-none shrink-0" style={{ backgroundColor: primaryColor }}>
@@ -815,7 +876,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
             </div>
             
             <div className="flex flex-col gap-1">
-              {["wyndham", "ramada", "cml"]
+              {["wyndham", "ramada"]
                 .filter((propId) => {
                   if (companyId === "ramada" && propId === "wyndham") return false;
                   if (companyId === "wyndham" && propId === "ramada") return false;
@@ -878,16 +939,23 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                                   const email = updated[propId]?.email || "";
                                   const domain = email.trim().toLowerCase().split("@")[1] || "";
                                   
-                                  if (propId === "ramada" && domain === "wyndhamgardenwailoaloafiji.com") {
-                                    disconnectGoogleWorkspaceProperty(propId);
-                                    setConnections(getGoogleWorkspaceConnections());
-                                    toastService.error("Linking failed: @wyndhamgardenwailoaloafiji.com email is not allowed for Ramada Suites.");
-                                    return;
+                                  let isValid = false;
+                                  if (propId === "ramada" && domain === "ramadawailoaloafiji.com") {
+                                    isValid = true;
+                                  } else if (propId === "wyndham" && domain === "wyndhamgardenwailoaloafiji.com") {
+                                    isValid = true;
+                                  } else if (propId === "cml" && domain === "cml.com.fj") {
+                                    isValid = true;
                                   }
-                                  if (propId === "wyndham" && domain === "ramadawailoaloafiji.com") {
+
+                                  if (!isValid) {
                                     disconnectGoogleWorkspaceProperty(propId);
                                     setConnections(getGoogleWorkspaceConnections());
-                                    toastService.error("Linking failed: @ramadawailoaloafiji.com email is not allowed for Wyndham Garden.");
+                                    let expected = "";
+                                    if (propId === "ramada") expected = "ramadawailoaloafiji.com";
+                                    else if (propId === "wyndham") expected = "wyndhamgardenwailoaloafiji.com";
+                                    else expected = "cml.com.fj";
+                                    toastService.error(`Linking failed: Only @${expected} domain emails are authorized for this property's Google Chat Widget.`);
                                     return;
                                   }
                                   
@@ -897,7 +965,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                               } catch (e) {
                                 toastService.error(`Failed to link ${getPropertyName(propId)}.`);
                               } finally {
-                                setIsConnecting(false);
+                                  setIsConnecting(false);
                               }
                             }}
                             disabled={isConnecting}
@@ -925,17 +993,20 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
           {/* Subheader / Description */}
           <div className="bg-slate-50 border-b border-slate-100 px-4 py-2 flex items-center justify-between shrink-0">
             <div className="flex-1 min-w-0 pr-2">
-              <p className="text-[10px] text-slate-800 font-sans font-bold truncate">
-                {spaces.find(s => s.id === activeSpaceId)?.name}
+              <p className="text-[10px] text-slate-800 font-sans font-extrabold truncate flex items-center gap-1">
+                {isDM ? `👤 DM: ${dmName}` : spaces.find(s => s.id === activeSpaceId)?.name}
+                {isDM && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping inline-block" />
+                )}
               </p>
               <p className="text-[8px] text-slate-400 font-serif italic truncate">
-                {spaces.find(s => s.id === activeSpaceId)?.description}
+                {isDM ? `Private encrypted staff correspondence with ${dmName}` : spaces.find(s => s.id === activeSpaceId)?.description}
               </p>
             </div>
             <div className="flex items-center gap-1.5 text-slate-400">
               <button 
                 onClick={() => {
-                  const name = spaces.find(s => s.id === activeSpaceId)?.name.replace(/^[^\s]+\s/, '') || "Team Members";
+                  const name = isDM ? dmName : (spaces.find(s => s.id === activeSpaceId)?.name.replace(/^[^\s]+\s/, '') || "Team Members");
                   setActiveCall({
                     type: "voice",
                     status: "ringing",
@@ -956,7 +1027,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
               </button>
               <button 
                 onClick={() => {
-                  const name = spaces.find(s => s.id === activeSpaceId)?.name.replace(/^[^\s]+\s/, '') || "Team Members";
+                  const name = isDM ? dmName : (spaces.find(s => s.id === activeSpaceId)?.name.replace(/^[^\s]+\s/, '') || "Team Members");
                   setActiveCall({
                     type: "video",
                     status: "ringing",
@@ -975,6 +1046,19 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
               >
                 <Video size={13} />
               </button>
+
+              {/* Email Straight to Person (Quick Action) */}
+              {isDM && (
+                <a 
+                  href={`mailto:${getMemberEmail(dmName)}?subject=CML Staff Inquiry - Private Desk Notification&body=Dear ${dmName},%0A%0AI wanted to follow up with you regarding our hotel management operations.%0A%0ABest regards,%0AAdministration`}
+                  className="p-1 hover:bg-slate-200 transition-colors flex items-center"
+                  style={{ color: primaryColor }}
+                  title={`Email Straight to ${dmName} (${getMemberEmail(dmName)})`}
+                >
+                  <Mail size={13} />
+                </a>
+              )}
+
               <button 
                 onClick={() => {
                   setShowSearch(!showSearch);
@@ -1039,7 +1123,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
           {/* Workspaces / Spaces and Active chat messages split view */}
           <div className="flex-1 flex overflow-hidden">
             {/* Spaces navigation rail (left) */}
-            <div className="w-1/3 bg-slate-50 border-r border-slate-200 flex flex-col select-none shrink-0 overflow-y-auto">
+            <div className="w-[155px] bg-slate-50 border-r border-slate-200 flex flex-col select-none shrink-0 overflow-y-auto custom-scrollbar">
               <div className="p-2 border-b border-slate-100 bg-slate-100/50 flex items-center justify-between">
                 <span className="text-[8px] font-display uppercase tracking-widest text-slate-400 font-black">Active Spaces</span>
                 <button 
@@ -1074,7 +1158,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                         color: primaryColor
                       } : {}}
                     >
-                      <span className="truncate">{space.name.replace(/^[^\s]+\s/, '')}</span>
+                      <span className="truncate font-sans font-medium flex items-center gap-1 text-[10px]">{space.name}</span>
                     </button>
                   );
                 })}
@@ -1277,7 +1361,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
 
                       <input
                         type="text"
-                        placeholder={`Reply to ${spaces.find(s => s.id === activeSpaceId)?.name.substring(3)}...`}
+                        placeholder={`Message ${isDM ? dmName : getCleanSpaceName(spaces.find(s => s.id === activeSpaceId)?.name)}...`}
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
                         className="flex-1 bg-white border border-slate-250 text-[10px] px-2.5 py-1.5 outline-none font-sans text-slate-800"
@@ -1302,108 +1386,157 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
 
               {/* Real-time Video/Voice Call Simulation HUD overlay */}
               {activeCall && (
-                <div className="absolute inset-0 bg-slate-900/95 z-[150] flex flex-col justify-between p-6 text-white animate-fade-in">
-                  <div className="flex items-center justify-between">
+                <div className="absolute inset-0 bg-slate-950/98 z-[150] flex flex-col justify-between p-6 text-white animate-fade-in font-sans">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-3">
                     <span className="text-[10px] uppercase font-display tracking-widest text-emerald-400 font-extrabold flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                      CML Chat Call
+                      CML Live Communications Desk
                     </span>
-                    <span className="text-[9px] text-slate-400 font-mono">
-                      {activeCall.type === "video" ? "HD Video Sync" : "Voice Link"}
+                    <span className="text-[9px] text-[#C5A02D] font-mono uppercase bg-amber-500/10 px-2 py-0.5 border border-amber-500/20">
+                      {activeCall.type === "video" ? "Secure HD Video" : "Secure Voice Link"}
                     </span>
                   </div>
 
-                  <div className="flex-1 flex flex-col items-center justify-center my-4">
+                  <div className="flex-1 flex flex-col items-center justify-center my-4 overflow-y-auto max-h-[340px] py-2 scrollbar-none">
                     {activeCall.type === "video" && activeCall.status === "connected" && activeCall.hasVideo ? (
-                      <div className="w-full h-40 bg-slate-800 rounded-lg relative overflow-hidden flex items-center justify-center border border-slate-700/80 shadow-inner">
+                      <div className="w-full h-44 bg-slate-900 rounded-sm relative overflow-hidden flex items-center justify-center border border-white/10 shadow-inner">
                         <img 
                           src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80" 
                           alt="Participant Feed" 
-                          className="w-full h-full object-cover opacity-80"
+                          className="w-full h-full object-cover opacity-90"
                           referrerPolicy="no-referrer"
                         />
-                        <div className="absolute bottom-2 left-2 bg-slate-900/70 px-2 py-0.5 rounded text-[8px] font-sans">
-                          {activeCall.participantName}
+                        <div className="absolute bottom-2 left-2 bg-slate-955/80 px-2 py-0.5 rounded text-[8px] font-mono border border-white/15">
+                          🟢 Remote: {activeCall.participantName}
                         </div>
                         {activeCall.hasVideo && (
-                          <div className="absolute top-2 right-2 w-16 h-12 bg-slate-900 rounded border border-slate-700 overflow-hidden shadow-md">
-                            <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: `${primaryColor}20` }}>
-                              <span className="text-[6px] text-white font-sans font-black opacity-80">You</span>
+                          <div className="absolute top-2 right-2 w-20 h-14 bg-slate-900 rounded border border-white/10 overflow-hidden shadow-lg">
+                            <div className="w-full h-full flex flex-col items-center justify-center bg-slate-950">
+                              <span className="text-[6px] text-[#C5A02D] font-mono uppercase font-black tracking-widest">LOCAL FEED</span>
+                              <span className="text-[7px] text-white font-sans font-bold">You (Admin)</span>
                             </div>
                           </div>
                         )}
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center gap-3">
-                        <div className="w-16 h-16 rounded-full flex items-center justify-center border-2 animate-pulse" style={{ backgroundColor: `${primaryColor}40`, borderColor: `${primaryColor}80` }}>
-                          <span className="text-2xl">👤</span>
+                      <div className="flex flex-col items-center gap-4 py-4">
+                        <div className="w-20 h-20 rounded-full flex items-center justify-center border-2 border-dashed border-[#C5A02D]/40 bg-slate-900 animate-pulse relative">
+                          <div className="absolute inset-2 bg-[#0B1C33] rounded-full flex items-center justify-center">
+                            <span className="text-3xl">👤</span>
+                          </div>
                         </div>
                         <div className="text-center">
-                          <h4 className="text-xs font-sans font-bold text-slate-100">{activeCall.participantName}</h4>
-                          <p className="text-[8px] text-slate-400 mt-1 uppercase font-semibold tracking-wider font-sans">
-                            {activeCall.status === "ringing" ? "Ringing..." : "Connected"}
+                          <h4 className="text-sm font-sans font-black text-white">{activeCall.participantName}</h4>
+                          <p className="text-[9px] text-[#C5A02D] mt-1.5 uppercase font-bold tracking-widest font-sans flex items-center justify-center gap-1">
+                            {activeCall.status === "ringing" ? (
+                              <>
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" />
+                                Incoming Ringing Link...
+                              </>
+                            ) : (
+                              <>
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                Securely Connected
+                              </>
+                            )}
                           </p>
                         </div>
                         {activeCall.status === "connected" && (
-                          <div className="flex items-center gap-1 mt-2">
-                            <span className="w-1 h-3 rounded-full animate-bounce" style={{ backgroundColor: primaryColor, animationDelay: '0.1s' }} />
-                            <span className="w-1 h-5 rounded-full animate-bounce" style={{ backgroundColor: primaryColor, animationDelay: '0.2s' }} />
-                            <span className="w-1 h-4 rounded-full animate-bounce" style={{ backgroundColor: primaryColor, animationDelay: '0.3s' }} />
-                            <span className="w-1 h-6 rounded-full animate-bounce" style={{ backgroundColor: primaryColor, animationDelay: '0.4s' }} />
-                            <span className="w-1 h-3 rounded-full animate-bounce" style={{ backgroundColor: primaryColor, animationDelay: '0.5s' }} />
+                          <div className="flex items-center gap-1.5 mt-1 bg-white/5 px-3 py-1.5 border border-white/5">
+                            <span className="w-1 h-3 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '0.1s' }} />
+                            <span className="w-1 h-5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '0.2s' }} />
+                            <span className="w-1 h-4 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '0.3s' }} />
+                            <span className="w-1 h-6 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '0.4s' }} />
+                            <span className="w-1 h-3 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '0.5s' }} />
                           </div>
                         )}
                       </div>
                     )}
                     
                     {activeCall.status === "connected" && (
-                      <span className="text-[10px] font-mono mt-3 font-semibold" style={{ color: primaryColor }}>
-                        <CallTimer />
+                      <span className="text-[11px] font-mono mt-4 font-bold bg-[#C5A02D]/10 text-[#C5A02D] px-2.5 py-1 border border-[#C5A02D]/20">
+                        ⏱️ <CallTimer />
                       </span>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-center gap-3">
-                    <button 
-                      type="button"
-                      onClick={() => setActiveCall(prev => prev ? { ...prev, hasMic: !prev.hasMic } : null)}
-                      className={`p-2.5 rounded-full border transition-all ${
-                        activeCall.hasMic 
-                          ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700" 
-                          : "bg-red-500/20 border-red-500/30 text-red-400 hover:bg-red-500/30"
-                      }`}
-                      title={activeCall.hasMic ? "Mute Microphone" : "Unmute Microphone"}
-                    >
-                      {activeCall.hasMic ? <Mic size={14} /> : <MicOff size={14} />}
-                    </button>
+                  {/* Actions Bar */}
+                  <div className="border-t border-white/10 pt-4 flex flex-col gap-3 shrink-0">
+                    {activeCall.status === "ringing" ? (
+                      <div className="grid grid-cols-2 gap-3 w-full">
+                        {/* ACCEPT / ANSWER BUTTON */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveCall(prev => prev ? { ...prev, status: "connected" } : null);
+                            toastService.success("Call connected.");
+                          }}
+                          className="py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-sm shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-wider text-[11px]"
+                        >
+                          <Phone size={14} className="animate-bounce" /> Answer Call
+                        </button>
 
-                    {activeCall.type === "video" && (
-                      <button 
-                        type="button"
-                        onClick={() => setActiveCall(prev => prev ? { ...prev, hasVideo: !prev.hasVideo } : null)}
-                        className={`p-2.5 rounded-full border transition-all ${
-                          activeCall.hasVideo 
-                            ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700" 
-                            : "bg-red-500/20 border-red-500/30 text-red-400 hover:bg-red-500/30"
-                        }`}
-                        title={activeCall.hasVideo ? "Turn Camera Off" : "Turn Camera On"}
-                      >
-                        {activeCall.hasVideo ? <Video size={14} /> : <VideoOff size={14} />}
-                      </button>
+                        {/* DECLINE BUTTON */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveCall(prev => prev ? { ...prev, status: "ended" } : null);
+                            toastService.info("Call declined.");
+                            setTimeout(() => setActiveCall(null), 1000);
+                          }}
+                          className="py-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-sm shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-wider text-[11px]"
+                        >
+                          <PhoneOff size={14} /> Decline
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-3 w-full">
+                        {/* Active Call Controls */}
+                        <div className="flex items-center justify-center gap-4">
+                          <button 
+                            type="button"
+                            onClick={() => setActiveCall(prev => prev ? { ...prev, hasMic: !prev.hasMic } : null)}
+                            className={`p-3 rounded-full border transition-all ${
+                              activeCall.hasMic 
+                                ? "bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700" 
+                                : "bg-rose-500/20 border-rose-500/30 text-rose-400 hover:bg-rose-500/30"
+                            }`}
+                            title={activeCall.hasMic ? "Mute Microphone" : "Unmute Microphone"}
+                          >
+                            {activeCall.hasMic ? <Mic size={14} /> : <MicOff size={14} />}
+                          </button>
+
+                          {activeCall.type === "video" && (
+                            <button 
+                              type="button"
+                              onClick={() => setActiveCall(prev => prev ? { ...prev, hasVideo: !prev.hasVideo } : null)}
+                              className={`p-3 rounded-full border transition-all ${
+                                activeCall.hasVideo 
+                                  ? "bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700" 
+                                  : "bg-rose-500/20 border-rose-500/30 text-rose-400 hover:bg-rose-500/30"
+                              }`}
+                              title={activeCall.hasVideo ? "Turn Camera Off" : "Turn Camera On"}
+                            >
+                              {activeCall.hasVideo ? <Video size={14} /> : <VideoOff size={14} />}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* END CALL BUTTON (Very big, clear, labeled) */}
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setActiveCall(prev => prev ? { ...prev, status: "ended" } : null);
+                            toastService.info("Call ended.");
+                            setTimeout(() => setActiveCall(null), 1000);
+                          }}
+                          className="w-full py-3 bg-rose-600 hover:bg-rose-500 text-white font-extrabold rounded-sm shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-wider text-[11px]"
+                          title="Hang Up"
+                        >
+                          <PhoneOff size={14} /> End Call Link
+                        </button>
+                      </div>
                     )}
-
-                    <button 
-                      type="button"
-                      onClick={() => {
-                        setActiveCall(prev => prev ? { ...prev, status: "ended" } : null);
-                        toastService.info("Call ended.");
-                        setTimeout(() => setActiveCall(null), 1000);
-                      }}
-                      className="p-2.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white transition-all shadow-lg"
-                      title="Hang Up"
-                    >
-                      <PhoneOff size={14} />
-                    </button>
                   </div>
                 </div>
               )}

@@ -1711,7 +1711,30 @@ export default function App() {
   const [formsLayoutView, setFormsLayoutView] = useState<"grid" | "list">("list");
   const [selectedFormCategory, setSelectedFormCategory] = useState<string>("All");
   const [isPrintFriendly, setIsPrintFriendly] = useState(false);
-  const [hotelInfoViewMode, setHotelInfoViewMode] = useState<"team" | "property">("team");
+  const [hotelInfoViewMode, setHotelInfoViewMode] = useState<"team" | "property" | "inventory">("team");
+  const [selectedRoomNumber, setSelectedRoomNumber] = useState("Room 101");
+  const [showAddRepairModal, setShowAddRepairModal] = useState(false);
+  const [maintenanceLogs, setMaintenanceLogs] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem("cml_maintenance_logs");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      { id: "log-1", roomNumber: "Room 204", propertyId: "ramada", issue: "AC compressor replacement", technician: "Kalesh Prasad", date: "2026-06-15", cost: 450, status: "Resolved", notes: "Installed brand new Panasonic unit." },
+      { id: "log-2", roomNumber: "Room 204", propertyId: "ramada", issue: "Balcony door latch repair", technician: "Sereana V.", date: "2026-06-10", cost: 50, status: "Resolved", notes: "Re-aligned latch mechanism." },
+      { id: "log-3", roomNumber: "Room 215", propertyId: "wyndham", issue: "Shower mixer leakage", technician: "Kalesh Prasad", date: "2026-06-25", cost: 120, status: "In Progress", notes: "Waiting for replacement cartridges." },
+      { id: "log-4", roomNumber: "Room 102", propertyId: "ramada", issue: "Smart TV connectivity setup", technician: "John Singh", date: "2026-06-18", cost: 0, status: "Resolved", notes: "Updated firmware and configured VLAN authentication." }
+    ];
+  });
+
+  useEffect(() => {
+    if (selectedCompany === "ramada") {
+      setSelectedRoomNumber("Room 101");
+    } else {
+      setSelectedRoomNumber("Room 110");
+    }
+  }, [selectedCompany]);
+
   const [revenueDivisionFilter, setRevenueDivisionFilter] = useState<"All" | "Western" | "Central">("All");
   const [portfolioSortKey, setPortfolioSortKey] = useState<"name" | "occupancy" | "revpar" | null>(null);
   const [portfolioSortOrder, setPortfolioSortOrder] = useState<"asc" | "desc">("desc");
@@ -7202,6 +7225,18 @@ export default function App() {
                     <Globe size={14} className={hotelInfoViewMode === "property" ? "text-gold" : "text-slate-400"} />
                     Property Profile & Wi-Fi Details
                   </button>
+                  <button
+                    onClick={() => setHotelInfoViewMode("inventory")}
+                    className={cn(
+                      "px-6 py-4 text-xs font-display uppercase tracking-widest font-extrabold border-b-2 transition-all shrink-0 flex items-center gap-2.5",
+                      hotelInfoViewMode === "inventory" 
+                        ? "border-gold text-slate-950 font-black" 
+                        : "border-transparent text-slate-400 hover:text-slate-600 font-medium"
+                    )}
+                  >
+                    <Wrench size={14} className={hotelInfoViewMode === "inventory" ? "text-gold" : "text-slate-400"} />
+                    Room Inventory & Maintenance History
+                  </button>
                 </div>
 
                 {hotelInfoViewMode === "team" ? (
@@ -7388,7 +7423,7 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-                ) : (
+                ) : hotelInfoViewMode === "property" ? (
                   /* Current physical profiles structures */
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     {/* Column 1: Property Profile & Wi-Fi */}
@@ -7524,6 +7559,272 @@ export default function App() {
                         Weekly Compliance Checklist Audited
                       </div>
                     </div>
+                  </div>
+                ) : (
+                  /* Room Inventory & Maintenance module */
+                  <div className="space-y-8 animate-fade-in text-left">
+                    <div>
+                      <span className="text-[10px] font-display uppercase tracking-widest text-gold font-extrabold block mb-1">Room Status Logs</span>
+                      <h3 className="text-2xl font-serif text-slate-950 italic">Room Inventory & Maintenance History</h3>
+                      <p className="text-xs text-slate-500 italic mt-1">Real-time status tracking and logged repairs for each guest unit across CML properties.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                      {/* Left: Rooms list */}
+                      <div className="lg:col-span-1 space-y-4">
+                        <div className="bg-white border border-slate-100 p-5 shadow-xs">
+                          <h4 className="text-xs font-display uppercase tracking-wider text-slate-800 font-extrabold mb-3">Unit Directory</h4>
+                          
+                          {/* List of rooms for the active property */}
+                          <div className="space-y-3">
+                            {(selectedCompany === "ramada" ? [
+                              { roomNumber: "Room 101", type: "Luxury 1-Bed Suite", status: "Occupied", condition: "Excellent", lastCheckDate: "2026-06-28" },
+                              { roomNumber: "Room 102", type: "Luxury 2-Bed Suite", status: "Vacant Clean", condition: "Excellent", lastCheckDate: "2026-06-30" },
+                              { roomNumber: "Room 204", type: "Luxury 3-Bed Suite", status: "Dirty", condition: "Needs Repair", lastCheckDate: "2026-06-15" },
+                              { roomNumber: "Room 305", type: "Oceanfront Penthouse", status: "Occupied", condition: "Excellent", lastCheckDate: "2026-07-01" },
+                            ] : [
+                              { roomNumber: "Room 110", type: "Garden Standard King", status: "Occupied", condition: "Excellent", lastCheckDate: "2026-06-25" },
+                              { roomNumber: "Room 112", type: "Garden Deluxe Queen", status: "Vacant Clean", condition: "Excellent", lastCheckDate: "2026-06-29" },
+                              { roomNumber: "Room 215", type: "Premium King Suite", status: "Out of Service", condition: "Needs Repair", lastCheckDate: "2026-06-20" },
+                              { roomNumber: "Room 320", type: "Ocean View Studio", status: "Occupied", condition: "Excellent", lastCheckDate: "2026-07-01" },
+                            ]).map((room) => {
+                              const isSelected = selectedRoomNumber === room.roomNumber;
+                              return (
+                                <button
+                                  key={room.roomNumber}
+                                  onClick={() => setSelectedRoomNumber(room.roomNumber)}
+                                  className={cn(
+                                    "w-full text-left p-3.5 border transition-all flex flex-col gap-1 hover:border-gold rounded-none cursor-pointer",
+                                    isSelected 
+                                      ? "bg-gold/5 border-gold shadow-xs" 
+                                      : "bg-white border-slate-100"
+                                  )}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[13px] font-sans font-bold text-slate-900">{room.roomNumber}</span>
+                                    <span className={cn(
+                                      "text-[8px] font-display uppercase tracking-wider px-2 py-0.5 font-bold",
+                                      room.status === "Occupied" ? "bg-blue-50 text-blue-700" :
+                                      room.status === "Vacant Clean" ? "bg-emerald-50 text-emerald-700" :
+                                      room.status === "Dirty" ? "bg-amber-50 text-amber-700" :
+                                      "bg-rose-50 text-rose-700"
+                                    )}>
+                                      {room.status}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-[11px] text-slate-500 font-serif italic">
+                                    <span>{room.type}</span>
+                                    <span className={cn(
+                                      "font-semibold",
+                                      room.condition === "Excellent" ? "text-emerald-600" :
+                                      room.condition === "Fair" ? "text-amber-500" : "text-rose-500"
+                                    )}>
+                                      {room.condition}
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Maintenance History Details & Add form */}
+                      <div className="lg:col-span-2 space-y-6">
+                        <div className="bg-white border border-slate-100 p-6 shadow-xs space-y-6">
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-4 flex-wrap gap-2">
+                            <div>
+                              <h4 className="text-sm font-display uppercase tracking-wider text-slate-900 font-extrabold">
+                                Maintenance History: <span className="text-gold font-sans font-bold ml-1">{selectedRoomNumber}</span>
+                              </h4>
+                              <p className="text-[11px] text-slate-400 font-serif italic">Viewing resolved and scheduled past repairs for this room.</p>
+                            </div>
+                            <button
+                              onClick={() => setShowAddRepairModal(true)}
+                              className="bg-slate-950 hover:bg-gold hover:text-slate-950 text-white text-[9px] font-display uppercase tracking-widest font-black px-4 py-2 rounded-none transition-all flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Wrench size={10} />
+                              LOG NEW REPAIR
+                            </button>
+                          </div>
+
+                          {/* Repairs history timeline */}
+                          <div className="space-y-4 text-left">
+                            {maintenanceLogs
+                              .filter((log) => log.roomNumber === selectedRoomNumber && log.propertyId === selectedCompany)
+                              .length === 0 ? (
+                                <div className="text-center py-12 bg-slate-50/50 border border-dashed border-slate-200">
+                                  <Wrench className="text-slate-300 mx-auto mb-3" size={24} />
+                                  <p className="text-xs font-serif text-slate-500 italic">No maintenance history recorded for this room.</p>
+                                </div>
+                              ) : (
+                                <div className="relative border-l-2 border-slate-100 pl-6 ml-3 space-y-6">
+                                  {maintenanceLogs
+                                    .filter((log) => log.roomNumber === selectedRoomNumber && log.propertyId === selectedCompany)
+                                    .map((log) => (
+                                      <div key={log.id} className="relative">
+                                        {/* Timeline point */}
+                                        <span className="absolute -left-[31px] top-1.5 bg-white border-2 border-gold rounded-full w-4 h-4 flex items-center justify-center z-10">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-gold" />
+                                        </span>
+
+                                        <div className="bg-slate-50/75 p-4 border border-slate-100 space-y-2 text-left">
+                                          <div className="flex items-start justify-between flex-wrap gap-2">
+                                            <div>
+                                              <p className="text-xs font-display uppercase tracking-wide text-slate-900 font-extrabold">{log.issue}</p>
+                                              <p className="text-[10px] text-slate-400 font-mono mt-0.5">Logged: {log.date} • Technician: {log.technician}</p>
+                                            </div>
+                                            <div className="flex flex-col items-end gap-1">
+                                              <span className={cn(
+                                                "text-[8px] font-display uppercase tracking-wider px-2 py-0.5 font-bold",
+                                                log.status === "Resolved" ? "bg-emerald-50 text-emerald-700" :
+                                                log.status === "In Progress" ? "bg-blue-50 text-blue-700" :
+                                                "bg-amber-50 text-amber-700"
+                                              )}>
+                                                {log.status}
+                                              </span>
+                                              {log.cost > 0 && (
+                                                <span className="text-[10px] text-slate-600 font-mono font-bold">${log.cost.toFixed(2)}</span>
+                                              )}
+                                            </div>
+                                          </div>
+                                          {log.notes && (
+                                            <p className="text-[11px] text-slate-600 font-serif italic leading-relaxed border-t border-slate-200/40 pt-1.5 mt-1">
+                                              "{log.notes}"
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                </div>
+                              )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Simple Embedded Form Modal for Logging repairs */}
+                    {showAddRepairModal && (
+                      <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
+                        <div className="bg-white border border-slate-100 shadow-xl w-full max-w-md p-6 space-y-4 relative text-left">
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <h3 className="text-xs font-display uppercase tracking-widest text-slate-950 font-extrabold flex items-center gap-1.5">
+                              <Wrench size={13} className="text-gold" />
+                              Log Past/New Repair for {selectedRoomNumber}
+                            </h3>
+                            <button 
+                              onClick={() => setShowAddRepairModal(false)}
+                              className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer p-1"
+                            >
+                              ✕
+                            </button>
+                          </div>
+
+                          <form onSubmit={(e) => {
+                            e.preventDefault();
+                            const formData = new FormData(e.currentTarget);
+                            const issue = formData.get("issue") as string;
+                            const technician = formData.get("technician") as string;
+                            const costStr = formData.get("cost") as string;
+                            const status = formData.get("status") as any;
+                            const notes = formData.get("notes") as string;
+
+                            if (!issue || !technician) {
+                              toastService.error("Please fill in issue and technician names.");
+                              return;
+                            }
+
+                            const newLog = {
+                              id: `repair-${Date.now()}`,
+                              roomNumber: selectedRoomNumber,
+                              propertyId: selectedCompany,
+                              issue,
+                              technician,
+                              date: new Date().toISOString().split("T")[0],
+                              cost: parseFloat(costStr) || 0,
+                              status,
+                              notes
+                            };
+
+                            const updated = [...maintenanceLogs, newLog];
+                            setMaintenanceLogs(updated);
+                            localStorage.setItem("cml_maintenance_logs", JSON.stringify(updated));
+                            setShowAddRepairModal(false);
+                            toastService.success(`Repair log for ${selectedRoomNumber} successfully recorded!`);
+                          }} className="space-y-3 text-xs text-left">
+                            <div className="space-y-1">
+                              <label className="text-[8px] uppercase tracking-wider text-slate-500 font-bold">Repair Issue / Job Description</label>
+                              <input 
+                                type="text" 
+                                name="issue"
+                                required
+                                placeholder="e.g. Shower hose leak replacement"
+                                className="w-full border border-slate-200 p-2 text-slate-800 focus:border-gold outline-none rounded-none"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-1">
+                                <label className="text-[8px] uppercase tracking-wider text-slate-500 font-bold">Technician Name</label>
+                                <input 
+                                  type="text" 
+                                  name="technician"
+                                  required
+                                  placeholder="e.g. Kalesh Prasad"
+                                  className="w-full border border-slate-200 p-2 text-slate-800 focus:border-gold outline-none rounded-none"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[8px] uppercase tracking-wider text-slate-500 font-bold">Estimated Cost ($)</label>
+                                <input 
+                                  type="number" 
+                                  name="cost"
+                                  defaultValue="0"
+                                  className="w-full border border-slate-200 p-2 text-slate-800 focus:border-gold outline-none rounded-none"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[8px] uppercase tracking-wider text-slate-500 font-bold">Repair Status</label>
+                              <select 
+                                name="status"
+                                className="w-full border border-slate-200 p-2 text-slate-800 focus:border-gold outline-none bg-white rounded-none"
+                              >
+                                <option value="Resolved">Resolved</option>
+                                <option value="In Progress">In Progress</option>
+                                <option value="Scheduled">Scheduled</option>
+                              </select>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[8px] uppercase tracking-wider text-slate-500 font-bold">Technician Repair Notes / Details</label>
+                              <textarea 
+                                name="notes"
+                                placeholder="Details about repair, replacement parts or actions taken..."
+                                className="w-full border border-slate-200 p-2 text-slate-800 focus:border-gold outline-none h-20 resize-none rounded-none"
+                              />
+                            </div>
+
+                            <div className="pt-2 flex items-center justify-end gap-2">
+                              <button 
+                                type="button" 
+                                onClick={() => setShowAddRepairModal(false)}
+                                className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-none cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button 
+                                type="submit" 
+                                className="px-4 py-2 bg-slate-950 text-white hover:bg-gold hover:text-slate-950 font-bold rounded-none cursor-pointer"
+                              >
+                                Save Repair Log
+                              </button>
+                            </div>
+                          </form>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
