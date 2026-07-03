@@ -1624,6 +1624,7 @@ export default function App() {
   }, [selectedCompany]);
 
   useEffect(() => {
+    if (!currentUser) return;
     const unsub = onSnapshot(doc(db, "workflow-configs", "global"), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
@@ -1635,7 +1636,7 @@ export default function App() {
       console.error("Failed to load workflow-configs in App.tsx:", error);
     });
     return () => unsub();
-  }, []);
+  }, [currentUser]);
   const [isResolving, setIsResolving] = useState(false);
   const [resolveForm, setResolveForm] = useState({
     resolvedBy: auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || "",
@@ -9373,9 +9374,6 @@ export default function App() {
               <LostAndFound 
                 userRole={userRole || undefined} 
                 companyId={selectedCompany || 'cml'} 
-                onPropertyChange={(propertyId) => {
-                  setSelectedCompany(propertyId);
-                }}
               />
             ) : activeTab === "staff-mailer" ? (
               <StaffMailer companyId={selectedCompany || 'cml'} />

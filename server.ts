@@ -32,11 +32,31 @@ async function sendToUserGoogleChat(messageText: string) {
 }
 
 function isDirectCollectionKey(key: string): boolean {
+  const [collectionName] = key.split('/');
+  if (!collectionName) return false;
   return (
-    key.startsWith("newsletter-subscribers-") ||
-    key.startsWith("lost-and-found-") ||
-    key.startsWith("restaurant-guests-") ||
-    key.startsWith("complaints-")
+    collectionName.startsWith("newsletter-subscribers-") ||
+    collectionName.startsWith("lost-and-found-") ||
+    collectionName.startsWith("restaurant-guests-") ||
+    collectionName.startsWith("complaints-") ||
+    collectionName.startsWith("hrms-") ||
+    collectionName.startsWith("cml-signin-") ||
+    collectionName.startsWith("cml-geofence-") ||
+    collectionName.startsWith("huddle-tasks-") ||
+    collectionName.startsWith("mailer-contacts-") ||
+    collectionName.startsWith("mailer-logs-") ||
+    collectionName.startsWith("flipbooks-") ||
+    collectionName.startsWith("rewards-config-") ||
+    collectionName.startsWith("forms-") ||
+    collectionName.startsWith("cml-forms-submissions-") ||
+    collectionName.startsWith("google-chat-messages-") ||
+    collectionName.startsWith("business-cards-") ||
+    collectionName === "daily-news" ||
+    collectionName === "ramada_form_submissions" ||
+    collectionName === "managed_cases" ||
+    collectionName === "google_forms_links" ||
+    collectionName === "it_tickets" ||
+    collectionName === "lost-and-found"
   );
 }
 
@@ -1789,6 +1809,11 @@ async function startServer() {
     }, 2500); // 2.5 second aggregation window to keep Cloud writes low
   };
 
+  const cleanDefaultEntries = (store: Record<string, any>) => {
+    // Disabled per user instruction to never delete any records
+    return false;
+  };
+
   // Load initial state from disk fallback AND try to hydrate from Firestore cloud to deal with Cloud Run multiple stateless containers!
   const hydrateStore = async () => {
     // 1. First feed from disk file (fast local fallback in development mode only)
@@ -1797,6 +1822,7 @@ async function startServer() {
       if (!isProduction && fs.existsSync(mockDbFilePath)) {
         const savedData = fs.readFileSync(mockDbFilePath, "utf8");
         serverMockDbStore = JSON.parse(savedData);
+        cleanDefaultEntries(serverMockDbStore);
         console.log(`[MOCK_DB] Pre-hydrated ${Object.keys(serverMockDbStore).length} keys from container disk.`);
       } else if (isProduction) {
         console.log("[MOCK_DB] Production environment detected. Bypassing container disk cache to prevent stale state overwriting the live cloud database.");
@@ -1808,7 +1834,7 @@ async function startServer() {
     // Helper to fetch direct collections from Firestore to recover any missing items
     const importDirectCollectionsFromFirestore = async () => {
       if (!firestoreRestSync) return;
-      const companies = ["cml", "ramada", "wyndham", "radisson"];
+      const companies = ["cml", "ramada", "wyndham"];
       const databaseId = firestoreRestSync.getDatabaseId();
       
       console.log("[MOCK_DB] Actively scanning live Firestore collections to restore any missing subscribers/guests/complaints...");
@@ -1889,6 +1915,9 @@ async function startServer() {
               for (const docObj of data.documents) {
                 const decoded = decodeFirestoreFields(docObj.fields);
                 const id = decoded.id || docObj.name.split("/").pop();
+                if (id === "comp_1" || id === "comp_2") {
+                  continue; // Skip seeded complaints
+                }
                 decoded.id = id;
                 const dbKey = `complaints-${activeCompanyId}/${id}`;
                 
@@ -1920,6 +1949,9 @@ async function startServer() {
               for (const docObj of data.documents) {
                 const decoded = decodeFirestoreFields(docObj.fields);
                 const id = decoded.id || docObj.name.split("/").pop();
+                if (id === "item_1" || id === "item_2") {
+                  continue; // Skip seeded items
+                }
                 decoded.id = id;
                 const dbKey = `lost-and-found-${activeCompanyId}/${id}`;
                 
@@ -1962,8 +1994,12 @@ async function startServer() {
 
           if (Object.keys(cloudState).length > 0) {
             serverMockDbStore = { ...serverMockDbStore, ...cloudState };
+            const wasCleaned = cleanDefaultEntries(serverMockDbStore);
             console.log(`[MOCK_DB] Fully synchronized and merged ${Object.keys(cloudState).length} records from central cloud Firestore database.`);
             saveMockDbToDisk();
+            if (wasCleaned) {
+              saveMasterCloudDebounced();
+            }
           } else {
             console.log("[MOCK_DB] Live central database is new or empty. Keeping local pre-hydrate parameters.");
           }
@@ -2101,7 +2137,6 @@ async function startServer() {
         if (cloudState !== null) {
           isCloudHydrated = true;
           let changedKeys: Record<string, any> = {};
-          let deletedKeys: string[] = [];
 
           // Find differences
           for (const [k, newVal] of Object.entries(cloudState)) {
@@ -2111,12 +2146,8 @@ async function startServer() {
             }
           }
 
-          // Check for deleted keys: only if they WERE previously synced in the cloud but are now gone
-          for (const k of Object.keys(serverMockDbStore)) {
-            if (!(k in cloudState) && previouslySyncedKeys.has(k)) {
-              deletedKeys.push(k);
-            }
-          }
+          // No sync-driven deletions per user instruction to ensure we never delete any records
+          const deletedKeys: string[] = [];
 
           // Update previouslySyncedKeys to match the new cloudState
           previouslySyncedKeys.clear();
@@ -2127,9 +2158,6 @@ async function startServer() {
           // Apply changes incrementally without destroying local-only or unsynced data!
           for (const [k, val] of Object.entries(changedKeys)) {
             serverMockDbStore[k] = val;
-          }
-          for (const k of deletedKeys) {
-            delete serverMockDbStore[k];
           }
 
           saveMockDbToDisk();

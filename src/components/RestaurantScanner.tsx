@@ -266,90 +266,16 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
         });
       });
 
-      if (list.length === 0) {
-        console.log("[RestaurantScanner] No guest profiles in Firestore. Seeding initial samples...");
-        const sampleProfiles = [
-          {
-            id: "CML-RE-001",
-            fullName: "Charles (VIP Member)",
-            email: "charles.viti@cml.com.fj",
-            phone: "+679 883 2910",
-            visitCount: 14,
-            rewardPoints: 6850,
-          },
-          {
-            id: "CML-RE-002",
-            fullName: "Savenaca Radrodro",
-            email: "savenaca.r@ramada.com",
-            phone: "+679 992 1044",
-            visitCount: 5,
-            rewardPoints: 2400,
-          },
-          {
-            id: "CML-RE-003",
-            fullName: "Mereoni Nasilasila",
-            email: "mereoni.n@wyndhamfiji.com",
-            phone: "+679 775 3215",
-            visitCount: 9,
-            rewardPoints: 4800,
-          }
-        ];
-
-        for (const profile of sampleProfiles) {
-          const guestRef = doc(db, `restaurant-guests-${companyId}`, profile.id);
-          await setDoc(guestRef, {
-            fullName: profile.fullName,
-            email: profile.email,
-            phone: profile.phone,
-            visitCount: profile.visitCount,
-            rewardPoints: profile.rewardPoints,
-            createdAt: new Date(),
-            lastVisited: new Date()
-          });
-
-          const colVisits = collection(db, `restaurant-guests-${companyId}`, profile.id, "visits");
-          await addDoc(colVisits, {
-            cardId: profile.id,
-            receiptNumber: "INV-2026-801",
-            billAmount: 125.50,
-            pointsAwarded: 1350,
-            type: "visit",
-            timestamp: new Date()
-          });
-        }
-
-        // Re-fetch after seeding
-        const secondSnapshot = await getDocs(colRef);
-        const secondList: GuestProfile[] = [];
-        secondSnapshot.forEach(docSnap => {
-          const data = docSnap.data();
-          secondList.push({
-            id: docSnap.id,
-            fullName: data.fullName || "",
-            email: data.email || "",
-            phone: data.phone || "",
-            visitCount: data.visitCount || 0,
-            rewardPoints: data.rewardPoints || 0,
-            lastVisited: data.lastVisited,
-            createdAt: data.createdAt
-          });
-        });
-        setGuests(secondList);
-        if (secondList.length > 0) {
-          setSelectedProfile(secondList[0]);
-        }
-      } else {
-        setGuests(list);
-        if (autoSelectId) {
-          const found = list.find(g => g.id === autoSelectId);
-          if (found) setSelectedProfile(found);
-        } else if (!selectedProfile && list.length > 0) {
-          setSelectedProfile(list[0]);
-        } else if (selectedProfile) {
-          // Keep current selection hydrated with latest points/visits
-          const updated = list.find(g => g.id === selectedProfile.id);
-          if (updated) setSelectedProfile(updated);
-        }
+      setGuests(list);
+      if (autoSelectId) {
+        const found = list.find(g => g.id === autoSelectId);
+        if (found) setSelectedProfile(found);
+      } else if (!selectedProfile && list.length > 0) {
+        setSelectedProfile(list[0]);
+      } else if (selectedProfile) {
+        // Keep current selection hydrated with latest points/visits
+        const updated = list.find(g => g.id === selectedProfile.id);
+        if (updated) setSelectedProfile(updated);
       }
     } catch (err) {
       console.error("Error loading guests:", err);
@@ -413,22 +339,17 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
         });
       });
 
-      if (list.length === 0) {
-        // If collection is empty, trigger fetchGuests once to run seeding logic
-        fetchGuests();
-      } else {
-        setGuests(list);
-        setLoading(false);
-        // Sync selected profile
-        setSelectedProfile(current => {
-          if (!current && list.length > 0) return list[0];
-          if (current) {
-            const updated = list.find(g => g.id === current.id);
-            return updated || current;
-          }
-          return null;
-        });
-      }
+      setGuests(list);
+      setLoading(false);
+      // Sync selected profile
+      setSelectedProfile(current => {
+        if (!current && list.length > 0) return list[0];
+        if (current) {
+          const updated = list.find(g => g.id === current.id);
+          return updated || current;
+        }
+        return null;
+      });
     }, (err) => {
       console.error("Error with guest snapshot subscription:", err);
       setLoading(false);

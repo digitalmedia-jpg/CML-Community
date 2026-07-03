@@ -410,6 +410,15 @@ export function AgreementsSigning() {
     customNotes: ""
   });
 
+  // Multi-step and Draft persistence states
+  const [isDraftRestored, setIsDraftRestored] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [formStep, setFormStep] = useState(1);
+
+  const restoredTemplateRef = useRef<string | null>(null);
+  const restoredTargetRef = useRef<string | null>(null);
+
   // Search/Filter state
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
@@ -440,8 +449,72 @@ export function AgreementsSigning() {
     localStorage.setItem("cml_agreements", JSON.stringify(agreements));
   }, [agreements]);
 
+  // Load draft on mount
+  useEffect(() => {
+    try {
+      const savedDraft = localStorage.getItem("cml_agreement_draft");
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed.builderForm) {
+          setBuilderForm(parsed.builderForm);
+        }
+        if (parsed.selectedTemplate) {
+          setSelectedTemplate(parsed.selectedTemplate);
+          restoredTemplateRef.current = parsed.selectedTemplate;
+        }
+        if (parsed.prefilledTarget) {
+          setPrefilledTarget(parsed.prefilledTarget);
+          restoredTargetRef.current = parsed.prefilledTarget;
+        }
+        if (parsed.formStep) {
+          setFormStep(parsed.formStep);
+        }
+        setLastSaved(parsed.lastSaved || null);
+        console.log("[AgreementBuilder] Restored auto-saved draft from localStorage.");
+      }
+    } catch (e) {
+      console.error("Error restoring draft:", e);
+    }
+    setIsDraftRestored(true);
+  }, []);
+
+  // Auto-save draft
+  useEffect(() => {
+    if (!isDraftRestored) return;
+
+    setIsSaving(true);
+    const saveTimer = setTimeout(() => {
+      try {
+        const draftData = {
+          builderForm,
+          selectedTemplate,
+          prefilledTarget,
+          formStep,
+          lastSaved: new Date().toLocaleTimeString()
+        };
+        localStorage.setItem("cml_agreement_draft", JSON.stringify(draftData));
+        setLastSaved(draftData.lastSaved);
+      } catch (e) {
+        console.error("Error auto-saving draft:", e);
+      } finally {
+        setIsSaving(false);
+      }
+    }, 800); // Debounce saves by 800ms
+
+    return () => clearTimeout(saveTimer);
+  }, [builderForm, selectedTemplate, prefilledTarget, formStep, isDraftRestored]);
+
   // Handle template selection pre-fills
   useEffect(() => {
+    if (!isDraftRestored) return;
+
+    // Skip pre-fill if it matches the draft restored on mount
+    if (restoredTemplateRef.current === selectedTemplate && restoredTargetRef.current === prefilledTarget) {
+      restoredTemplateRef.current = null;
+      restoredTargetRef.current = null;
+      return;
+    }
+
     if (prefilledTarget === "ramada") {
       setBuilderForm({
         title: `${selectedTemplate} – Ramada Plaza & Suites Nadi`,
@@ -457,7 +530,7 @@ export function AgreementsSigning() {
         techFee: "US$15,000 payable upon contract execution",
         initialTerm: "10 Years from Opening Date",
         renewalTerm: "One (1) further term of Ten (10) Operating Years",
-        facilitiesText: "Fully fitted 88 Apartments with 210 key hotel room as per brand requirements\nFully fitted Kitchen, Restaurant & Bar and Dining area to meet brand standard\nFully fitted branded Front Office Reception as per brand standards\nDesigned lobby and Guest Luggage Room\nCar parking space\nMaintenance Room\nFully functional Administration Office including Manager’s offices\nGuest waiting Lounge Area\nSwimming Pool and fully equipped pump room\nGround Floor Dining area\nOutdoor guest Male and Female shower and toilets at the deck area\nRecommended Brand quality silent power generator with Automatic changeover control system\nWater pressuring pump system both installed on ground floor and rooftop water tank system\nFully equipped System Server Room including Servers with software to cater for IPTV Sky Channel & in room movie system, room and property Phones, Hotel PMS, CCTV control, Data Protection Firewall, Vingcard room door lock key control system\nStaff Room and Staff area, toilet and shower\nBranded and fully functional lift with emergency rescue device installed\nFully functional fire protection system, heat & smoke detectors, extinguishers and fire hose requirements as per local authorities\nLinen rooms with storage space at all levels\nFully functional pressured Instant Hot water supply system for the entire building\nStandard Wall paintings and coverings\nFully equipped and functional water storage tanks for fresh water supply to the entire building\nFully functional high floor Bar, Restaurant, Kitchen and Dining\nFully functional Conference room to handle around 350 people\nConference break-out meeting rooms at least 2 to handle 30pax in room\nEntire property network and Wifi setup including all hardware\nVingcard door lock system for guest rooms and office doors\nConcierge/Porter desk\nMeet & Greet guest lobby for guest pickup and drop off\nProper Rubbish bin storage area with bins\nDisable Toilet and shower room\nFully Functional Spa and Fitness Center\nMaids Stations on each level\nAmenity storage Room\nKitchen Dry Storage Room\nKitchen Freezer Room and Cooler Room\nBeer Cooler Room\nMaintenance Storage Rooms\nMaintenance working area\nProperty Guest Transporting Vehicle\nGym\nSpa\nShop",
+        facilitiesText: "Fully fitted 88 Apartments with 210 key hotel room as per brand requirements\nFully fitted Kitchen, Restaurant & Bar and Dining area to meet brand standard\nFully fitted branded Front Office Reception as per brand standards\nDesigned lobby and Guest Luggage Room\nCar parking space\nMaintenance Room\nFully functional Administration Office including Manager’s offices\nGuest waiting Lounge Area\nSwimming Pool and fully equipped pump room\nGround Floor Dining area\nOutdoor guest Male and Female shower and toilets at the deck area\nRecommended Brand quality silent power generator with Automatic changeover control system\nWater pressuring pump system both installed on ground floor and rooftop water tank system\nFully equipped System Server Room including Servers with software to cater for IPTV Sky Channel & in room movie system, room and property Phones, Hotel PMS, CCTV control, Data Protection Firewall, Vingcard room door lock key control system\nStaff Room and Staff area, toilet and shower\nBranded and fully functional lift with emergency rescue device installed\nFully functional fire protection system, heat & smoke detectors, extinguishers and fire hose requirements as per local authorities\nLinen rooms with storage space at all levels\nFully functional pressured Instant Hot water supply system for the entire building\nStandard Wall paintings and coverings\nFully equipped and functional water storage tanks for fresh water supply to the entire building\nFully functional high floor Bar, Restaurant, Kitchen and Dining\nFully functional Conference room to handle around 350 people\nConference break-out meeting rooms at least 2 to handle 30pax in room\nEntire property network and Wifi setup electronic key, smart door lock\nGym\nSpa\nShop",
         customNotes: "Proposed in accordance with Cove Management hospitality standards."
       });
     } else if (prefilledTarget === "wyndham") {
@@ -497,7 +570,7 @@ export function AgreementsSigning() {
         customNotes: ""
       });
     }
-  }, [selectedTemplate, prefilledTarget]);
+  }, [selectedTemplate, prefilledTarget, isDraftRestored]);
 
   // Show standard notification toast
   const triggerNotification = (message: string, type: "success" | "error" | "info" = "success") => {
@@ -830,6 +903,27 @@ This is a verified secure copy of the contract annexure "${docItem.name}".
     setAgreements([newAg, ...agreements]);
     setActiveSubView("storage");
     triggerNotification(`Successfully drafted "${builderForm.title}".`, "success");
+
+    // Clean up draft storage
+    localStorage.removeItem("cml_agreement_draft");
+    setFormStep(1);
+    setBuilderForm({
+      title: "",
+      ownerName: "Charles",
+      ownerCompany: "Koro Fiji-Nadi Bay Sands Investment Limited",
+      ownerDetails: "Koro Fiji-Nadi Bay Sands Investment Limited\nLot 2 Northern Press Rd, Martintar, Nadi Fiji",
+      ownerEmail: "digitalmedia@cml.com.fj",
+      ownerPhone: "+679 672 8885",
+      hotelName: "Ramada Plaza by Wyndham & Suites",
+      hotelAddress: "Lot 2 Northern Press Rd, Martintar, Nadi Fiji",
+      inventory: "88 Apartments & 210 hotel rooms (Total 298 Keys)",
+      managementFee: "20% of Gross Operating Profit (GOP)",
+      techFee: "US$15,000 payable upon contract execution",
+      initialTerm: "10 Years from Opening Date",
+      renewalTerm: "One (1) further term of Ten (10) Operating Years",
+      facilitiesText: "Fully fitted 88 Apartments with 210 key hotel room as per brand requirements\nFully fitted Kitchen, Restaurant & Bar and Dining area to meet brand standard\nFully fitted branded Front Office Reception as per brand standards\nDesigned lobby and Guest Luggage Room\nCar parking space\nMaintenance Room\nFully functional Administration Office including Manager’s offices\nGuest waiting Lounge Area\nSwimming Pool and fully equipped pump room\nGround Floor Dining area\nOutdoor guest Male and Female shower and toilets at the deck area\nRecommended Brand quality silent power generator with Automatic changeover control system\nWater pressuring pump system both installed on ground floor and rooftop water tank system\nFully equipped System Server Room including Servers with software to cater for IPTV Sky Channel & in room movie system, room and property Phones, Hotel PMS, CCTV control, Data Protection Firewall, Vingcard room door lock key control system\nStaff Room and Staff area, toilet and shower\nBranded and fully functional lift with emergency rescue device installed\nFully functional fire protection system, heat & smoke detectors, extinguishers and fire hose requirements as per local authorities\nLinen rooms with storage space at all levels\nFully functional pressured Instant Hot water supply system for the entire building\nStandard Wall paintings and coverings\nFully equipped and functional water storage tanks for fresh water supply to the entire building\nFully functional high floor Bar, Restaurant, Kitchen and Dining\nFully functional Conference room to handle around 350 people\nConference break-out meeting rooms at least 2 to handle 30pax in room\nEntire property network and Wifi setup electronic key, smart door lock\nGym\nSpa\nShop",
+      customNotes: ""
+    });
   };
 
   const handleSendAgreement = (id: string) => {
@@ -1197,8 +1291,33 @@ This is a verified secure copy of the contract annexure "${docItem.name}".
             </button>
           </div>
 
-          <div className="text-xs font-serif italic text-slate-500">
-            <span className="text-amber-850 bg-amber-50 px-2 py-1 rounded border border-amber-100">Cove Management Admin Desk</span>
+          <div className="flex items-center gap-3">
+            <div className="flex border border-slate-200 p-0.5 bg-slate-100 rounded">
+              <button
+                onClick={() => setRole("admin")}
+                className={cn(
+                  "px-3 py-1.5 text-[10px] font-display uppercase tracking-wider font-bold transition-all",
+                  role === "admin" ? "bg-[#0B1C33] text-white rounded-sm shadow-sm" : "text-slate-500 hover:text-[#0B1C33]"
+                )}
+              >
+                CML Admin Portal
+              </button>
+              <button
+                onClick={() => setRole("owner")}
+                className={cn(
+                  "px-3 py-1.5 text-[10px] font-display uppercase tracking-wider font-bold transition-all",
+                  role === "owner" ? "bg-[#C5A02D] text-[#0B1C33] font-black rounded-sm shadow-sm" : "text-slate-500 hover:text-[#0B1C33]"
+                )}
+              >
+                Owner Portal
+              </button>
+            </div>
+            <span className={cn(
+              "text-[10px] font-mono px-2.5 py-1 rounded border uppercase font-bold tracking-wider",
+              role === "admin" ? "bg-slate-50 border-slate-200 text-slate-600" : "bg-[#FAF7F2] border-[#C5A02D]/40 text-[#0B1C33]"
+            )}>
+              {role === "admin" ? "Admin Mode" : "Owner Mode"}
+            </span>
           </div>
         </div>
 
@@ -1469,251 +1588,422 @@ This is a verified secure copy of the contract annexure "${docItem.name}".
 
         {/* ==================== 2. AGREEMENT BUILDER (CML ADMIN ONLY) ==================== */}
         {activeSubView === "builder" && role === "admin" && (
-          <div className="bg-white border border-slate-200 shadow-lg p-8 max-w-4xl mx-auto">
-            <div className="text-center mb-8 pb-6 border-b border-slate-100">
-              <span className="text-xs font-display uppercase tracking-widest text-[#C5A02D] font-bold">New Agreement Builder</span>
-              <h2 className="text-3xl font-serif italic text-[#0B1C33] mt-1">Professional Contract Prefiller</h2>
-              <p className="text-xs text-slate-400 mt-2">
-                Configure, pre-fill from property assets, and draft legal covenants for hotel owner review.
-              </p>
+          <div className="bg-white border border-slate-200 shadow-xl p-8 max-w-4xl mx-auto relative overflow-hidden">
+            {/* Top corner Gold accent line */}
+            <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-[#0B1C33] via-[#C5A02D] to-[#0B1C33]" />
+
+            {/* Header with Auto-Save Status */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 pb-6 border-b border-slate-100">
+              <div>
+                <span className="text-xs font-display uppercase tracking-widest text-[#C5A02D] font-black">New Agreement Builder</span>
+                <h2 className="text-3xl font-serif italic text-[#0B1C33] mt-1">Professional Contract Prefiller</h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Configure, pre-fill from property assets, and draft legal covenants for hotel owner review.
+                </p>
+              </div>
+
+              {/* Auto-Save Indicator */}
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-[#FAF7F2] border border-slate-200">
+                  <span className={cn(
+                    "h-2 w-2 rounded-full",
+                    isSaving ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
+                  )} />
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#0B1C33]">
+                    {isSaving ? "Saving Draft..." : lastSaved ? `Draft Saved (${lastSaved})` : "Draft Saved"}
+                  </span>
+                </div>
+                {lastSaved && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm("Are you sure you want to clear your draft and start over?")) {
+                        localStorage.removeItem("cml_agreement_draft");
+                        setFormStep(1);
+                        setBuilderForm({
+                          title: "",
+                          ownerName: "Charles",
+                          ownerCompany: "Koro Fiji-Nadi Bay Sands Investment Limited",
+                          ownerDetails: "Koro Fiji-Nadi Bay Sands Investment Limited\nLot 2 Northern Press Rd, Martintar, Nadi Fiji",
+                          ownerEmail: "digitalmedia@cml.com.fj",
+                          ownerPhone: "+679 672 8885",
+                          hotelName: "Ramada Plaza by Wyndham & Suites",
+                          hotelAddress: "Lot 2 Northern Press Rd, Martintar, Nadi Fiji",
+                          inventory: "88 Apartments & 210 hotel rooms (Total 298 Keys)",
+                          managementFee: "20% of Gross Operating Profit (GOP)",
+                          techFee: "US$15,000 payable upon contract execution",
+                          initialTerm: "10 Years from Opening Date",
+                          renewalTerm: "One (1) further term of Ten (10) Operating Years",
+                          facilitiesText: "Fully fitted 88 Apartments with 210 key hotel room as per brand requirements\nFully fitted Kitchen, Restaurant & Bar and Dining area to meet brand standard\nFully fitted branded Front Office Reception as per brand standards\nDesigned lobby and Guest Luggage Room\nCar parking space\nMaintenance Room\nFully functional Administration Office including Manager’s offices\nGuest waiting Lounge Area\nSwimming Pool and fully equipped pump room\nGround Floor Dining area\nOutdoor guest Male and Female shower and toilets at the deck area\nRecommended Brand quality silent power generator with Automatic changeover control system\nWater pressuring pump system both installed on ground floor and rooftop water tank system\nFully equipped System Server Room including Servers with software to cater for IPTV Sky Channel & in room movie system, room and property Phones, Hotel PMS, CCTV control, Data Protection Firewall, Vingcard room door lock key control system\nStaff Room and Staff area, toilet and shower\nBranded and fully functional lift with emergency rescue device installed\nFully functional fire protection system, heat & smoke detectors, extinguishers and fire hose requirements as per local authorities\nLinen rooms with storage space at all levels\nFully functional pressured Instant Hot water supply system for the entire building\nStandard Wall paintings and coverings\nFully equipped and functional water storage tanks for fresh water supply to the entire building\nFully functional high floor Bar, Restaurant, Kitchen and Dining\nFully functional Conference room to handle around 350 people\nConference break-out meeting rooms at least 2 to handle 30pax in room\nEntire property network and Wifi setup electronic key, smart door lock\nGym\nSpa\nShop",
+                          customNotes: ""
+                        });
+                        triggerNotification("Draft has been reset.", "info");
+                      }
+                    }}
+                    className="text-[9px] font-mono text-rose-600 hover:underline hover:text-rose-700"
+                  >
+                    Reset and Clear Draft
+                  </button>
+                )}
+              </div>
             </div>
 
+            {/* VISUAL PROGRESS TRACKER */}
+            <div className="mb-8">
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { step: 1, name: "Template & Preset", desc: "Select document type" },
+                  { step: 2, name: "Signatory Party", desc: "Owner & contact details" },
+                  { step: 3, name: "Asset Description", desc: "Hotel name & inventory" },
+                  { step: 4, name: "Commercials", desc: "Management fees & covenants" }
+                ].map((s) => {
+                  const isActive = formStep === s.step;
+                  const isCompleted = formStep > s.step;
+                  return (
+                    <button
+                      key={s.step}
+                      type="button"
+                      onClick={() => {
+                        // Allow skipping backwards freely, but forward only if we have filled the basic title
+                        if (s.step < formStep || builderForm.title) {
+                          setFormStep(s.step);
+                        }
+                      }}
+                      className={cn(
+                        "text-left p-3 border transition-all relative flex flex-col justify-between h-20 rounded-none",
+                        isActive ? "border-[#C5A02D] bg-[#FAF7F2] shadow-sm" :
+                        isCompleted ? "border-[#0B1C33]/30 bg-white" :
+                        "border-slate-100 bg-slate-50/50 opacity-60 cursor-not-allowed"
+                      )}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className={cn(
+                          "text-[10px] font-mono font-black",
+                          isActive ? "text-[#C5A02D]" : "text-slate-400"
+                        )}>
+                          0{s.step}
+                        </span>
+                        {isCompleted && <span className="text-emerald-600 text-xs font-bold">✓</span>}
+                      </div>
+                      <div className="mt-auto">
+                        <p className={cn(
+                          "text-[10px] font-display uppercase tracking-wider font-bold truncate block w-full",
+                          isActive ? "text-[#0B1C33]" : "text-slate-500"
+                        )}>
+                          {s.name}
+                        </p>
+                        <p className="text-[9px] text-slate-400 font-serif italic truncate hidden md:block">
+                          {s.desc}
+                        </p>
+                      </div>
+                      {isActive && (
+                        <div className="absolute bottom-0 left-0 h-[2px] bg-[#C5A02D] w-full animate-pulse" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Numeric Indicator */}
+              <div className="flex items-center justify-between mt-3 px-1 text-[10px] text-slate-400 font-mono">
+                <span>Step {formStep} of 4</span>
+                <span>{Math.round(((formStep) / 4) * 100)}% Complete</span>
+              </div>
+            </div>
+
+            {/* FORM CONTAINER */}
             <form onSubmit={handleCreateAgreement} className="space-y-6">
               
-              {/* Preset Prefillers */}
-              <div className="bg-[#FAF7F2] p-4 border border-[#C5A02D]/25 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-3">
-                  <span className="text-[9px] font-display uppercase tracking-widest text-[#C5A02D] font-bold block mb-2">Pre-fill presets from properties database:</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setPrefilledTarget("ramada")}
-                  className={cn(
-                    "p-3 border text-left flex flex-col justify-between transition-all rounded-none",
-                    prefilledTarget === "ramada" ? "border-[#C5A02D] bg-white shadow-md text-[#0B1C33]" : "border-slate-200 hover:border-slate-300 text-slate-500"
-                  )}
-                >
-                  <span className="text-xs font-bold">Ramada Plaza & Suites</span>
-                  <span className="text-[9px] font-mono mt-1 opacity-70">Lot 2 Northern Press, 298 Keys</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPrefilledTarget("wyndham")}
-                  className={cn(
-                    "p-3 border text-left flex flex-col justify-between transition-all rounded-none",
-                    prefilledTarget === "wyndham" ? "border-[#C5A02D] bg-white shadow-md text-[#0B1C33]" : "border-slate-200 hover:border-slate-300 text-slate-500"
-                  )}
-                >
-                  <span className="text-xs font-bold">Wyndham Garden Beach</span>
-                  <span className="text-[9px] font-mono mt-1 opacity-70">Lot 3 Wailoaloa Rd, 120 Keys</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPrefilledTarget("custom")}
-                  className={cn(
-                    "p-3 border text-left flex flex-col justify-between transition-all rounded-none",
-                    prefilledTarget === "custom" ? "border-[#C5A02D] bg-white shadow-md text-[#0B1C33]" : "border-slate-200 hover:border-slate-300 text-slate-500"
-                  )}
-                >
-                  <span className="text-xs font-bold">Blank Custom Agreement</span>
-                  <span className="text-[9px] font-mono mt-1 opacity-70">Manually enter all covenants</span>
-                </button>
-              </div>
+              {/* STEP 1: PRESET & TEMPLATE IDENTIFICATION */}
+              {formStep === 1 && (
+                <div className="space-y-6 animate-fadeIn">
+                  <div className="bg-[#FAF7F2] p-4 border border-[#C5A02D]/25 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="md:col-span-3">
+                      <span className="text-[9px] font-display uppercase tracking-widest text-[#C5A02D] font-bold block mb-1">Pre-fill presets from properties database:</span>
+                      <p className="text-[10px] text-slate-400 mb-2 font-serif italic">Selecting a preset automatically populates default covenants to accelerate the draft.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPrefilledTarget("ramada")}
+                      className={cn(
+                        "p-4 border text-left flex flex-col justify-between transition-all rounded-none",
+                        prefilledTarget === "ramada" ? "border-[#C5A02D] bg-white shadow-md text-[#0B1C33]" : "border-slate-200 hover:border-slate-300 text-slate-500"
+                      )}
+                    >
+                      <span className="text-xs font-bold">Ramada Plaza & Suites</span>
+                      <span className="text-[9px] font-mono mt-1 opacity-70">Lot 2 Northern Press, 298 Keys</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrefilledTarget("wyndham")}
+                      className={cn(
+                        "p-4 border text-left flex flex-col justify-between transition-all rounded-none",
+                        prefilledTarget === "wyndham" ? "border-[#C5A02D] bg-white shadow-md text-[#0B1C33]" : "border-slate-200 hover:border-slate-300 text-slate-500"
+                      )}
+                    >
+                      <span className="text-xs font-bold">Wyndham Garden Beach</span>
+                      <span className="text-[9px] font-mono mt-1 opacity-70">Lot 3 Wailoaloa Rd, 120 Keys</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrefilledTarget("custom")}
+                      className={cn(
+                        "p-4 border text-left flex flex-col justify-between transition-all rounded-none",
+                        prefilledTarget === "custom" ? "border-[#C5A02D] bg-white shadow-md text-[#0B1C33]" : "border-slate-200 hover:border-slate-300 text-slate-500"
+                      )}
+                    >
+                      <span className="text-xs font-bold">Blank Custom Agreement</span>
+                      <span className="text-[9px] font-mono mt-1 opacity-70">Manually enter all covenants</span>
+                    </button>
+                  </div>
 
-              {/* Form Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
-                {/* Select Template */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Choose Legal Template</label>
-                  <select
-                    value={selectedTemplate}
-                    onChange={(e) => setSelectedTemplate(e.target.value)}
-                    className="w-full border border-slate-200 p-2.5 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Choose Legal Template */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Choose Legal Template</label>
+                      <select
+                        value={selectedTemplate}
+                        onChange={(e) => setSelectedTemplate(e.target.value)}
+                        className="w-full border border-slate-200 p-2.5 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none font-bold text-[#0B1C33]"
+                      >
+                        <option>Hotel Management LOI</option>
+                        <option>Hotel Management Agreement</option>
+                        <option>Technical Services Agreement</option>
+                        <option>Consultancy Agreement</option>
+                        <option>NDA</option>
+                        <option>Custom Agreement</option>
+                      </select>
+                    </div>
+
+                    {/* Agreement Title */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Agreement Title</label>
+                      <input
+                        type="text"
+                        required
+                        value={builderForm.title}
+                        onChange={(e) => setBuilderForm({ ...builderForm, title: e.target.value })}
+                        className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none font-semibold text-[#0B1C33]"
+                        placeholder="Enter agreement title..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 2: OWNER SIGNATORY PARTY DETAILS */}
+              {formStep === 2 && (
+                <div className="space-y-6 animate-fadeIn">
+                  <div className="border-b border-slate-100 pb-2">
+                    <span className="text-[11px] font-display uppercase tracking-widest text-[#C5A02D] font-bold block">OWNER SIGNATORY PARTY INFORMATION</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Owner Name */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Owner Representative Name</label>
+                      <input
+                        type="text"
+                        required
+                        value={builderForm.ownerName}
+                        onChange={(e) => setBuilderForm({ ...builderForm, ownerName: e.target.value })}
+                        className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
+                        placeholder="Charles"
+                      />
+                    </div>
+
+                    {/* Owner Email */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Owner Email (For Alerts)</label>
+                      <input
+                        type="email"
+                        required
+                        value={builderForm.ownerEmail}
+                        onChange={(e) => setBuilderForm({ ...builderForm, ownerEmail: e.target.value })}
+                        className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
+                        placeholder="digitalmedia@cml.com.fj"
+                      />
+                    </div>
+
+                    {/* Owner Phone */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Owner Phone Number</label>
+                      <input
+                        type="text"
+                        value={builderForm.ownerPhone}
+                        onChange={(e) => setBuilderForm({ ...builderForm, ownerPhone: e.target.value })}
+                        className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
+                        placeholder="+679 672 8885"
+                      />
+                    </div>
+
+                    {/* Owner Corporate Entity Name & Address */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Owner Corporate Entity Name & Address</label>
+                      <textarea
+                        required
+                        rows={3}
+                        value={builderForm.ownerDetails}
+                        onChange={(e) => {
+                          const lines = e.target.value.split('\n');
+                          setBuilderForm({ 
+                            ...builderForm, 
+                            ownerDetails: e.target.value,
+                            ownerCompany: lines[0] || ""
+                          });
+                        }}
+                        className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none font-sans"
+                        placeholder="Koro Fiji-Nadi Bay Sands Investment Limited&#10;Lot 2 Northern Press Rd, Martintar, Nadi Fiji"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: ASSET DESCRIPTION & KEYS */}
+              {formStep === 3 && (
+                <div className="space-y-6 animate-fadeIn">
+                  <div className="border-b border-slate-100 pb-2">
+                    <span className="text-[11px] font-display uppercase tracking-widest text-[#C5A02D] font-bold block">ASSET DESCRIPTION & KEY INVENTORIES</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Hotel Name */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Asset (Hotel Name)</label>
+                      <input
+                        type="text"
+                        required
+                        value={builderForm.hotelName}
+                        onChange={(e) => setBuilderForm({ ...builderForm, hotelName: e.target.value })}
+                        className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none font-bold"
+                      />
+                    </div>
+
+                    {/* Asset Physical Address */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Asset Physical Address</label>
+                      <input
+                        type="text"
+                        value={builderForm.hotelAddress}
+                        onChange={(e) => setBuilderForm({ ...builderForm, hotelAddress: e.target.value })}
+                        className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
+                      />
+                    </div>
+
+                    {/* Room Inventory (Keys) */}
+                    <div className="md:col-span-2 space-y-1">
+                      <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Room Inventory (Keys)</label>
+                      <input
+                        type="text"
+                        value={builderForm.inventory}
+                        onChange={(e) => setBuilderForm({ ...builderForm, inventory: e.target.value })}
+                        className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none font-mono"
+                        placeholder="e.g. 88 Apartments & 210 hotel rooms (Total 298 Keys)"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 4: COVENANTS & FACILITIES */}
+              {formStep === 4 && (
+                <div className="space-y-6 animate-fadeIn">
+                  <div className="border-b border-slate-100 pb-2">
+                    <span className="text-[11px] font-display uppercase tracking-widest text-[#C5A02D] font-bold block">COMMERCIAL COVENANTS & DESIGNATED FACILITIES</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Management Fee */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Management Fee Percentage</label>
+                      <input
+                        type="text"
+                        value={builderForm.managementFee}
+                        onChange={(e) => setBuilderForm({ ...builderForm, managementFee: e.target.value })}
+                        className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
+                      />
+                    </div>
+
+                    {/* Technical Service Fee */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Technical Services Advisory Fee (TSF)</label>
+                      <input
+                        type="text"
+                        value={builderForm.techFee}
+                        onChange={(e) => setBuilderForm({ ...builderForm, techFee: e.target.value })}
+                        className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
+                      />
+                    </div>
+
+                    {/* Initial Term */}
+                    <div className="md:col-span-2 space-y-1">
+                      <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Initial Management Term Covenants</label>
+                      <input
+                        type="text"
+                        value={builderForm.initialTerm}
+                        onChange={(e) => setBuilderForm({ ...builderForm, initialTerm: e.target.value })}
+                        className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
+                      />
+                    </div>
+
+                    {/* Facilities List */}
+                    <div className="md:col-span-2 space-y-1">
+                      <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Designated Facilities (One item per line)</label>
+                      <textarea
+                        rows={6}
+                        value={builderForm.facilitiesText}
+                        onChange={(e) => setBuilderForm({ ...builderForm, facilitiesText: e.target.value })}
+                        className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none font-mono leading-relaxed"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action / Navigation Buttons */}
+              <div className="flex items-center justify-between pt-6 border-t border-slate-100">
+                {/* Left Side: Cancel or Back */}
+                {formStep > 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => setFormStep(step => step - 1)}
+                    className="px-6 py-2.5 border border-[#0B1C33] text-[11px] font-display uppercase tracking-widest font-black text-[#0B1C33] hover:bg-slate-50 transition-all"
                   >
-                    <option>Hotel Management LOI</option>
-                    <option>Hotel Management Agreement</option>
-                    <option>Technical Services Agreement</option>
-                    <option>Consultancy Agreement</option>
-                    <option>NDA</option>
-                    <option>Custom Agreement</option>
-                  </select>
-                </div>
+                    ← Previous Step
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setActiveSubView("dashboard")}
+                    className="px-6 py-2.5 border border-slate-200 text-[11px] font-display uppercase tracking-widest font-black text-slate-500 hover:bg-slate-50 transition-all"
+                  >
+                    Cancel
+                  </button>
+                )}
 
-                {/* Title */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Agreement Title</label>
-                  <input
-                    type="text"
-                    required
-                    value={builderForm.title}
-                    onChange={(e) => setBuilderForm({ ...builderForm, title: e.target.value })}
-                    className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
-                    placeholder="Enter agreement title..."
-                  />
-                </div>
-
-                <div className="border-t border-slate-100 md:col-span-2 pt-4">
-                  <span className="text-[11px] font-display uppercase tracking-widest text-[#C5A02D] font-bold block mb-4">OWNER SIGNATORY PARTY INFORMATION</span>
-                </div>
-
-                {/* Owner Name */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Owner Representative Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={builderForm.ownerName}
-                    onChange={(e) => setBuilderForm({ ...builderForm, ownerName: e.target.value })}
-                    className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
-                    placeholder="Charles"
-                  />
-                </div>
-
-                {/* Owner Company & Address */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Owner Corporate Entity Name & Address (One unified entry)</label>
-                  <textarea
-                    required
-                    rows={2}
-                    value={builderForm.ownerDetails}
-                    onChange={(e) => {
-                      const lines = e.target.value.split('\n');
-                      setBuilderForm({ 
-                        ...builderForm, 
-                        ownerDetails: e.target.value,
-                        ownerCompany: lines[0] || ""
-                      });
+                {/* Right Side: Next or Submit */}
+                {formStep < 4 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (formStep === 1 && !builderForm.title) {
+                        triggerNotification("Please fill out the Agreement Title to proceed.", "error");
+                        return;
+                      }
+                      setFormStep(step => step + 1);
                     }}
-                    className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
-                    placeholder="Koro Fiji-Nadi Bay Sands Investment Limited&#10;Lot 2 Northern Press Rd, Martintar, Nadi Fiji"
-                  />
-                </div>
-
-                {/* Owner Email */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Owner Email (For Alerts)</label>
-                  <input
-                    type="email"
-                    required
-                    value={builderForm.ownerEmail}
-                    onChange={(e) => setBuilderForm({ ...builderForm, ownerEmail: e.target.value })}
-                    className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
-                    placeholder="digitalmedia@cml.com.fj"
-                  />
-                </div>
-
-                {/* Owner Phone */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Owner Phone Number</label>
-                  <input
-                    type="text"
-                    value={builderForm.ownerPhone}
-                    onChange={(e) => setBuilderForm({ ...builderForm, ownerPhone: e.target.value })}
-                    className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
-                    placeholder="+679 672 8885"
-                  />
-                </div>
-
-                <div className="border-t border-slate-100 md:col-span-2 pt-4">
-                  <span className="text-[11px] font-display uppercase tracking-widest text-[#C5A02D] font-bold block mb-4">COMMERCIAL COVENANTS & INVENTORY</span>
-                </div>
-
-                {/* Hotel Name */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Asset (Hotel Name)</label>
-                  <input
-                    type="text"
-                    required
-                    value={builderForm.hotelName}
-                    onChange={(e) => setBuilderForm({ ...builderForm, hotelName: e.target.value })}
-                    className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
-                  />
-                </div>
-
-                {/* Hotel Address */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Asset Physical Address</label>
-                  <input
-                    type="text"
-                    value={builderForm.hotelAddress}
-                    onChange={(e) => setBuilderForm({ ...builderForm, hotelAddress: e.target.value })}
-                    className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
-                  />
-                </div>
-
-                {/* Inventory / Keys */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Room Inventory (Keys)</label>
-                  <input
-                    type="text"
-                    value={builderForm.inventory}
-                    onChange={(e) => setBuilderForm({ ...builderForm, inventory: e.target.value })}
-                    className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
-                  />
-                </div>
-
-                {/* Management Fee */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Management Fee Percentage</label>
-                  <input
-                    type="text"
-                    value={builderForm.managementFee}
-                    onChange={(e) => setBuilderForm({ ...builderForm, managementFee: e.target.value })}
-                    className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
-                  />
-                </div>
-
-                {/* Technical Service Fee */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Technical Services Advisory Fee (TSF)</label>
-                  <input
-                    type="text"
-                    value={builderForm.techFee}
-                    onChange={(e) => setBuilderForm({ ...builderForm, techFee: e.target.value })}
-                    className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
-                  />
-                </div>
-
-                {/* Initial Term */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Initial Management Term Covenants</label>
-                  <input
-                    type="text"
-                    value={builderForm.initialTerm}
-                    onChange={(e) => setBuilderForm({ ...builderForm, initialTerm: e.target.value })}
-                    className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none"
-                  />
-                </div>
-
-                {/* Facilities List */}
-                <div className="md:col-span-2 space-y-1">
-                  <label className="text-[10px] font-display uppercase tracking-wider text-[#0B1C33] font-bold">Designated Facilities (One item per line)</label>
-                  <textarea
-                    rows={4}
-                    value={builderForm.facilitiesText}
-                    onChange={(e) => setBuilderForm({ ...builderForm, facilitiesText: e.target.value })}
-                    className="w-full border border-slate-200 p-2 text-xs bg-[#FDFBF7] focus:border-[#C5A02D] outline-none font-mono"
-                  />
-                </div>
-
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-6 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setActiveSubView("dashboard")}
-                  className="px-6 py-2.5 border border-slate-200 text-xs font-display uppercase tracking-widest font-black text-slate-500 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-8 py-2.5 bg-[#0B1C33] text-[#C5A02D] hover:bg-[#C5A02D] hover:text-[#0B1C33] text-xs font-display uppercase tracking-widest font-black transition-all border border-[#0B1C33] hover:border-[#C5A02D]"
-                >
-                  Draft Agreement
-                </button>
+                    className="px-8 py-2.5 bg-[#0B1C33] text-[#C5A02D] hover:bg-[#C5A02D] hover:text-[#0B1C33] text-[11px] font-display uppercase tracking-widest font-black transition-all border border-[#0B1C33] hover:border-[#C5A02D]"
+                  >
+                    Next Step →
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    className="px-10 py-3 bg-[#0B1C33] text-[#C5A02D] hover:bg-[#C5A02D] hover:text-[#0B1C33] text-[11px] font-display uppercase tracking-widest font-black transition-all border border-[#0B1C33] hover:border-[#C5A02D] shadow-md hover:shadow-lg"
+                  >
+                    Draft Agreement & Pre-file ✓
+                  </button>
+                )}
               </div>
 
             </form>

@@ -257,31 +257,13 @@ export default function NewsletterSubscribers({ companyId, userRole, onConvertSu
     const unsubscribe = onSnapshot(colRef, async (snapshot) => {
       const list: Subscriber[] = [];
       snapshot.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() });
+        list.push({ id: docSnap.id, ...docSnap.data() } as any);
       });
 
-      if (list.length === 0 && !hasSeededRef.current) {
-        hasSeededRef.current = true;
-        console.log("[NewsletterSubscribers] Collection empty. Seeding defaults...");
-        const seeds = [
-          { email: "charles.viti@cml.com.fj", source: "Website Header", createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), convertedToRewards: false, fullName: "Charles Cebujano" },
-          { email: "priyesh.narayan@cml.com.fj", source: "Facebook Landing Page", createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), convertedToRewards: false, fullName: "Priyesh Narayan" },
-          { email: "rohit.lal@cml.com.fj", source: "Ramada Suites QR Code", createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), convertedToRewards: true, fullName: "Rohit Lal" },
-          { email: "shaun.singh@gmail.com", source: "Wyndham Buffet Entry Form", createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), convertedToRewards: false, fullName: "Shaun Singh" }
-        ];
-        for (const item of seeds) {
-          try {
-            await addDoc(colRef, item);
-          } catch (err) {
-            console.error("Seeding item failed:", err);
-          }
-        }
-      } else {
-        // Sort descending by date
-        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setSubscribers(list);
-        setLoading(false);
-      }
+      // Sort descending by date
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setSubscribers(list);
+      setLoading(false);
     }, (e) => {
       console.error("Error fetching newsletter subscribers snapshot:", e);
       setLoading(false);
@@ -298,7 +280,7 @@ export default function NewsletterSubscribers({ companyId, userRole, onConvertSu
       const snapshot = await getDocs(colRef);
       const list: Subscriber[] = [];
       snapshot.docs.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() });
+        list.push({ id: doc.id, ...doc.data() } as any);
       });
       // Sort descending by date
       list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());

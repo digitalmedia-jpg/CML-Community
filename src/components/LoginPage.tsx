@@ -36,8 +36,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       }
 
       console.log("[Sandbox Bypass] Forcing resilient high-fidelity mockup authentication mode for:", targetIdentifier);
-      auth.setMode("mock");
-      await auth.signInWithEmailAndPassword(targetIdentifier, "bypass");
+      (auth as any).setMode("mock");
+      await (auth as any).signInWithEmailAndPassword(targetIdentifier, "bypass");
       onLoginSuccess();
     } catch (err: any) {
       setError(err.message || "Sandbox access failed");

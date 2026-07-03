@@ -51,8 +51,8 @@ export const SystemDiagnostics: React.FC<SystemDiagnosticsProps> = ({
     };
   }, []);
 
-  const activeMode = auth.getMode(); // 'real' or 'mock'
-  const isUsingLiveFirebase = activeMode === "real" && !db._isMock;
+  const activeMode = (auth as any).getMode ? (auth as any).getMode() : "live"; // 'real' or 'mock'
+  const isUsingLiveFirebase = activeMode === "live" || !(db as any)._isMock;
   
   const handleRefresh = async () => {
     setIsRefreshing(true);

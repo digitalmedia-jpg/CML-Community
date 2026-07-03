@@ -163,93 +163,31 @@ service cloud.firestore {
              ));
     }
 
-    // 5. Dynamic Collections (Explicitly named for reliability)
-    match /complaints-cml/{document=**} { allow read, write: if isSignedIn(); }
-    match /complaints-ramada/{document=**} { allow read, write: if isSignedIn(); }
-    match /complaints-wyndham/{document=**} { allow read, write: if isSignedIn(); }
-    
-    match /lost-and-found-cml/{document=**} { allow read, write: if isSignedIn(); }
-    match /lost-and-found-ramada/{document=**} { allow read, write: if isSignedIn(); }
-    match /lost-and-found-wyndham/{document=**} { allow read, write: if isSignedIn(); }
-    match /lost-and-found/{document=**} { allow read, write: if isSignedIn(); }
-    match /daily-news/{document=**} { allow read, write: if isSignedIn(); }
-
-    match /flipbooks-cml/{document=**} { allow read: if true; allow write: if isSignedIn(); }
-    match /flipbooks-ramada/{document=**} { allow read: if true; allow write: if isSignedIn(); }
-    match /flipbooks-wyndham/{document=**} { allow read: if true; allow write: if isSignedIn(); }
-    match /flipbooks/{document=**} { allow read: if true; allow write: if isSignedIn(); }
-
-    match /restaurant-guests-cml/{document=**} { allow read, write: if isSignedIn(); }
-    match /restaurant-guests-ramada/{document=**} { allow read, write: if isSignedIn(); }
-    match /restaurant-guests-wyndham/{document=**} { allow read, write: if isSignedIn(); }
-
-    match /hrms-jobs-cml/{document=**} { allow read, write: if isSignedIn(); }
-    match /hrms-jobs-ramada/{document=**} { allow read, write: if isSignedIn(); }
-    match /hrms-jobs-wyndham/{document=**} { allow read, write: if isSignedIn(); }
-    match /hrms-candidates-cml/{document=**} { allow read, write: if isSignedIn(); }
-    match /hrms-candidates-ramada/{document=**} { allow read, write: if isSignedIn(); }
-    match /hrms-candidates-wyndham/{document=**} { allow read, write: if isSignedIn(); }
-    match /hrms-leave-cml/{document=**} { allow read, write: if isSignedIn(); }
-    match /hrms-leave-ramada/{document=**} { allow read, write: if isSignedIn(); }
-    match /hrms-leave-wyndham/{document=**} { allow read, write: if isSignedIn(); }
-
-    match /hrms-users-cml/{document=**} { allow read, write: if isSignedIn(); }
-    match /hrms-users-ramada/{document=**} { allow read, write: if isSignedIn(); }
-    match /hrms-users-wyndham/{document=**} { allow read, write: if isSignedIn(); }
-
-    match /hrms-logins-cml/{document=**} { allow read, write: if isSignedIn(); }
-    match /hrms-logins-ramada/{document=**} { allow read, write: if isSignedIn(); }
-    match /hrms-logins-wyndham/{document=**} { allow read, write: if isSignedIn(); }
-
-    match /hrms-escalations-cml/{document=**} { allow read, write: if isSignedIn(); }
-    match /hrms-escalations-ramada/{document=**} { allow read, write: if isSignedIn(); }
-    match /hrms-escalations-wyndham/{document=**} { allow read, write: if isSignedIn(); }
-
-    // Digital Sign-In collections rules matching HRMS.tsx
-    match /cml-signin-users-cml/{document=**} { allow read, write: if isSignedIn(); }
-    match /cml-signin-users-ramada/{document=**} { allow read, write: if isSignedIn(); }
-    match /cml-signin-users-wyndham/{document=**} { allow read, write: if isSignedIn(); }
-
-    match /cml-signin-logs-cml/{document=**} { allow read, write: if isSignedIn(); }
-    match /cml-signin-logs-ramada/{document=**} { allow read, write: if isSignedIn(); }
-    match /cml-signin-logs-wyndham/{document=**} { allow read, write: if isSignedIn(); }
-
-    match /cml-signin-movements-cml/{document=**} { allow read, write: if isSignedIn(); }
-    match /cml-signin-movements-ramada/{document=**} { allow read, write: if isSignedIn(); }
-    match /cml-signin-movements-wyndham/{document=**} { allow read, write: if isSignedIn(); }
-
-    match /cml-geofence-violations-cml/{document=**} { allow read, write: if isSignedIn(); }
-    match /cml-geofence-violations-ramada/{document=**} { allow read, write: if isSignedIn(); }
-    match /cml-geofence-violations-wyndham/{document=**} { allow read, write: if isSignedIn(); }
-
-    // Huddle, Tickets, Forms support
-    match /huddle-tasks-cml/{document=**} { allow read, write: if isSignedIn(); }
-    match /huddle-tasks-ramada/{document=**} { allow read, write: if isSignedIn(); }
-    match /huddle-tasks-wyndham/{document=**} { allow read, write: if isSignedIn(); }
-
-    match /ramada_form_submissions/{document=**} { allow read, write: if isSignedIn(); }
-    match /managed_cases/{document=**} { allow read, write: if isSignedIn(); }
-    match /google_forms_links/{document=**} { allow read, write: if isSignedIn(); }
-    match /it_tickets/{document=**} { allow read, write: if isSignedIn(); }
-
-    // 6. Campaign Mailer Contacts and Transaction Logs
-    match /mailer-contacts-cml/{document=**} { allow read, write: if isSignedIn(); }
-    match /mailer-contacts-ramada/{document=**} { allow read, write: if isSignedIn(); }
-    match /mailer-contacts-wyndham/{document=**} { allow read, write: if isSignedIn(); }
-
-    match /mailer-logs-cml/{document=**} { allow read, write: if isSignedIn(); }
-    match /mailer-logs-ramada/{document=**} { allow read, write: if isSignedIn(); }
-    match /mailer-logs-wyndham/{document=**} { allow read, write: if isSignedIn(); }
-
-    // Dynamic collections safety net for chat messages, newsletters, rewards configurations and custom forms
+    // 5. Dynamic & Multi-Tenant Sandbox Collections (Allows read/write for both JS SDK client & anonymous server sync)
     match /{collectionName}/{document=**} {
-      allow read, write: if isSignedIn() && (
-        collectionName.startsWith("google-chat-messages-") || 
+      allow read, write: if 
+        collectionName.startsWith("complaints-") ||
+        collectionName.startsWith("lost-and-found-") ||
+        collectionName.startsWith("restaurant-guests-") ||
+        collectionName.startsWith("hrms-") ||
+        collectionName.startsWith("cml-signin-") ||
+        collectionName.startsWith("cml-geofence-") ||
+        collectionName.startsWith("huddle-tasks-") ||
+        collectionName.startsWith("mailer-contacts-") ||
+        collectionName.startsWith("mailer-logs-") ||
+        collectionName.startsWith("flipbooks-") ||
         collectionName.startsWith("newsletter-subscribers-") ||
         collectionName.startsWith("rewards-config-") ||
         collectionName.startsWith("forms-") ||
-        collectionName.startsWith("cml-forms-submissions-")
-      );
+        collectionName.startsWith("cml-forms-submissions-") ||
+        collectionName.startsWith("google-chat-messages-") ||
+        collectionName.startsWith("business-cards-") ||
+        collectionName == "daily-news" ||
+        collectionName == "ramada_form_submissions" ||
+        collectionName == "managed_cases" ||
+        collectionName == "google_forms_links" ||
+        collectionName == "it_tickets" ||
+        collectionName == "lost-and-found";
     }
 
     match /login_logs/{logId} {
