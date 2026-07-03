@@ -33,13 +33,13 @@ import {
 
 // Your Firebase configuration keys
 const firebaseConfig = {
-  apiKey: "AIzaSyC-zbYXWxtoRLMWuvRxMSvhjFALeG1iv8k" , // Put your Web API Key string here
+  apiKey: "AIzaSyC-zbYXWxtoRLMWuvRxMSvhjFALeG1iv8k",
   authDomain: "gen-lang-client-0274279306.firebaseapp.com",
   projectId: "gen-lang-client-0274279306",
   storageBucket: "gen-lang-client-0274279306.firebasestorage.app",
   messagingSenderId: "113045738113",
-  appId: "1:113045738113:web:26f8fc9288f54d23727380",
-  measurementId: "G-H7W90HRVZT"
+  appId: "1:113045738113:web:478956f2b42198ca727380",
+  measurementId: "G-60XDN4JYG7"
 
 };
 
