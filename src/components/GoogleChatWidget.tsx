@@ -8,6 +8,7 @@ import {
   query,
   orderBy,
   doc,
+  updateDoc,
   connectGoogleWorkspace,
   getGoogleAccessToken,
   getGoogleWorkspaceConnections,
@@ -376,20 +377,30 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
   // Real-time listener for current space messages (with live staff forum sync integration)
   useEffect(() => {
     if (activeSpaceId === "forum-discussions-sync") {
-      const colRef = collection(db, "posts");
+      const colRef = collection(db, "hybrid_sandbox");
       const unsubscribe = onSnapshot(colRef, (snapshot) => {
         const list: ChatMessage[] = [];
         snapshot.forEach((doc) => {
           const data = doc.data();
-          const timestampDate = data.createdAt ? (data.createdAt.seconds ? new Date(data.createdAt.seconds * 1000) : new Date(data.createdAt)) : new Date();
-          list.push({
-            id: doc.id,
-            senderName: data.authorName || "CML Forum",
-            senderEmail: data.authorEmail || "forum@cml.com.fj",
-            content: `📢 [${data.category || 'Staff Forum'}] **${data.title}**\n\n${data.content}`,
-            timestamp: timestampDate.toISOString(),
-          } as ChatMessage);
-          knownMessageIdsRef.current.add(doc.id);
+          if (data.collection === "posts" || doc.id.startsWith("posts_") || doc.id.startsWith("post_") || (data.title && data.content && data.category)) {
+            let payload: any = {};
+            if (data.db_json) {
+              try { payload = JSON.parse(data.db_json); } catch (e) {}
+            } else if (data.payload_json) {
+              try { payload = JSON.parse(data.payload_json); } catch (e) {}
+            } else {
+              payload = data;
+            }
+            const timestampDate = payload.createdAt ? (payload.createdAt.seconds ? new Date(payload.createdAt.seconds * 1000) : new Date(payload.createdAt)) : new Date();
+            list.push({
+              id: doc.id,
+              senderName: payload.authorName || "CML Forum",
+              senderEmail: payload.authorEmail || "forum@cml.com.fj",
+              content: `📢 [${payload.category || 'Staff Forum'}] **${payload.title}**\n\n${payload.content}`,
+              timestamp: timestampDate.toISOString(),
+            } as ChatMessage);
+            knownMessageIdsRef.current.add(doc.id);
+          }
         });
 
         // Sort by timestamp
@@ -404,12 +415,24 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
       return () => unsubscribe();
     }
 
-    const colRef = collection(db, `google-chat-messages-${companyId}-${activeSpaceId}`);
+    const colRef = collection(db, "hybrid_sandbox");
+    const targetCol = `google-chat-messages-${companyId}-${activeSpaceId}`;
     const unsubscribe = onSnapshot(colRef, (snapshot) => {
       const list: ChatMessage[] = [];
       snapshot.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() } as ChatMessage);
-        knownMessageIdsRef.current.add(doc.id); // Guard to prevent duplicate notification
+        const data = doc.data();
+        if (data.collection === targetCol) {
+          let payload: any = {};
+          if (data.db_json) {
+            try { payload = JSON.parse(data.db_json); } catch (e) {}
+          } else if (data.payload_json) {
+            try { payload = JSON.parse(data.payload_json); } catch (e) {}
+          } else {
+            payload = data;
+          }
+          list.push({ id: doc.id, ...payload } as ChatMessage);
+          knownMessageIdsRef.current.add(doc.id); // Guard to prevent duplicate notification
+        }
       });
 
       // Sort by timestamp
@@ -433,52 +456,62 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     const unsubscribes: (() => void)[] = [];
 
     spaces.forEach((space) => {
-      const colRef = collection(db, `google-chat-messages-${companyId}-${space.id}`);
+      const colRef = collection(db, "hybrid_sandbox");
+      const targetCol = `google-chat-messages-${companyId}-${space.id}`;
       let isFirstRun = true;
 
       const unsub = onSnapshot(colRef, (snapshot) => {
+        const filteredDocs = snapshot.docs.filter(doc => doc.data().collection === targetCol);
         if (isFirstRun) {
-          snapshot.forEach((doc) => {
+          filteredDocs.forEach((doc) => {
             knownMessageIdsRef.current.add(doc.id);
           });
           isFirstRun = false;
           return;
         }
 
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === "added") {
-            const id = change.doc.id;
-            const msg = change.doc.data() as ChatMessage;
+        filteredDocs.forEach((doc) => {
+          const id = doc.id;
+          if (!knownMessageIdsRef.current.has(id)) {
+            knownMessageIdsRef.current.add(id);
+
+            const data = doc.data();
+            let payload: any = {};
+            if (data.db_json) {
+              try { payload = JSON.parse(data.db_json); } catch (e) {}
+            } else if (data.payload_json) {
+              try { payload = JSON.parse(data.payload_json); } catch (e) {}
+            } else {
+              payload = data;
+            }
+
+            const msg = { id, ...payload } as ChatMessage;
             const currentEmail = auth.currentUser?.email || "";
 
-            if (!knownMessageIdsRef.current.has(id)) {
-              knownMessageIdsRef.current.add(id);
+            if (msg.senderEmail && msg.senderEmail !== currentEmail) {
+              const isCurrentActiveSpaceFocused = isOpen && space.id === activeSpaceId;
 
-              if (msg.senderEmail && msg.senderEmail !== currentEmail) {
-                const isCurrentActiveSpaceFocused = isOpen && space.id === activeSpaceId;
+              // Play chime
+              if (soundEnabled) {
+                playChime();
+              }
 
-                // Play chime
-                if (soundEnabled) {
-                  playChime();
-                }
+              // Native Desktop Push notification (perfect when in background/other tabs)
+              if (!isCurrentActiveSpaceFocused && window.Notification && Notification.permission === "granted") {
+                new Notification(`CML Chat: ${space.name.replace(/^[^\s]+\s/, '')}`, {
+                  body: `${msg.senderName}: ${msg.content}`,
+                  icon: "https://cml.com.fj/wp-content/uploads/2025/12/CML-Logo-White-BG-Landscape-e1780482084995.png"
+                });
+              }
 
-                // Native Desktop Push notification (perfect when in background/other tabs)
-                if (!isCurrentActiveSpaceFocused && window.Notification && Notification.permission === "granted") {
-                  new Notification(`CML Chat: ${space.name.replace(/^[^\s]+\s/, '')}`, {
-                    body: `${msg.senderName}: ${msg.content}`,
-                    icon: "https://cml.com.fj/wp-content/uploads/2025/12/CML-Logo-White-BG-Landscape-e1780482084995.png"
-                  });
-                }
-
-                // Show floating Toast alert if not active and focused
-                if (!isCurrentActiveSpaceFocused) {
-                  toastService.show(
-                    msg.content,
-                    "info",
-                    5000,
-                    `💬 CHAT: ${msg.senderName} (${space.name.replace(/^[^\s]+\s/, '')})`
-                  );
-                }
+              // Show floating Toast alert if not active and focused
+              if (!isCurrentActiveSpaceFocused) {
+                toastService.show(
+                  msg.content,
+                  "info",
+                  5000,
+                  `💬 CHAT: ${msg.senderName} (${space.name.replace(/^[^\s]+\s/, '')})`
+                );
               }
             }
           }
@@ -528,10 +561,13 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
   // Pre-seed some initial professional messages when a space is empty
   useEffect(() => {
     const checkAndSeed = async () => {
-      const colRef = collection(db, `google-chat-messages-${companyId}-${activeSpaceId}`);
+      const colRef = collection(db, "hybrid_sandbox");
+      const targetCol = `google-chat-messages-${companyId}-${activeSpaceId}`;
+      
       // Query messages
       const checkSnapshot = onSnapshot(colRef, async (snapshot) => {
-        if (snapshot.docs.length === 0) {
+        const matchingDocs = snapshot.docs.filter(doc => doc.data().collection === targetCol);
+        if (matchingDocs.length === 0) {
           // Unsubscribe immediately to prevent looping
           checkSnapshot();
 
@@ -590,12 +626,18 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
           }
 
           for (const msg of seedMessages) {
-            await addDoc(colRef, {
+            const payload = {
               senderName: msg.senderName,
               senderEmail: msg.senderEmail,
               content: msg.content,
               timestamp: msg.timestamp,
               reactions: { "👍": ["Charles Cebujano"] }
+            };
+            await addDoc(collection(db, "hybrid_sandbox"), {
+              collection: targetCol,
+              db_json: JSON.stringify(payload),
+              payload_json: JSON.stringify(payload),
+              createdAt: new Date().toISOString()
             });
           }
         }
@@ -606,32 +648,47 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
 
   // Sync general posts from "posts" collection to "forum-discussions-sync" channel
   useEffect(() => {
-    const forumCol = collection(db, "posts");
+    const forumCol = collection(db, "hybrid_sandbox");
     const unsubscribe = onSnapshot(forumCol, (snapshot) => {
       if (snapshot && typeof snapshot.docChanges === "function") {
         snapshot.docChanges().forEach(async (change) => {
           if (change.type === "added") {
-            const postData = change.doc.data();
-            const timestamp = postData.createdAt || new Date().toISOString();
-            
-            // Verify that we haven't already posted this forum sync message
-            const syncKey = `FORUM_SYNC_${change.doc.id}`;
-            const chatCol = collection(db, `google-chat-messages-${companyId}-forum-discussions-sync`);
-            
-            // Check if already synchronized in local memory/store
-            const syncId = `forum_post_${change.doc.id}`;
-            const storageKey = `cml_synced_forum_${change.doc.id}`;
-            if (!localStorage.getItem(storageKey)) {
-              localStorage.setItem(storageKey, "true");
+            const data = change.doc.data();
+            if (data.collection === "posts" || change.doc.id.startsWith("posts_") || change.doc.id.startsWith("post_")) {
+              let postData: any = {};
+              if (data.db_json) {
+                try { postData = JSON.parse(data.db_json); } catch (e) {}
+              } else if (data.payload_json) {
+                try { postData = JSON.parse(data.payload_json); } catch (e) {}
+              } else {
+                postData = data;
+              }
+              const timestamp = postData.createdAt || new Date().toISOString();
               
-              // Post notification to Google Chat
-              await addDoc(chatCol, {
-                senderName: "📢 Forum Sync",
-                senderEmail: "forum-sync@cml.com.fj",
-                content: `📝 *New Post Added to Feed:* "${postData.title}" by *${postData.authorName}*\n_Category: ${postData.category || "General"}_\n\n"${postData.content.substring(0, 150)}..."`,
-                timestamp: new Date().toISOString(),
-                reactions: { "❤️": ["System"] }
-              });
+              // Verify that we haven't already posted this forum sync message
+              const syncKey = `FORUM_SYNC_${change.doc.id}`;
+              const chatCol = `google-chat-messages-${companyId}-forum-discussions-sync`;
+              
+              // Check if already synchronized in local memory/store
+              const storageKey = `cml_synced_forum_${change.doc.id}`;
+              if (!localStorage.getItem(storageKey)) {
+                localStorage.setItem(storageKey, "true");
+                
+                // Post notification to Google Chat
+                const payload = {
+                  senderName: "📢 Forum Sync",
+                  senderEmail: "forum-sync@cml.com.fj",
+                  content: `📝 *New Post Added to Feed:* "${postData.title}" by *${postData.authorName}*\n_Category: ${postData.category || "General"}_\n\n"${postData.content.substring(0, 150)}..."`,
+                  timestamp: new Date().toISOString(),
+                  reactions: { "❤️": ["System"] }
+                };
+                await addDoc(collection(db, "hybrid_sandbox"), {
+                  collection: chatCol,
+                  db_json: JSON.stringify(payload),
+                  payload_json: JSON.stringify(payload),
+                  createdAt: new Date().toISOString()
+                });
+              }
             }
           }
         });
@@ -642,34 +699,45 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
 
   // Sync Guest complaints to "wyndham-recovery-operations" space
   useEffect(() => {
-    // Monitor both ramada and wyndham complaints
-    const properties = ["wyndham", "ramada", "cml"];
-    const unsubscribers = properties.map((prop) => {
-      const col = collection(db, `complaints-${prop}`);
-      return onSnapshot(col, (snapshot) => {
-        if (snapshot && typeof snapshot.docChanges === "function") {
-          snapshot.docChanges().forEach(async (change) => {
-            if (change.type === "added") {
-              const data = change.doc.data();
+    const col = collection(db, "hybrid_sandbox");
+    const unsubscribe = onSnapshot(col, (snapshot) => {
+      if (snapshot && typeof snapshot.docChanges === "function") {
+        snapshot.docChanges().forEach(async (change) => {
+          if (change.type === "added") {
+            const data = change.doc.data();
+            if (data.collection?.startsWith("complaints-") || change.doc.id.startsWith("complaints_") || change.doc.id.startsWith("complaint_")) {
+              let complaintData: any = {};
+              if (data.db_json) {
+                try { complaintData = JSON.parse(data.db_json); } catch (e) {}
+              } else if (data.payload_json) {
+                try { complaintData = JSON.parse(data.payload_json); } catch (e) {}
+              } else {
+                complaintData = data;
+              }
               const storageKey = `cml_synced_complaint_${change.doc.id}`;
               if (!localStorage.getItem(storageKey)) {
                 localStorage.setItem(storageKey, "true");
 
-                const chatCol = collection(db, `google-chat-messages-${companyId}-wyndham-recovery-operations`);
-                await addDoc(chatCol, {
+                const chatCol = `google-chat-messages-${companyId}-wyndham-recovery-operations`;
+                const payload = {
                   senderName: "🛡️ Guest Recovery Monitor",
                   senderEmail: "recovery-sync@cml.com.fj",
-                  content: `🚨 *New Complaint Logged:* Guest *${data.guestName || "Anonymous"}* in Room *${data.roomNumber || "N/A"}*\n_Category: ${data.type || "Service"} | Priority: ${data.priority}_\n\n"${data.description.substring(0, 150)}..."`,
+                  content: `🚨 *New Complaint Logged:* Guest *${complaintData.guestName || "Anonymous"}* in Room *${complaintData.roomNumber || "N/A"}*\n_Category: ${complaintData.type || "Service"} | Priority: ${complaintData.priority}_\n\n"${complaintData.description.substring(0, 150)}..."`,
                   timestamp: new Date().toISOString()
+                };
+                await addDoc(collection(db, "hybrid_sandbox"), {
+                  collection: chatCol,
+                  db_json: JSON.stringify(payload),
+                  payload_json: JSON.stringify(payload),
+                  createdAt: new Date().toISOString()
                 });
               }
             }
-          });
-        }
-      });
+          }
+        });
+      }
     });
-
-    return () => unsubscribers.forEach(unsub => unsub());
+    return () => unsubscribe();
   }, [companyId]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -678,7 +746,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
 
     try {
       const user = auth.currentUser;
-      const colRef = collection(db, `google-chat-messages-${companyId}-${activeSpaceId}`);
+      const targetCol = `google-chat-messages-${companyId}-${activeSpaceId}`;
       
       const payload: Partial<ChatMessage> = {
         senderName: user?.displayName || user?.email?.split('@')[0] || "Authorized Staff",
@@ -692,7 +760,12 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
         payload.attachmentName = simulatedAttachment.name;
       }
 
-      await addDoc(colRef, payload);
+      await addDoc(collection(db, "hybrid_sandbox"), {
+        collection: targetCol,
+        db_json: JSON.stringify(payload),
+        payload_json: JSON.stringify(payload),
+        createdAt: new Date().toISOString()
+      });
       setNewMessage("");
       setSimulatedAttachment(null);
     } catch (err) {
@@ -740,11 +813,19 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     }
 
     try {
-      const colRef = collection(db, `google-chat-messages-${companyId}-${activeSpaceId}`);
-      // Find and update doc
-      const msgDoc = doc(db, `google-chat-messages-${companyId}-${activeSpaceId}`, msg.id);
-      await addDoc(collection(db, `google-chat-messages-${companyId}-${activeSpaceId}`), {}); // Just to trigger listener
-    } catch (err) {}
+      const nextMsg = {
+        ...msg,
+        reactions: nextReactions
+      };
+      
+      const docRef = doc(db, "hybrid_sandbox", msg.id);
+      await updateDoc(docRef, {
+        db_json: JSON.stringify(nextMsg),
+        payload_json: JSON.stringify(nextMsg)
+      });
+    } catch (err) {
+      console.error("Failed to update reactions in hybrid_sandbox:", err);
+    }
   };
 
   // Filter messages based on search query

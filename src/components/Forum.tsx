@@ -158,15 +158,35 @@ export const Forum: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  // Subscribe to posts
+  // Subscribe to posts from hybrid_sandbox
   useEffect(() => {
-    const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'hybrid_sandbox'));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const postsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Post[];
+      const postsData: Post[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.collection === "posts" || doc.id.startsWith("posts_") || doc.id.startsWith("post_") || (data.title && data.content && data.category)) {
+          let payload: any = {};
+          if (data.db_json) {
+            try { payload = JSON.parse(data.db_json); } catch (e) {}
+          } else if (data.payload_json) {
+            try { payload = JSON.parse(data.payload_json); } catch (e) {}
+          } else {
+            payload = data;
+          }
+          postsData.push({ id: doc.id, ...payload } as Post);
+        }
+      });
+      // Sort by createdAt desc
+      const getTimestamp = (val: any) => {
+        if (!val) return 0;
+        if (typeof val.toDate === 'function') return val.toDate().getTime();
+        if (val.seconds) return val.seconds * 1000;
+        const d = new Date(val).getTime();
+        return isNaN(d) ? 0 : d;
+      };
+      postsData.sort((a, b) => getTimestamp(b.createdAt) - getTimestamp(a.createdAt));
       setPosts(postsData);
       setLoading(false);
     }, (error) => {
@@ -176,23 +196,41 @@ export const Forum: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // Subscribe to comments when a post is selected
+  // Subscribe to comments when a post is selected from hybrid_sandbox
   useEffect(() => {
     if (!selectedPost) {
       setComments([]);
       return;
     }
 
-    const q = query(
-      collection(db, `posts/${selectedPost.id}/comments`), 
-      orderBy('createdAt', 'asc')
-    );
+    const q = query(collection(db, 'hybrid_sandbox'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const commentsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Comment[];
+      const commentsData: Comment[] = [];
+      const targetColName = `posts/${selectedPost.id}/comments`;
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.collection === targetColName) {
+          let payload: any = {};
+          if (data.db_json) {
+            try { payload = JSON.parse(data.db_json); } catch (e) {}
+          } else if (data.payload_json) {
+            try { payload = JSON.parse(data.payload_json); } catch (e) {}
+          } else {
+            payload = data;
+          }
+          commentsData.push({ id: doc.id, ...payload } as Comment);
+        }
+      });
+
+      const getTimestamp = (val: any) => {
+        if (!val) return 0;
+        if (typeof val.toDate === 'function') return val.toDate().getTime();
+        if (val.seconds) return val.seconds * 1000;
+        const d = new Date(val).getTime();
+        return isNaN(d) ? 0 : d;
+      };
+      commentsData.sort((a, b) => getTimestamp(a.createdAt) - getTimestamp(b.createdAt));
       setComments(commentsData);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, `posts/${selectedPost.id}/comments`);
@@ -207,7 +245,7 @@ export const Forum: React.FC = () => {
     if (!newPostTitle.trim() || !newPostContent.trim()) return;
 
     try {
-      await addDoc(collection(db, 'posts'), {
+      const payload = {
         title: newPostTitle,
         content: newPostContent,
         category: newPostCategory,
@@ -215,8 +253,14 @@ export const Forum: React.FC = () => {
         authorName: auth.currentUser.displayName || auth.currentUser.email || 'Anonymous',
         authorPhotoURL: auth.currentUser.photoURL,
         postImage: attachedImage || '',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      await addDoc(collection(db, 'hybrid_sandbox'), {
+        collection: 'posts',
+        db_json: JSON.stringify(payload),
+        payload_json: JSON.stringify(payload),
+        createdAt: new Date().toISOString()
       });
 
       // Broadcast notification
@@ -280,12 +324,18 @@ export const Forum: React.FC = () => {
 
     const path = `posts/${selectedPost.id}/comments`;
     try {
-      await addDoc(collection(db, path), {
+      const payload = {
         content: newComment,
         authorId: auth.currentUser.uid,
         authorName: auth.currentUser.displayName || auth.currentUser.email || 'Anonymous',
         authorPhotoURL: auth.currentUser.photoURL,
-        createdAt: serverTimestamp()
+        createdAt: new Date().toISOString()
+      };
+      await addDoc(collection(db, 'hybrid_sandbox'), {
+        collection: path,
+        db_json: JSON.stringify(payload),
+        payload_json: JSON.stringify(payload),
+        createdAt: new Date().toISOString()
       });
 
       // Notify post author

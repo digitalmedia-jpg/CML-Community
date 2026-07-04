@@ -33,14 +33,13 @@ import {
 
 // Your Firebase configuration keys
 const firebaseConfig = {
-  apiKey: "AIzaSyC-zbYXWxtoRLMWuvRxMSvhjFALeG1iv8k",
+  apiKey: "AIzaSyC-zbYXWxtoRlMWuvRxMSvhjfALeG1iv8k",
   authDomain: "gen-lang-client-0274279306.firebaseapp.com",
   projectId: "gen-lang-client-0274279306",
   storageBucket: "gen-lang-client-0274279306.firebasestorage.app",
   messagingSenderId: "113045738113",
-  appId: "1:113045738113:web:478956f2b42198ca727380",
-  measurementId: "G-60XDN4JYG7"
-
+  appId: "1:113045738113:web:26f8fc9288f54d23727380",
+  measurementId: "G-H7W90HRVZT"
 };
 
 // Clean Initialization with double-init safeguards
@@ -49,7 +48,7 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 // Force Firestore to talk to your specific database instance cleanly
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true
-}, "ai-studio-b3113e74-1023-4099-b19c-1c2b6c9c399c");
+}, "ai-studio-cmlcommunity-b3113e74-1023-4099-b19c-1c2b6c9c399c");
 (db as any)._isMock = false;
 
 const realAuth = getAuth(app);
@@ -112,11 +111,53 @@ export const arrayUnion = fbArrayUnion;
 export const writeBatch = (customDb?: any) => fbWriteBatch(customDb || db);
 
 export const onAuthStateChanged = (...args: any[]) => {
-  if (args.length === 2) {
-    return fbOnAuthStateChanged(args[0], args[1]);
-  } else {
-    return fbOnAuthStateChanged(auth, args[0]);
+  const actualCallback = args.length === 2 ? args[1] : args[0];
+  const authInstance = args.length === 2 ? args[0] : auth;
+
+  const getMockUser = () => {
+    const customUserStr = localStorage.getItem("cml_custom_user");
+    if (customUserStr) {
+      try {
+        const customUser = JSON.parse(customUserStr);
+        return {
+          uid: "staff_" + customUser.email.toLowerCase().replace(/[@.]/g, "_"),
+          email: customUser.email,
+          displayName: customUser.name,
+          role: customUser.role,
+          photoURL: "",
+          emailVerified: true,
+          isAnonymous: false,
+          metadata: {},
+          providerData: [],
+          providerId: "firebase",
+          tenantId: null,
+          phoneNumber: null,
+          getIdToken: async () => "mock-token",
+          getIdTokenResult: async () => ({ token: "mock-token", claims: {} }),
+          reload: async () => {},
+        };
+      } catch (e) {
+        console.error("Error parsing mock user:", e);
+      }
+    }
+    return null;
+  };
+
+  const initialMock = getMockUser();
+  if (initialMock) {
+    setTimeout(() => {
+      actualCallback(initialMock);
+    }, 20);
   }
+
+  return fbOnAuthStateChanged(authInstance, async (firebaseUser) => {
+    const mockUser = getMockUser();
+    if (mockUser) {
+      actualCallback(mockUser);
+    } else {
+      actualCallback(firebaseUser);
+    }
+  });
 };
 
 export const loginWithEmail = async (email: string, pass: string) => {
@@ -133,6 +174,7 @@ export const loginWithGoogle = async () => {
 };
 
 export const logout = async () => {
+  localStorage.removeItem("cml_custom_user");
   return signOut(auth);
 };
 

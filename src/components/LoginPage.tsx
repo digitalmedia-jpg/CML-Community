@@ -1,43 +1,103 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Mail, Lock, LogIn, ArrowRight, ShieldCheck } from "lucide-react";
-import { loginWithEmail, registerWithEmail, resetPassword, auth, EXPLICIT_CREDENTIALS } from "../lib/firebase";
+import { Mail, Lock, LogIn, ArrowRight, ShieldCheck, CheckCircle2 } from "lucide-react";
+import { loginWithEmail, registerWithEmail, resetPassword, auth, EXPLICIT_CREDENTIALS, doc, setDoc, getDoc, db } from "../lib/firebase";
 
 interface LoginPageProps {
   onLoginSuccess: () => void;
 }
 
+const STAFF_WHITELIST = [
+  { email: "graphics@cml.com.fj", name: "Priyesh Narayan", role: "Administrator" },
+  { email: "rohit@cml.com.fj", name: "Rohit Lal", role: "Administrator" },
+  { email: "manageraccounts@cml.com.fj", name: "Shahil Sharma", role: "Administrator" },
+  { email: "accounts@cml.com.fj", name: "Zaiba Khan", role: "Administrator" },
+  { email: "sales@cml.com.fj", name: "Shwaran Shivani", role: "Administrator" },
+  { email: "itmanager@cml.com.fj", name: "John Singh", role: "Administrator" },
+  { email: "reservations@ramadawailoaloafiji.com", name: "Anjeshni Devi", role: "Administrator" },
+  { email: "mod@ramadawailoaloafiji.com", name: "Charlene Nand", role: "Administrator" },
+  { email: "roomsd@ramadawailoaloafiji.com", name: "Nolau Malo", role: "Administrator" },
+  { email: "hr@cml.com.fj", name: "Neetisa Devi", role: "Administrator" },
+  { email: "digitalmedia@cml.com.fj", name: "Charles Cebujano", role: "Administrator" },
+  { email: "cml@wyndhamgardenwailoaloafiji.com", name: "Charles Cebujano", role: "Administrator" }
+];
+
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [mode, setMode] = useState<"login" | "register" | "reset">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const getMatchedStaff = (input: string) => {
+    if (!input) return null;
+    const trimmed = input.trim().toLowerCase();
+    
+    // Check direct email matches
+    const byEmail = STAFF_WHITELIST.find(u => u.email.toLowerCase() === trimmed);
+    if (byEmail) return byEmail;
+
+    // Check mapping from explicit credentials username
+    const explicitMatched = EXPLICIT_CREDENTIALS.find(u => 
+      u.username.toLowerCase() === trimmed || 
+      u.email.toLowerCase() === trimmed
+    );
+    if (explicitMatched) {
+      const whitelistMatch = STAFF_WHITELIST.find(w => w.email.toLowerCase() === explicitMatched.email.toLowerCase());
+      if (whitelistMatch) return whitelistMatch;
+      return { email: explicitMatched.email, name: explicitMatched.name, role: "Administrator" };
+    }
+
+    return null;
+  };
+
+  const matchedStaff = getMatchedStaff(email);
 
   const handleSandboxBypass = async () => {
     try {
       setLoading(true);
       setError(null);
+      setSuccessMessage(null);
       
       const targetIdentifier = email.trim() || "digitalmedia@cml.com.fj";
-      const isExplicitUser = EXPLICIT_CREDENTIALS.some(u => 
+      
+      let resolvedEmail = targetIdentifier;
+      let name = targetIdentifier.split("@")[0];
+      let role = "Staff";
+
+      const explicitMatched = EXPLICIT_CREDENTIALS.find(u => 
         u.username.toLowerCase() === targetIdentifier.toLowerCase() || 
         u.email.toLowerCase() === targetIdentifier.toLowerCase()
       );
 
-      if (!isExplicitUser) {
-        // Allow only whitelisted domains for authentic security looks
+      if (explicitMatched) {
+        resolvedEmail = explicitMatched.email;
+        name = explicitMatched.name;
+        role = "Administrator";
+      } else {
         const emailDomain = targetIdentifier.toLowerCase().split("@")[1] || "";
         const allowedDomains = ["cml.com.fj", "ramadawailoaloafiji.com", "wyndhamgardenwailoaloafiji.com"];
         
         if (!allowedDomains.includes(emailDomain)) {
           return setError("Unauthorized domain. Sandbox mode is restricted to @cml.com.fj, @ramadawailoaloafiji.com, or @wyndhamgardenwailoaloafiji.com.");
         }
+        
+        const staff = getMatchedStaff(targetIdentifier);
+        if (staff) {
+          resolvedEmail = staff.email;
+          name = staff.name;
+          role = staff.role;
+        }
       }
 
-      console.log("[Sandbox Bypass] Forcing resilient high-fidelity mockup authentication mode for:", targetIdentifier);
-      (auth as any).setMode("mock");
-      await (auth as any).signInWithEmailAndPassword(targetIdentifier, "bypass");
+      console.log("[Sandbox Bypass] Forcing resilient sandbox authentication mode for:", resolvedEmail);
+      localStorage.setItem("cml_custom_user", JSON.stringify({
+        email: resolvedEmail,
+        name: name,
+        role: role
+      }));
       onLoginSuccess();
     } catch (err: any) {
       setError(err.message || "Sandbox access failed");
@@ -51,12 +111,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     if (!email) return setError("Email or Username is required");
     
     const targetIdentifier = email.trim();
-    const isExplicitUser = EXPLICIT_CREDENTIALS.some(u => 
+    const explicitMatched = EXPLICIT_CREDENTIALS.find(u => 
       u.username.toLowerCase() === targetIdentifier.toLowerCase() || 
       u.email.toLowerCase() === targetIdentifier.toLowerCase()
     );
 
-    if (!isExplicitUser) {
+    const resolvedEmail = explicitMatched ? explicitMatched.email : targetIdentifier;
+
+    if (!explicitMatched) {
       const emailDomain = targetIdentifier.toLowerCase().split("@")[1] || "";
       const allowedDomains = ["cml.com.fj", "ramadawailoaloafiji.com", "wyndhamgardenwailoaloafiji.com"];
       
@@ -68,19 +130,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     try {
       setLoading(true);
       setError(null);
+      setSuccessMessage(null);
       
       if (mode === "login") {
-        await loginWithEmail(targetIdentifier, password);
+        await loginWithEmail(resolvedEmail, password);
+        onLoginSuccess();
       } else if (mode === "register") {
         if (password.length < 6) return setError("Password must be at least 6 characters");
-        await registerWithEmail(targetIdentifier, password);
+        if (password !== confirmPassword) return setError("Passwords do not match");
+
+        await registerWithEmail(resolvedEmail, password);
+        onLoginSuccess();
       } else {
-        await resetPassword(targetIdentifier);
-        alert("Password reset email sent!");
+        await resetPassword(resolvedEmail);
+        setSuccessMessage("A password reset link has been successfully dispatched to your email inbox!");
         setMode("login");
       }
-      
-      if (mode !== "reset") onLoginSuccess();
     } catch (err: any) {
       setError(err.message || "Authentication failed");
     } finally {
@@ -148,39 +213,129 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       className="w-full bg-[#242424] border border-neutral-750 pl-11 pr-4 py-2 sm:py-4 text-xs sm:text-sm text-white placeholder:text-gray-500 outline-none focus:border-gold/60 focus:bg-[#2c2c2c] transition-all rounded-sm font-sans"
                     />
                   </div>
+                  
+                  {matchedStaff && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="p-3 bg-amber-500/5 border border-gold/25 rounded-sm space-y-2 mt-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse" />
+                        <span className="text-[10px] uppercase tracking-wider text-gold font-bold">
+                          CML Whitelist: {matchedStaff.name} ({matchedStaff.role})
+                        </span>
+                      </div>
+                      <p className="text-[9px] text-slate-400 leading-normal font-sans normal-case">
+                        First time logging in or don't know your password? Set a new password or send a recovery link directly below:
+                      </p>
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              setLoading(true);
+                              setError(null);
+                              setSuccessMessage(null);
+                              await resetPassword(matchedStaff.email);
+                              setSuccessMessage(`A secure password setup link was successfully sent to ${matchedStaff.email}. Please check your inbox.`);
+                            } catch (err: any) {
+                              setError(err.message || "Failed to send setup email");
+                            } finally {
+                              setLoading(false);
+                            }
+                          }}
+                          className="px-2 py-1 bg-gold/10 border border-gold/30 hover:bg-gold/20 text-gold text-[8px] sm:text-[9px] uppercase tracking-wider font-extrabold rounded-sm transition-all"
+                        >
+                          Send Password Setup Link
+                        </button>
+                        
+                        {mode === "login" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMode("register");
+                              setError(null);
+                              setSuccessMessage(null);
+                            }}
+                            className="px-2 py-1 bg-white/5 border border-white/10 hover:bg-white/10 text-white text-[8px] sm:text-[9px] uppercase tracking-wider font-extrabold rounded-sm transition-all"
+                          >
+                            Set Password Directly
+                          </button>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+
                   <p className="text-[8px] text-slate-400 font-display uppercase tracking-widest pl-1 mt-0.5 leading-relaxed">
                     Login using corporate email or username credentials
                   </p>
                 </div>
 
                 {mode !== "reset" && (
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between items-center pr-1">
-                      <label className="text-[9px] sm:text-[10px] font-display uppercase tracking-widest text-gold font-black opacity-90 pl-1">
-                        Security Phrase
-                      </label>
-                      {mode === "login" && (
-                        <button 
-                          type="button"
-                          onClick={() => setMode("reset")}
-                          className="text-[8px] sm:text-[9px] font-display uppercase tracking-widest text-slate-400 hover:text-gold transition-colors font-bold"
-                        >
-                          Forgot?
-                        </button>
-                      )}
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center pr-1">
+                        <label className="text-[9px] sm:text-[10px] font-display uppercase tracking-widest text-gold font-black opacity-90 pl-1">
+                          {mode === "register" ? "Choose New Password" : "Security Phrase"}
+                        </label>
+                        {mode === "login" && (
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setMode("reset");
+                              setError(null);
+                              setSuccessMessage(null);
+                            }}
+                            className="text-[8px] sm:text-[9px] font-display uppercase tracking-widest text-slate-400 hover:text-gold transition-colors font-bold"
+                          >
+                            Forgot?
+                          </button>
+                        )}
+                      </div>
+                      <div className="relative group">
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-gold transition-colors" size={14} />
+                        <input 
+                          type="password"
+                          required
+                          placeholder="••••••••"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="w-full bg-[#242424] border border-neutral-750 pl-11 pr-4 py-2 sm:py-4 text-xs sm:text-sm text-white placeholder:text-gray-500 outline-none focus:border-gold/60 focus:bg-[#2c2c2c] transition-all rounded-sm font-sans"
+                        />
+                      </div>
                     </div>
-                    <div className="relative group">
-                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-gold transition-colors" size={14} />
-                      <input 
-                        type="password"
-                        required
-                        placeholder="••••••••"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-[#242424] border border-neutral-750 pl-11 pr-4 py-2 sm:py-4 text-xs sm:text-sm text-white placeholder:text-gray-500 outline-none focus:border-gold/60 focus:bg-[#2c2c2c] transition-all rounded-sm font-sans"
-                      />
-                    </div>
+
+                    {mode === "register" && (
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] sm:text-[10px] font-display uppercase tracking-widest text-gold font-black opacity-90 pl-1">
+                          Confirm New Password
+                        </label>
+                        <div className="relative group">
+                          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-gold transition-colors" size={14} />
+                          <input 
+                            type="password"
+                            required
+                            placeholder="••••••••"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            className="w-full bg-[#242424] border border-neutral-750 pl-11 pr-4 py-2 sm:py-4 text-xs sm:text-sm text-white placeholder:text-gray-500 outline-none focus:border-gold/60 focus:bg-[#2c2c2c] transition-all rounded-sm font-sans"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
+                )}
+
+                {successMessage && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="text-[10px] sm:text-[11px] text-emerald-400 font-display uppercase tracking-widest font-black text-center py-3 bg-emerald-500/10 rounded-sm border border-emerald-500/15 px-2.5 leading-relaxed flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 size={14} className="text-emerald-400 flex-shrink-0" />
+                    <span>{successMessage}</span>
+                  </motion.div>
                 )}
 
                 {error && (
@@ -218,7 +373,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     "Processing..."
                   ) : (
                     <>
-                      {mode === "login" ? "Sign In" : mode === "register" ? "Register Identity" : "Send Recovery Link"}
+                      {mode === "login" ? "Sign In" : mode === "register" ? "Register Identity & Password" : "Send Recovery Link"}
                       <ArrowRight size={16} />
                     </>
                   )}
@@ -230,7 +385,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           <div className="mt-14 pt-8 border-t border-white/5 flex flex-col items-center gap-5">
             {mode !== "login" && (
               <button 
-                onClick={() => setMode("login")}
+                onClick={() => {
+                  setMode("login");
+                  setError(null);
+                  setSuccessMessage(null);
+                }}
                 className="text-[11px] font-display uppercase tracking-[0.2em] text-slate-400 hover:text-white transition-all flex items-center gap-2 group font-bold"
               >
                 <LogIn size={14} className="group-hover:text-gold transition-colors" />

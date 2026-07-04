@@ -832,12 +832,31 @@ export default function App() {
   const handleArchiveComplaintConfirm = async () => {
     if (!deleteComplaintTarget) return;
     try {
-      await updateDoc(doc(db, `complaints-${deleteComplaintTarget.propertyId || selectedCompany || 'cml'}`, deleteComplaintTarget.id), {
+      const nextFields = {
+        ...deleteComplaintTarget,
         isArchived: true,
         status: "Archived",
-        archivedAt: new Date(),
+        archivedAt: new Date().toISOString(),
         archivedBy: currentUser?.displayName || currentUser?.email?.split('@')[0] || "Staff"
-      });
+      };
+      
+      try {
+        await updateDoc(doc(db, "hybrid_sandbox", deleteComplaintTarget.id), {
+          db_json: JSON.stringify(nextFields),
+          payload_json: JSON.stringify(nextFields),
+          isArchived: true,
+          status: "Archived",
+          archivedAt: new Date().toISOString(),
+          archivedBy: currentUser?.displayName || currentUser?.email?.split('@')[0] || "Staff"
+        });
+      } catch (err) {
+        await updateDoc(doc(db, `complaints-${deleteComplaintTarget.propertyId || selectedCompany || 'cml'}`, deleteComplaintTarget.id), {
+          isArchived: true,
+          status: "Archived",
+          archivedAt: new Date(),
+          archivedBy: currentUser?.displayName || currentUser?.email?.split('@')[0] || "Staff"
+        });
+      }
       setSelectedComplaint(null);
     } catch (e) {
       console.error(e);
@@ -1337,32 +1356,56 @@ export default function App() {
       
       console.log("[Re-fetch All Data] Manually re-querying Firestore collections for instant reconciliation...");
       
-      // Re-query Complaints for active properties
-      const propertiesList = ['cml', 'ramada', 'wyndham'];
-      const complaintsMap: { [key: string]: any[] } = {};
-
-      for (const prefix of propertiesList) {
-        try {
-          const qComplaints = query(
-            collection(db, `complaints-${prefix}`),
-            orderBy('createdAt', 'desc')
-          );
-          // Explict getDocs queries Firestore collection directly, bypassing cached memory to reconcile entries
-          const snapshot = await getDocs(qComplaints);
-          console.log(`[Re-fetch All Data] Explict query successful for complaints-${prefix}: ${snapshot?.docs?.length || 0} docs.`);
-          
-          if (snapshot && snapshot.docs) {
-            setLastComplaintsSnapshotTime(new Date());
-            const docs = snapshot.docs.map(doc => ({
-              id: doc.id,
-              ...doc.data(),
-              propertyId: prefix
-            }));
-            complaintsMap[prefix] = docs;
-          }
-        } catch (err) {
-          console.warn(`[Re-fetch All Data] Warning during direct complaints-${prefix} query:`, err);
+      // Re-query Complaints for active properties from hybrid_sandbox
+      const complaintsMap: { [key: string]: any[] } = {
+        cml: [],
+        ramada: [],
+        wyndham: []
+      };
+      try {
+        const snapshot = await getDocs(collection(db, "hybrid_sandbox"));
+        console.log(`[Re-fetch All Data] Explict query successful for hybrid_sandbox: ${snapshot?.docs?.length || 0} docs.`);
+        
+        if (snapshot && snapshot.docs) {
+          setLastComplaintsSnapshotTime(new Date());
+          snapshot.docs.forEach((doc) => {
+            const data = doc.data();
+            if (data.collection?.startsWith("complaints-") || doc.id.startsWith("complaints_") || doc.id.startsWith("complaint_") || (data.guestName && data.roomNumber)) {
+              let prefix = "wyndham";
+              if (data.collection) {
+                prefix = data.collection.replace("complaints-", "");
+              } else if (doc.id.startsWith("complaints_")) {
+                const parts = doc.id.split("_");
+                if (parts[1]) prefix = parts[1];
+              } else if (data.propertyId) {
+                prefix = data.propertyId;
+              }
+              
+              let payload: any = {};
+              if (data.db_json) {
+                try { payload = JSON.parse(data.db_json); } catch (e) {}
+              } else if (data.payload_json) {
+                try { payload = JSON.parse(data.payload_json); } catch (e) {}
+              } else {
+                payload = data;
+              }
+              
+              const docObj = {
+                id: doc.id,
+                ...payload,
+                propertyId: prefix
+              };
+              
+              if (complaintsMap[prefix]) {
+                complaintsMap[prefix].push(docObj);
+              } else {
+                complaintsMap[prefix] = [docObj];
+              }
+            }
+          });
         }
+      } catch (err) {
+        console.warn(`[Re-fetch All Data] Warning during direct hybrid_sandbox query:`, err);
       }
 
       // Combine and sort by createdAt desc
@@ -1900,80 +1943,91 @@ export default function App() {
 
     let unsubscribes: (() => void)[] = [];
     try {
-      // All properties are synchronized and visible to all users as requested by Charles
-      const propertiesList = ['cml', 'ramada', 'wyndham'];
-      const complaintsMap: { [key: string]: any[] } = {};
-
-      propertiesList.forEach((prefix) => {
-        const q = query(
-          collection(db, `complaints-${prefix}`),
-          orderBy('createdAt', 'desc')
-        );
+      const q = query(collection(db, "hybrid_sandbox"));
+      
+      const unsub = onSnapshot(q, (snapshot) => {
+        setLastComplaintsSnapshotTime(new Date());
         
-        const unsub = onSnapshot(q, (snapshot) => {
-          setLastComplaintsSnapshotTime(new Date());
-          const isFromCache = (snapshot && snapshot.metadata) ? (snapshot.metadata.fromCache ? 'cache' : 'server') : 'mock';
-          console.log(`[Firestore Listener] Received snapshot update for 'complaints-${prefix}' with ${snapshot?.docs?.length || 0} document(s). Source: ${isFromCache}`);
-          
-          if (snapshot && typeof snapshot.docChanges === 'function') {
-            snapshot.docChanges().forEach((change) => {
-              console.log(`[Firestore Listener] [complaints-${prefix}] Change detected: Type = ${change.type}, Doc ID = ${change.doc.id}`);
-              if (change.type === 'added') {
-                console.log(`[Firestore Listener] Added complaint - Guest: ${change.doc.data()?.guestName}, Type: ${change.doc.data()?.type}, Priority: ${change.doc.data()?.priority}`);
-              }
-            });
-          }
-
-          // Log to Sync Event Log
-          syncLogger.logEvent({
-            collection: `complaints-${prefix}`,
-            action: 'REACTIVE_SUBSCRIPTION_UPDATE',
-            status: 'success',
-            source: isFromCache === 'mock' ? 'sandbox' : 'live',
-            message: `Synchronized ${snapshot?.docs?.length || 0} active records from Firestore gateway successfully`
-          });
-
-          const docs = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            propertyId: prefix
-          }));
-          complaintsMap[prefix] = docs;
-
-          // Combine and sort by createdAt desc
-          const aggregated = Object.values(complaintsMap).flat();
-          const getTimestamp = (val: any) => {
-            if (!val) return 0;
-            if (typeof val.toDate === 'function') return val.toDate().getTime();
-            if (val.seconds) return val.seconds * 1000;
-            const d = new Date(val).getTime();
-            return isNaN(d) ? 0 : d;
-          };
-          aggregated.sort((a, b) => {
-            return getTimestamp(b.createdAt) - getTimestamp(a.createdAt);
-          });
-          setComplaints(aggregated);
-          console.log(`[Firestore Listener] Dynamic aggregated complaint state updated. Total visible complaints across all properties: ${aggregated.length}`);
-        }, (err) => {
-          console.error(`Group-wide complaints subscription failed for collection: complaints-${prefix}`, err);
-          
-          // Log failure to Sync Event Log
-          syncLogger.logEvent({
-            collection: `complaints-${prefix}`,
-            action: 'REACTIVE_SUBSCRIPTION_UPDATE',
-            status: 'failure',
-            source: db && '_isMock' in db ? 'sandbox' : 'live',
-            message: `Subscription warning: ${err?.message || err}`
-          });
-
-          if (err.message.includes('permission')) {
-            setComplaintsError("Access Restricted: Permission to access this recovery registry is limited to management personnel.");
+        const complaintsMap: { [key: string]: any[] } = {
+          cml: [],
+          ramada: [],
+          wyndham: []
+        };
+        
+        snapshot.docs.forEach((doc) => {
+          const data = doc.data();
+          // Check if this document represents a complaint
+          if (data.collection?.startsWith("complaints-") || doc.id.startsWith("complaints_") || doc.id.startsWith("complaint_") || (data.guestName && data.roomNumber)) {
+            let prefix = "wyndham";
+            if (data.collection) {
+              prefix = data.collection.replace("complaints-", "");
+            } else if (doc.id.startsWith("complaints_")) {
+              const parts = doc.id.split("_");
+              if (parts[1]) prefix = parts[1];
+            } else if (data.propertyId) {
+              prefix = data.propertyId;
+            }
+            
+            let payload: any = {};
+            if (data.db_json) {
+              try { payload = JSON.parse(data.db_json); } catch (e) {}
+            } else if (data.payload_json) {
+              try { payload = JSON.parse(data.payload_json); } catch (e) {}
+            } else {
+              payload = data;
+            }
+            
+            const docObj = {
+              id: doc.id,
+              ...payload,
+              propertyId: prefix
+            };
+            
+            if (complaintsMap[prefix]) {
+              complaintsMap[prefix].push(docObj);
+            } else {
+              complaintsMap[prefix] = [docObj];
+            }
           }
         });
-        unsubscribes.push(unsub);
+
+        // Log to Sync Event Log
+        syncLogger.logEvent({
+          collection: `hybrid_sandbox`,
+          action: 'REACTIVE_SUBSCRIPTION_UPDATE',
+          status: 'success',
+          source: 'sandbox',
+          message: `Synchronized ${snapshot?.docs?.length || 0} active records from hybrid_sandbox successfully`
+        });
+
+        // Combine and sort by createdAt desc
+        const aggregated = Object.values(complaintsMap).flat();
+        const getTimestamp = (val: any) => {
+          if (!val) return 0;
+          if (typeof val.toDate === 'function') return val.toDate().getTime();
+          if (val.seconds) return val.seconds * 1000;
+          const d = new Date(val).getTime();
+          return isNaN(d) ? 0 : d;
+        };
+        aggregated.sort((a, b) => {
+          return getTimestamp(b.createdAt) - getTimestamp(a.createdAt);
+        });
+        setComplaints(aggregated);
+        console.log(`[Firestore Listener] Dynamic aggregated complaint state updated from hybrid_sandbox. Total complaints: ${aggregated.length}`);
+      }, (err) => {
+        console.error(`Group-wide complaints subscription failed for collection: hybrid_sandbox`, err);
+        
+        syncLogger.logEvent({
+          collection: `hybrid_sandbox`,
+          action: 'REACTIVE_SUBSCRIPTION_UPDATE',
+          status: 'failure',
+          source: 'sandbox',
+          message: `Subscription warning: ${err?.message || err}`
+        });
       });
+      unsubscribes.push(unsub);
     } catch (err) {
-      console.error("Failed to construct complaints query:", err);
+      console.error("Failed to construct complaints query from hybrid_sandbox:", err);
       setComplaintsError("Failed to synchronize complaints database. Please check permissions.");
     }
     
@@ -2019,17 +2073,46 @@ export default function App() {
   const handleQuickApproveHOD = async (complaint: any) => {
     try {
       const authorName = currentUser?.displayName || currentUser?.email?.toLowerCase().split('@')[0] || "HOD Manager";
-      await updateDoc(doc(db, `complaints-${complaint.propertyId || selectedCompany || 'cml'}`, complaint.id), {
-        hodApproved: true,
-        hodApprovedBy: authorName,
-        hodApprovedAt: new Date(),
-        status: "HOD Approved",
-        updates: arrayUnion({
+      const nextUpdates = [
+        ...(complaint.updates || []),
+        {
           message: `STEP 1 APPROVED: Department Head (HOD) approval granted by ${authorName}.`,
           authorName: "SYSTEM_ACTION",
-          timestamp: new Date()
-        })
-      });
+          timestamp: new Date().toISOString()
+        }
+      ];
+      const nextFields = {
+        ...complaint,
+        hodApproved: true,
+        hodApprovedBy: authorName,
+        hodApprovedAt: new Date().toISOString(),
+        status: "HOD Approved",
+        updates: nextUpdates
+      };
+
+      try {
+        await updateDoc(doc(db, "hybrid_sandbox", complaint.id), {
+          db_json: JSON.stringify(nextFields),
+          payload_json: JSON.stringify(nextFields),
+          hodApproved: true,
+          hodApprovedBy: authorName,
+          hodApprovedAt: new Date().toISOString(),
+          status: "HOD Approved",
+          updates: nextUpdates
+        });
+      } catch (err) {
+        await updateDoc(doc(db, `complaints-${complaint.propertyId || selectedCompany || 'cml'}`, complaint.id), {
+          hodApproved: true,
+          hodApprovedBy: authorName,
+          hodApprovedAt: new Date(),
+          status: "HOD Approved",
+          updates: arrayUnion({
+            message: `STEP 1 APPROVED: Department Head (HOD) approval granted by ${authorName}.`,
+            authorName: "SYSTEM_ACTION",
+            timestamp: new Date()
+          })
+        });
+      }
 
       // Trigger background notification sync
       fetch("/api/notify-complaint-update", {
@@ -2052,20 +2135,55 @@ export default function App() {
 
   const handleQuickApproveSuperAdmin = async (complaint: any, name: string, dept: string) => {
     try {
-      await updateDoc(doc(db, `complaints-${complaint.propertyId || selectedCompany || 'cml'}`, complaint.id), {
-        superAdminApproved: true,
-        superAdminApprovedBy: name,
-        superAdminApprovedAt: new Date(),
-        status: "Resolved",
-        resolvedAt: serverTimestamp(),
-        resolvedBy: name,
-        resolvedDepartment: dept,
-        updates: arrayUnion({
+      const nextUpdates = [
+        ...(complaint.updates || []),
+        {
           message: `STEP 2 RESOLVED: Final SuperAdmin sign-off granted by ${name} (${dept}).`,
           authorName: "SYSTEM_ACTION",
-          timestamp: new Date()
-        })
-      });
+          timestamp: new Date().toISOString()
+        }
+      ];
+      const nextFields = {
+        ...complaint,
+        superAdminApproved: true,
+        superAdminApprovedBy: name,
+        superAdminApprovedAt: new Date().toISOString(),
+        status: "Resolved",
+        resolvedAt: new Date().toISOString(),
+        resolvedBy: name,
+        resolvedDepartment: dept,
+        updates: nextUpdates
+      };
+
+      try {
+        await updateDoc(doc(db, "hybrid_sandbox", complaint.id), {
+          db_json: JSON.stringify(nextFields),
+          payload_json: JSON.stringify(nextFields),
+          superAdminApproved: true,
+          superAdminApprovedBy: name,
+          superAdminApprovedAt: new Date().toISOString(),
+          status: "Resolved",
+          resolvedAt: new Date().toISOString(),
+          resolvedBy: name,
+          resolvedDepartment: dept,
+          updates: nextUpdates
+        });
+      } catch (err) {
+        await updateDoc(doc(db, `complaints-${complaint.propertyId || selectedCompany || 'cml'}`, complaint.id), {
+          superAdminApproved: true,
+          superAdminApprovedBy: name,
+          superAdminApprovedAt: new Date(),
+          status: "Resolved",
+          resolvedAt: serverTimestamp(),
+          resolvedBy: name,
+          resolvedDepartment: dept,
+          updates: arrayUnion({
+            message: `STEP 2 RESOLVED: Final SuperAdmin sign-off granted by ${name} (${dept}).`,
+            authorName: "SYSTEM_ACTION",
+            timestamp: new Date()
+          })
+        });
+      }
 
       // Trigger background webhook of Google Chat & Emails
       fetch("/api/notify-complaint-update", {
@@ -2572,13 +2690,20 @@ export default function App() {
         reporterRole: compiledRole
       };
 
-      await addDoc(collection(db, `complaints-${targetPropertyId}`), {
+      const docPayload = {
         ...payloadForm,
         status: "Pending",
         authorId: currentUser.uid,
         authorName: currentUser.displayName || currentUser.email?.split('@')[0],
-        createdAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
         propertyId: targetPropertyId
+      };
+
+      await addDoc(collection(db, "hybrid_sandbox"), {
+        collection: `complaints-${targetPropertyId}`,
+        db_json: JSON.stringify(docPayload),
+        payload_json: JSON.stringify(docPayload),
+        createdAt: new Date().toISOString()
       });
 
       // Log success to Sync Event Log
@@ -2709,12 +2834,18 @@ export default function App() {
 
       const seedProperty = selectedCompany || 'cml';
       for (const c of sampleComplaints) {
-        await addDoc(collection(db, `complaints-${seedProperty}`), {
+        const payload = {
           ...c,
           authorId: currentUser.uid,
           authorName: "System Seed",
           propertyId: seedProperty,
-          createdAt: serverTimestamp()
+          createdAt: new Date().toISOString()
+        };
+        await addDoc(collection(db, "hybrid_sandbox"), {
+          collection: `complaints-${seedProperty}`,
+          db_json: JSON.stringify(payload),
+          payload_json: JSON.stringify(payload),
+          createdAt: new Date().toISOString()
         });
       }
 
@@ -6388,13 +6519,34 @@ export default function App() {
                                                   try {
 
                                                     const messageContent = newStaffReply;
-                                                    await updateDoc(doc(db, `complaints-${selectedComplaint.propertyId || selectedCompany || 'cml'}`, selectedComplaint.id), {
-                                                      updates: arrayUnion({
+                                                    const nextUpdates = [
+                                                      ...(selectedComplaint.updates || []),
+                                                      {
                                                         message: messageContent,
                                                         authorName: currentUser.displayName || currentUser.email?.split('@')[0],
-                                                        timestamp: new Date() // Client side date for immediate display, but arrayUnion is slightly complex with serverTimestamp in arrays
-                                                      })
-                                                    });
+                                                        timestamp: new Date().toISOString()
+                                                      }
+                                                    ];
+                                                    const nextFields = {
+                                                      ...selectedComplaint,
+                                                      updates: nextUpdates
+                                                    };
+
+                                                    try {
+                                                      await updateDoc(doc(db, "hybrid_sandbox", selectedComplaint.id), {
+                                                        db_json: JSON.stringify(nextFields),
+                                                        payload_json: JSON.stringify(nextFields),
+                                                        updates: nextUpdates
+                                                      });
+                                                    } catch (err) {
+                                                      await updateDoc(doc(db, `complaints-${selectedComplaint.propertyId || selectedCompany || 'cml'}`, selectedComplaint.id), {
+                                                        updates: arrayUnion({
+                                                          message: messageContent,
+                                                          authorName: currentUser.displayName || currentUser.email?.split('@')[0],
+                                                          timestamp: new Date()
+                                                        })
+                                                      });
+                                                    }
 
                                                     // Safe background trigger of Google Chat webhook proxy
                                                     fetch("/api/notify-complaint-update", {
@@ -6465,15 +6617,40 @@ export default function App() {
                                           onClick={async () => {
                                             if (!dispatchComplaintForm.dispatchedTo) return;
                                             try {
-                                              await updateDoc(doc(db, `complaints-${selectedComplaint.propertyId || selectedCompany || 'cml'}`, selectedComplaint.id), {
-                                                status: "In Progress",
-                                                dispatchedTo: dispatchComplaintForm.dispatchedTo,
-                                                updates: arrayUnion({
+                                              const nextUpdates = [
+                                                ...(selectedComplaint.updates || []),
+                                                {
                                                   message: `Issue dispatched to: ${dispatchComplaintForm.dispatchedTo}`,
                                                   authorName: "SYSTEM_ACTION",
-                                                  timestamp: new Date()
-                                                })
-                                              });
+                                                  timestamp: new Date().toISOString()
+                                                }
+                                              ];
+                                              const nextFields = {
+                                                ...selectedComplaint,
+                                                status: "In Progress",
+                                                dispatchedTo: dispatchComplaintForm.dispatchedTo,
+                                                updates: nextUpdates
+                                              };
+
+                                              try {
+                                                await updateDoc(doc(db, "hybrid_sandbox", selectedComplaint.id), {
+                                                  db_json: JSON.stringify(nextFields),
+                                                  payload_json: JSON.stringify(nextFields),
+                                                  status: "In Progress",
+                                                  dispatchedTo: dispatchComplaintForm.dispatchedTo,
+                                                  updates: nextUpdates
+                                                });
+                                              } catch (err) {
+                                                await updateDoc(doc(db, `complaints-${selectedComplaint.propertyId || selectedCompany || 'cml'}`, selectedComplaint.id), {
+                                                  status: "In Progress",
+                                                  dispatchedTo: dispatchComplaintForm.dispatchedTo,
+                                                  updates: arrayUnion({
+                                                    message: `Issue dispatched to: ${dispatchComplaintForm.dispatchedTo}`,
+                                                    authorName: "SYSTEM_ACTION",
+                                                    timestamp: new Date()
+                                                  })
+                                                });
+                                              }
                                               setSelectedComplaint((prev: any) => ({
                                                 ...prev,
                                                 status: "In Progress",
@@ -6832,14 +7009,37 @@ export default function App() {
                                     }
 
                                     // Firestore update
-                                    await updateDoc(doc(db, `complaints-${targetPropertyId}`, selectedComplaint.id), {
-                                       ...updateData,
-                                       updates: arrayUnion({
+                                    const nextUpdates = [
+                                       ...(selectedComplaint.updates || []),
+                                       {
                                           message: logMsg,
                                           authorName: "SYSTEM_ACTION",
-                                          timestamp: new Date()
-                                       })
-                                    });
+                                          timestamp: new Date().toISOString()
+                                       }
+                                    ];
+                                    const nextFields = {
+                                       ...selectedComplaint,
+                                       ...updateData,
+                                       updates: nextUpdates
+                                    };
+
+                                    try {
+                                       await updateDoc(doc(db, "hybrid_sandbox", selectedComplaint.id), {
+                                          db_json: JSON.stringify(nextFields),
+                                          payload_json: JSON.stringify(nextFields),
+                                          ...updateData,
+                                          updates: nextUpdates
+                                       });
+                                    } catch (err) {
+                                       await updateDoc(doc(db, `complaints-${targetPropertyId}`, selectedComplaint.id), {
+                                          ...updateData,
+                                          updates: arrayUnion({
+                                             message: logMsg,
+                                             authorName: "SYSTEM_ACTION",
+                                             timestamp: new Date()
+                                          })
+                                       });
+                                    }
 
                                     // Webhook update
                                     fetch("/api/notify-complaint-update", {
