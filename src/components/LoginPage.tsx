@@ -61,8 +61,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       setError(null);
       setSuccessMessage(null);
       
-      const targetIdentifier = email.trim() || "digitalmedia@cml.com.fj";
+      let targetIdentifier = email.trim() || "digitalmedia@cml.com.fj";
       
+      // If it's a username without domain, attempt to find its explicit credentials or fallback to @cml.com.fj domain
+      if (!targetIdentifier.includes("@")) {
+        const explicitMatched = EXPLICIT_CREDENTIALS.find(u => u.username.toLowerCase() === targetIdentifier.toLowerCase());
+        if (explicitMatched) {
+          targetIdentifier = explicitMatched.email;
+        } else {
+          targetIdentifier = `${targetIdentifier}@cml.com.fj`;
+        }
+      }
+
       let resolvedEmail = targetIdentifier;
       let name = targetIdentifier.split("@")[0];
       let role = "Staff";
@@ -73,9 +83,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       );
 
       if (explicitMatched) {
+        const staff = getMatchedStaff(targetIdentifier);
         resolvedEmail = explicitMatched.email;
-        name = explicitMatched.name;
-        role = "Administrator";
+        name = staff ? staff.name : explicitMatched.name;
+        role = staff ? staff.role : "Administrator";
       } else {
         const emailDomain = targetIdentifier.toLowerCase().split("@")[1] || "";
         const allowedDomains = ["cml.com.fj", "ramadawailoaloafiji.com", "wyndhamgardenwailoaloafiji.com"];
@@ -133,6 +144,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       setSuccessMessage(null);
       
       if (mode === "login") {
+        if (explicitMatched) {
+          if (password === explicitMatched.password) {
+            const matched = getMatchedStaff(targetIdentifier) || { email: explicitMatched.email, name: explicitMatched.name, role: "Administrator" };
+            console.log("[Authentication] Predefined credentials verified. Logging in locally:", matched.email);
+            localStorage.setItem("cml_custom_user", JSON.stringify({
+              email: matched.email,
+              name: matched.name,
+              role: matched.role
+            }));
+            onLoginSuccess();
+            return;
+          } else {
+            return setError("Invalid password for this pre-registered corporate username/email. Please try again.");
+          }
+        }
         await loginWithEmail(resolvedEmail, password);
         onLoginSuccess();
       } else if (mode === "register") {
