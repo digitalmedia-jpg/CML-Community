@@ -1370,19 +1370,42 @@ export default function App() {
           setLastComplaintsSnapshotTime(new Date());
           snapshot.docs.forEach((doc) => {
             const data = doc.data();
-            if (data.collection?.startsWith("complaints-") || doc.id.startsWith("complaints_") || doc.id.startsWith("complaint_") || (data.guestName && data.roomNumber)) {
+            const isComplaint = 
+              doc.id.startsWith("complaints-") || 
+              doc.id.startsWith("complaints_") || 
+              doc.id.startsWith("complaint-") || 
+              doc.id.startsWith("complaint_") || 
+              (data.collection && typeof data.collection === "string" && data.collection.startsWith("complaints-")) ||
+              (data.guestName && data.roomNumber) ||
+              (data.payload && typeof data.payload === "object" && (data.payload.guestName || data.payload.roomNumber));
+
+            if (isComplaint) {
               let prefix = "wyndham";
-              if (data.collection) {
+              if (data.collection && typeof data.collection === "string") {
                 prefix = data.collection.replace("complaints-", "");
+              } else if (doc.id.includes("___")) {
+                const beforeTriple = doc.id.split("___")[0];
+                if (beforeTriple.startsWith("complaints-")) {
+                  prefix = beforeTriple.replace("complaints-", "");
+                } else if (beforeTriple.startsWith("complaints_")) {
+                  prefix = beforeTriple.replace("complaints_", "");
+                }
               } else if (doc.id.startsWith("complaints_")) {
                 const parts = doc.id.split("_");
                 if (parts[1]) prefix = parts[1];
+              } else if (doc.id.startsWith("complaints-")) {
+                const parts = doc.id.split("-");
+                if (parts[1]) prefix = parts[1];
               } else if (data.propertyId) {
                 prefix = data.propertyId;
+              } else if (data.payload?.propertyId) {
+                prefix = data.payload.propertyId;
               }
               
               let payload: any = {};
-              if (data.db_json) {
+              if (data.payload && typeof data.payload === "object") {
+                payload = data.payload;
+              } else if (data.db_json) {
                 try { payload = JSON.parse(data.db_json); } catch (e) {}
               } else if (data.payload_json) {
                 try { payload = JSON.parse(data.payload_json); } catch (e) {}
@@ -1957,19 +1980,42 @@ export default function App() {
         snapshot.docs.forEach((doc) => {
           const data = doc.data();
           // Check if this document represents a complaint
-          if (data.collection?.startsWith("complaints-") || doc.id.startsWith("complaints_") || doc.id.startsWith("complaint_") || (data.guestName && data.roomNumber)) {
+          const isComplaint = 
+            doc.id.startsWith("complaints-") || 
+            doc.id.startsWith("complaints_") || 
+            doc.id.startsWith("complaint-") || 
+            doc.id.startsWith("complaint_") || 
+            (data.collection && typeof data.collection === "string" && data.collection.startsWith("complaints-")) ||
+            (data.guestName && data.roomNumber) ||
+            (data.payload && typeof data.payload === "object" && (data.payload.guestName || data.payload.roomNumber));
+
+          if (isComplaint) {
             let prefix = "wyndham";
-            if (data.collection) {
+            if (data.collection && typeof data.collection === "string") {
               prefix = data.collection.replace("complaints-", "");
+            } else if (doc.id.includes("___")) {
+              const beforeTriple = doc.id.split("___")[0];
+              if (beforeTriple.startsWith("complaints-")) {
+                prefix = beforeTriple.replace("complaints-", "");
+              } else if (beforeTriple.startsWith("complaints_")) {
+                prefix = beforeTriple.replace("complaints_", "");
+              }
             } else if (doc.id.startsWith("complaints_")) {
               const parts = doc.id.split("_");
               if (parts[1]) prefix = parts[1];
+            } else if (doc.id.startsWith("complaints-")) {
+              const parts = doc.id.split("-");
+              if (parts[1]) prefix = parts[1];
             } else if (data.propertyId) {
               prefix = data.propertyId;
+            } else if (data.payload?.propertyId) {
+              prefix = data.payload.propertyId;
             }
             
             let payload: any = {};
-            if (data.db_json) {
+            if (data.payload && typeof data.payload === "object") {
+              payload = data.payload;
+            } else if (data.db_json) {
               try { payload = JSON.parse(data.db_json); } catch (e) {}
             } else if (data.payload_json) {
               try { payload = JSON.parse(data.payload_json); } catch (e) {}

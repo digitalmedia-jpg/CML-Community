@@ -705,9 +705,20 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
         snapshot.docChanges().forEach(async (change) => {
           if (change.type === "added") {
             const data = change.doc.data();
-            if (data.collection?.startsWith("complaints-") || change.doc.id.startsWith("complaints_") || change.doc.id.startsWith("complaint_")) {
+            const isComplaint = 
+              change.doc.id.startsWith("complaints-") || 
+              change.doc.id.startsWith("complaints_") || 
+              change.doc.id.startsWith("complaint-") || 
+              change.doc.id.startsWith("complaint_") || 
+              (data.collection && typeof data.collection === "string" && data.collection.startsWith("complaints-")) ||
+              (data.guestName && data.roomNumber) ||
+              (data.payload && typeof data.payload === "object" && (data.payload.guestName || data.payload.roomNumber));
+
+            if (isComplaint) {
               let complaintData: any = {};
-              if (data.db_json) {
+              if (data.payload && typeof data.payload === "object") {
+                complaintData = data.payload;
+              } else if (data.db_json) {
                 try { complaintData = JSON.parse(data.db_json); } catch (e) {}
               } else if (data.payload_json) {
                 try { complaintData = JSON.parse(data.payload_json); } catch (e) {}
@@ -722,7 +733,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                 const payload = {
                   senderName: "🛡️ Guest Recovery Monitor",
                   senderEmail: "recovery-sync@cml.com.fj",
-                  content: `🚨 *New Complaint Logged:* Guest *${complaintData.guestName || "Anonymous"}* in Room *${complaintData.roomNumber || "N/A"}*\n_Category: ${complaintData.type || "Service"} | Priority: ${complaintData.priority}_\n\n"${complaintData.description.substring(0, 150)}..."`,
+                  content: `🚨 *New Complaint Logged:* Guest *${complaintData.guestName || "Anonymous"}* in Room *${complaintData.roomNumber || "N/A"}*\n_Category: ${complaintData.type || "Service"} | Priority: ${complaintData.priority || "Medium"}_\n\n"${(complaintData.description || "").substring(0, 150)}..."`,
                   timestamp: new Date().toISOString()
                 };
                 await addDoc(collection(db, "hybrid_sandbox"), {
