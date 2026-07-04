@@ -814,14 +814,23 @@ export default function App() {
     };
 
     // Run immediately on app mount
+    const isDevEnv = window.location.hostname === "localhost" || 
+                     window.location.hostname.includes("ais-dev") || 
+                     window.location.hostname.includes("ais-pre");
+
+    if (isDevEnv) {
+      console.log("[Auto-Updater] Auto-updater polling disabled in the development sandbox to prevent rate-limiting.");
+      return;
+    }
+
     const startupTimeout = setTimeout(() => {
       checkVersion();
-    }, 4000);
+    }, 10000);
 
-    // Then check periodically every 25 seconds for any new publishes in the background
+    // Then check periodically every 5 minutes in production
     checkInterval = setInterval(() => {
       checkVersion();
-    }, 25000);
+    }, 300000);
 
     return () => {
       clearTimeout(startupTimeout);

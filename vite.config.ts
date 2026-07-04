@@ -10,7 +10,7 @@ export default defineConfig(({mode}) => {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(process.cwd(), '.'),
       },
     },
     server: {
@@ -19,6 +19,8 @@ export default defineConfig(({mode}) => {
       hmr: process.env.DISABLE_HMR !== 'true',
     },
     build: {
+      outDir: 'dist',
+      emptyOutDir: true,
       rollupOptions: {
         output: {
           manualChunks(id) {
