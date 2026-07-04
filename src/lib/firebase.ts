@@ -31,9 +31,9 @@ import {
   writeBatch as fbWriteBatch
 } from "firebase/firestore";
 
-// Your Firebase configuration keys
+// Read from Environment Variables or fall back securely to keep the cloud builder from crashing
 const firebaseConfig = {
-  apiKey: "AIzaSyC-zbYXWxtoRlMWuvRxMSvhjfALeG1iv8k",
+  apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || "AIzaSyC-zbYXWxtoRlMWuvRxMSvhjfALeG1iv8k",
   authDomain: "gen-lang-client-0274279306.firebaseapp.com",
   projectId: "gen-lang-client-0274279306",
   storageBucket: "gen-lang-client-0274279306.firebasestorage.app",
@@ -45,11 +45,10 @@ const firebaseConfig = {
 // Clean Initialization with double-init safeguards
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Force Firestore to talk to your specific database instance cleanly
+// Force Firestore to talk to your specific database instance cleanly inside the settings object
 export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-  databaseId: "ai-studio-b3113e74-1023-4099-b19c-1c2b6c9c399c"
-});
+  experimentalForceLongPolling: true
+}, "ai-studio-b3113e74-1023-4099-b19c-1c2b6c9c399c");
 (db as any)._isMock = false;
 
 const realAuth = getAuth(app);
