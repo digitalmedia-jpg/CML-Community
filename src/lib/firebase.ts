@@ -67,6 +67,9 @@ export class MockQuery {
 const safeObjectProxy = (target: any): any => {
   return new Proxy(target, {
     get: (obj, prop) => {
+      if (typeof prop === 'symbol' || prop === 'toJSON' || prop === 'constructor' || prop === 'then') {
+        return obj[prop];
+      }
       if (prop in obj) {
         const val = obj[prop];
         if (typeof val === 'object' && val !== null) return safeObjectProxy(val);
@@ -169,6 +172,13 @@ function triggerListeners(path: string) {
     listenersMap[path].forEach(cb => {
       try { cb(); } catch (e) {}
     });
+  }
+  if (path.startsWith("complaints-") || path.startsWith("posts")) {
+    if (listenersMap["hybrid_sandbox"]) {
+      listenersMap["hybrid_sandbox"].forEach(cb => {
+        try { cb(); } catch (e) {}
+      });
+    }
   }
 }
 
@@ -495,9 +505,63 @@ export const getDoc = async (docRef: any) => {
   return new MockDocSnapshot(docRef, data);
 };
 
+function getVirtualHybridSandboxDocs(): MockDocSnapshot[] {
+  const list: MockDocSnapshot[] = [];
+  for (const [k, v] of Object.entries(MOCK_STORE)) {
+    if (k.startsWith("complaints-") || k.startsWith("posts")) {
+      const parts = k.split('/');
+      if (parts.length >= 2) {
+        const collectionName = parts.slice(0, -1).join('/');
+        const docId = parts[parts.length - 1];
+        
+        // Synthesize virtual hybrid_sandbox document ID
+        const virtualDocId = k.replace(/\//g, "___");
+        const docRef = new MockDocRef("hybrid_sandbox", virtualDocId);
+        
+        const docData = {
+          collection: collectionName,
+          db_json: JSON.stringify(v),
+          payload_json: JSON.stringify(v),
+          createdAt: v.createdAt || new Date().toISOString(),
+          ...v
+        };
+        
+        list.push(new MockDocSnapshot(docRef, docData));
+      }
+    }
+  }
+  return list;
+}
+
+function normalizeWrite(pathKey: string, data: any) {
+  if (pathKey.startsWith("hybrid_sandbox/")) {
+    const virtualDocId = pathKey.replace("hybrid_sandbox/", "");
+    if (virtualDocId.includes("___")) {
+      const parts = virtualDocId.split("___");
+      const collectionName = parts.slice(0, -1).join('/');
+      const docId = parts[parts.length - 1];
+      const directKey = `${collectionName}/${docId}`;
+      
+      let payload = data;
+      if (data.db_json) {
+        try { payload = JSON.parse(data.db_json); } catch (e) {}
+      } else if (data.payload_json) {
+        try { payload = JSON.parse(data.payload_json); } catch (e) {}
+      }
+      
+      return { key: directKey, value: payload };
+    }
+  }
+  return null;
+}
+
 export const getDocs = async (queryOrRef: any) => {
   const collectionPath = queryOrRef.path || queryOrRef.collectionRef?.path || '';
   const matchedDocs: MockDocSnapshot[] = [];
+  
+  if (collectionPath === "hybrid_sandbox") {
+    matchedDocs.push(...getVirtualHybridSandboxDocs());
+  }
   
   for (const [k, v] of Object.entries(MOCK_STORE)) {
     if (k.startsWith(`${collectionPath}/`)) {
@@ -512,6 +576,18 @@ export const getDocs = async (queryOrRef: any) => {
 
 export const setDoc = async (docRef: any, data: any, options?: any) => {
   const pathKey = docRef.path;
+  const normalized = normalizeWrite(pathKey, data);
+  if (normalized) {
+    if (options?.merge && MOCK_STORE[normalized.key]) {
+      MOCK_STORE[normalized.key] = { ...MOCK_STORE[normalized.key], ...normalized.value };
+    } else {
+      MOCK_STORE[normalized.key] = normalized.value;
+    }
+    MOCK_STORE[pathKey] = data;
+    saveMockStore(normalized.key);
+    return Promise.resolve();
+  }
+
   if (options?.merge && MOCK_STORE[pathKey]) {
     MOCK_STORE[pathKey] = { ...MOCK_STORE[pathKey], ...data };
   } else {
@@ -523,14 +599,47 @@ export const setDoc = async (docRef: any, data: any, options?: any) => {
 
 export const updateDoc = async (docRef: any, data: any) => {
   const pathKey = docRef.path;
+  const normalized = normalizeWrite(pathKey, data);
+  if (normalized) {
+    MOCK_STORE[normalized.key] = { ...(MOCK_STORE[normalized.key] || {}), ...normalized.value };
+    MOCK_STORE[pathKey] = { ...(MOCK_STORE[pathKey] || {}), ...data };
+    saveMockStore(normalized.key);
+    return Promise.resolve();
+  }
+
   MOCK_STORE[pathKey] = { ...(MOCK_STORE[pathKey] || {}), ...data };
   saveMockStore(pathKey);
   return Promise.resolve();
 };
 
 export const addDoc = async (collectionRef: any, data: any) => {
+  const collectionPath = collectionRef.path || '';
+  if (collectionPath === "hybrid_sandbox") {
+    let targetCollection = data.collection;
+    if (targetCollection && (targetCollection.startsWith("complaints-") || targetCollection.startsWith("posts"))) {
+      let payload = data;
+      if (data.db_json) {
+        try { payload = JSON.parse(data.db_json); } catch (e) {}
+      } else if (data.payload_json) {
+        try { payload = JSON.parse(data.payload_json); } catch (e) {}
+      }
+      
+      const newId = payload.id || (targetCollection.startsWith("complaints-") ? "comp_" : (targetCollection.endsWith("/comments") ? "comment_" : "post_")) + Math.random().toString(36).substring(2, 11);
+      const directKey = `${targetCollection}/${newId}`;
+      
+      MOCK_STORE[directKey] = {
+        ...payload,
+        id: newId,
+        createdAt: payload.createdAt || new Date().toISOString()
+      };
+      
+      saveMockStore(directKey);
+      return new MockDocRef("hybrid_sandbox", directKey.replace(/\//g, "___"));
+    }
+  }
+
   const newId = Math.random().toString(36).substring(2, 11);
-  const pathKey = `${collectionRef.path}/${newId}`;
+  const pathKey = `${collectionPath}/${newId}`;
   MOCK_STORE[pathKey] = data;
   saveMockStore(pathKey);
   return new MockDocRef(collectionRef.path, newId);
@@ -538,6 +647,21 @@ export const addDoc = async (collectionRef: any, data: any) => {
 
 export const deleteDoc = async (docRef: any) => {
   const pathKey = docRef.path;
+  if (pathKey.startsWith("hybrid_sandbox/")) {
+    const virtualDocId = pathKey.replace("hybrid_sandbox/", "");
+    if (virtualDocId.includes("___")) {
+      const parts = virtualDocId.split("___");
+      const collectionName = parts.slice(0, -1).join('/');
+      const docId = parts[parts.length - 1];
+      const directKey = `${collectionName}/${docId}`;
+      
+      delete MOCK_STORE[directKey];
+      delete MOCK_STORE[pathKey];
+      saveMockStore(directKey, true);
+      return Promise.resolve();
+    }
+  }
+
   delete MOCK_STORE[pathKey];
   saveMockStore(pathKey, true);
   return Promise.resolve();
@@ -555,6 +679,11 @@ export const onSnapshot = (queryOrRef: any, ...args: any[]) => {
       callback(new MockDocSnapshot(queryOrRef, MOCK_STORE[queryOrRef.path]));
     } else {
       const matchedDocs: MockDocSnapshot[] = [];
+      
+      if (collectionPath === "hybrid_sandbox") {
+        matchedDocs.push(...getVirtualHybridSandboxDocs());
+      }
+      
       for (const [k, v] of Object.entries(MOCK_STORE)) {
         if (k.startsWith(`${collectionPath}/`)) {
           const parts = k.replace(`${collectionPath}/`, '').split('/');

@@ -166,22 +166,22 @@ service cloud.firestore {
     // 5. Dynamic & Multi-Tenant Sandbox Collections (Allows read/write for both JS SDK client & anonymous server sync)
     match /{collectionName}/{document=**} {
       allow read, write: if 
-        collectionName.startsWith("complaints-") ||
-        collectionName.startsWith("lost-and-found-") ||
-        collectionName.startsWith("restaurant-guests-") ||
-        collectionName.startsWith("hrms-") ||
-        collectionName.startsWith("cml-signin-") ||
-        collectionName.startsWith("cml-geofence-") ||
-        collectionName.startsWith("huddle-tasks-") ||
-        collectionName.startsWith("mailer-contacts-") ||
-        collectionName.startsWith("mailer-logs-") ||
-        collectionName.startsWith("flipbooks-") ||
-        collectionName.startsWith("newsletter-subscribers-") ||
-        collectionName.startsWith("rewards-config-") ||
-        collectionName.startsWith("forms-") ||
-        collectionName.startsWith("cml-forms-submissions-") ||
-        collectionName.startsWith("google-chat-messages-") ||
-        collectionName.startsWith("business-cards-") ||
+        collectionName.matches('^complaints-.*') ||
+        collectionName.matches('^lost-and-found-.*') ||
+        collectionName.matches('^restaurant-guests-.*') ||
+        collectionName.matches('^hrms-.*') ||
+        collectionName.matches('^cml-signin-.*') ||
+        collectionName.matches('^cml-geofence-.*') ||
+        collectionName.matches('^huddle-tasks-.*') ||
+        collectionName.matches('^mailer-contacts-.*') ||
+        collectionName.matches('^mailer-logs-.*') ||
+        collectionName.matches('^flipbooks-.*') ||
+        collectionName.matches('^newsletter-subscribers-.*') ||
+        collectionName.matches('^rewards-config-.*') ||
+        collectionName.matches('^forms-.*') ||
+        collectionName.matches('^cml-forms-submissions-.*') ||
+        collectionName.matches('^google-chat-messages-.*') ||
+        collectionName.matches('^business-cards-.*') ||
         collectionName == "daily-news" ||
         collectionName == "ramada_form_submissions" ||
         collectionName == "managed_cases" ||

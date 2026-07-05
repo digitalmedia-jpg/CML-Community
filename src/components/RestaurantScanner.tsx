@@ -43,6 +43,28 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import RewardsConfigurator from "./RewardsConfigurator";
 
+function parseFirebaseDate(val: any): Date {
+  if (!val) return new Date();
+  if (val instanceof Date) return val;
+  if (typeof val.toDate === "function") {
+    try {
+      return val.toDate();
+    } catch (e) {}
+  }
+  if (val && typeof val === "object") {
+    if (typeof val.seconds === "number") {
+      return new Date(val.seconds * 1000);
+    }
+    if (typeof val._seconds === "number") {
+      return new Date(val._seconds * 1000);
+    }
+  }
+  if (typeof val === "string" || typeof val === "number") {
+    return new Date(val);
+  }
+  return new Date();
+}
+
 interface GuestProfile {
   id: string; // The Card ID (e.g. RP00001)
   fullName: string;
@@ -306,8 +328,8 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
 
       // Sort client-side by timestamp descending
       list.sort((a, b) => {
-        const timeA = a.timestamp?.seconds ? a.timestamp.seconds * 1000 : (a.timestamp ? new Date(a.timestamp).getTime() : 0);
-        const timeB = b.timestamp?.seconds ? b.timestamp.seconds * 1000 : (b.timestamp ? new Date(b.timestamp).getTime() : 0);
+        const timeA = parseFirebaseDate(a.timestamp).getTime();
+        const timeB = parseFirebaseDate(b.timestamp).getTime();
         return timeB - timeA;
       });
 
@@ -659,7 +681,7 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
     csvContent += "Date,Receipt Number,Bill Amount (FJD),Points Awarded,Transaction Type\n";
     
     recentVisits.forEach((v) => {
-      const dt = v.timestamp ? new Date(v.timestamp.seconds ? v.timestamp.seconds * 1000 : v.timestamp).toLocaleDateString() : "Just now";
+      const dt = v.timestamp ? parseFirebaseDate(v.timestamp).toLocaleDateString() : "Just now";
       csvContent += `"${dt}","${v.receiptNumber}",$${v.billAmount?.toFixed(2)},${v.pointsAwarded},"${v.type}"\n`;
     });
     
@@ -689,8 +711,8 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
         return (b.rewardPoints || 0) - (a.rewardPoints || 0);
       } else {
         // latest
-        const timeA = a.createdAt?.seconds ? a.createdAt.seconds : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
-        const timeB = b.createdAt?.seconds ? b.createdAt.seconds : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+        const timeA = parseFirebaseDate(a.createdAt).getTime();
+        const timeB = parseFirebaseDate(b.createdAt).getTime();
         return timeB - timeA;
       }
     });
@@ -1223,7 +1245,7 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
                             </span>
                             <span className="text-[8px] md:text-[9px] font-serif font-bold text-white tracking-wider" style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.5)" }}>
                               {selectedProfile.createdAt 
-                                ? new Date(selectedProfile.createdAt.seconds ? selectedProfile.createdAt.seconds * 1000 : selectedProfile.createdAt).toLocaleDateString("en-US", { month: "2-digit", year: "numeric" })
+                                ? parseFirebaseDate(selectedProfile.createdAt).toLocaleDateString("en-US", { month: "2-digit", year: "numeric" })
                                 : "05/2024"}
                             </span>
                           </div>
@@ -1526,7 +1548,7 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
                         {recentVisits.map((v) => (
                           <tr key={v.id} className="hover:bg-slate-50/50">
                             <td className="p-2.5 font-mono text-[10px] text-slate-500">
-                              {v.timestamp ? new Date(v.timestamp.seconds ? v.timestamp.seconds * 1000 : v.timestamp).toLocaleDateString() : "Just now"}
+                              {v.timestamp ? parseFirebaseDate(v.timestamp).toLocaleDateString() : "Just now"}
                             </td>
                             <td className="p-2.5 font-mono text-[10.5px] font-semibold text-slate-800">{v.receiptNumber}</td>
                             <td className="p-2.5 font-mono">${v.billAmount?.toFixed(2)}</td>
