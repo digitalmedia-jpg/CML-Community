@@ -780,6 +780,39 @@ async function startServer() {
     }
   });
 
+  // Google Chat Proxy Endpoint to bypass browser CORS block
+  app.post("/api/proxy-gchat", async (req, res) => {
+    try {
+      const { url, method = "POST", headers = {}, body } = req.body;
+      
+      if (!url || !url.startsWith("https://chat.googleapis.com/")) {
+        return res.status(400).json({ error: "Invalid target URL" });
+      }
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          ...headers
+        },
+        body: body ? JSON.stringify(body) : undefined
+      });
+
+      const responseData = await response.text();
+      let parsedData = {};
+      try {
+        parsedData = JSON.parse(responseData);
+      } catch (e) {
+        parsedData = { text: responseData };
+      }
+
+      res.status(response.status).json(parsedData);
+    } catch (err: any) {
+      console.error("[Proxy Error]:", err);
+      res.status(500).json({ error: err.message || "Failed to proxy request" });
+    }
+  });
+
   // Google Chat Webhook Notification Endpoint
   app.post("/api/webhook-notify", async (req, res) => {
     const { item, sender, companyId, type = "found" } = req.body;
