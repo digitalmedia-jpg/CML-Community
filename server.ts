@@ -34,19 +34,29 @@ async function sendToUserGoogleChat(messageText: string) {
 function isDirectCollectionKey(key: string): boolean {
   const [collectionName] = key.split('/');
   if (!collectionName) return false;
-  return (
+
+  // Direct categories are directed exclusively to/from hybrid_sandbox per Charles's instruction:
+  // customer recovery (complaints-*), lost and found (lost-and-found-*, lost-and-found), cml rewards (restaurant-guests-*, rewards-config-*),
+  // newsletter subscriber (newsletter-subscribers-*), flip books (flipbooks-*).
+  if (
     collectionName.startsWith("newsletter-subscribers-") ||
     collectionName.startsWith("lost-and-found-") ||
     collectionName.startsWith("restaurant-guests-") ||
     collectionName.startsWith("complaints-") ||
+    collectionName.startsWith("flipbooks-") ||
+    collectionName.startsWith("rewards-config-") ||
+    collectionName === "lost-and-found"
+  ) {
+    return false;
+  }
+
+  return (
     collectionName.startsWith("hrms-") ||
     collectionName.startsWith("cml-signin-") ||
     collectionName.startsWith("cml-geofence-") ||
     collectionName.startsWith("huddle-tasks-") ||
     collectionName.startsWith("mailer-contacts-") ||
     collectionName.startsWith("mailer-logs-") ||
-    collectionName.startsWith("flipbooks-") ||
-    collectionName.startsWith("rewards-config-") ||
     collectionName.startsWith("forms-") ||
     collectionName.startsWith("cml-forms-submissions-") ||
     collectionName.startsWith("google-chat-messages-") ||
@@ -55,8 +65,7 @@ function isDirectCollectionKey(key: string): boolean {
     collectionName === "ramada_form_submissions" ||
     collectionName === "managed_cases" ||
     collectionName === "google_forms_links" ||
-    collectionName === "it_tickets" ||
-    collectionName === "lost-and-found"
+    collectionName === "it_tickets"
   );
 }
 
@@ -381,89 +390,70 @@ async function startServer() {
     }
   });
 
-  // Background Sync Endpoint for Offline Guest Complaints
+  // Background Sync Endpoint for Offline Guest Complaints - Stored in hybrid_sandbox
   app.post("/api/sync-offline-complaints", async (req, res) => {
     const { complaints } = req.body;
-    console.log(`[Offline Sync API] Received ${complaints?.length || 0} pending complaints to push to live Firestore.`);
+    console.log(`[Offline Sync API] Received ${complaints?.length || 0} pending complaints to save directly to hybrid_sandbox.`);
 
     if (!Array.isArray(complaints) || complaints.length === 0) {
       return res.json({ success: true, count: 0 });
     }
 
     try {
-      const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-      if (!fs.existsSync(configPath)) {
-        throw new Error("firebase-applet-config.json not found");
-      }
-      const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-      const apiKey = config.apiKey;
-      const projectId = config.projectId;
-      const databaseId = firestoreRestSync ? firestoreRestSync.getDatabaseId() : (config.firestoreDatabaseId || "(default)");
-
-      if (!apiKey || !projectId) {
-        throw new Error("apiKey or projectId missing in config");
-      }
-
       let syncCount = 0;
+      const updates: Record<string, any> = {};
+
       for (const comp of complaints) {
         const targetPropertyId = comp.propertyId || "wyndham";
-        const collectionName = `complaints-${targetPropertyId}`;
+        const newId = comp.id && !comp.id.startsWith("temp_") ? comp.id : "comp_" + Math.random().toString(36).substring(2, 11);
+        const dbKey = `complaints-${targetPropertyId}/${newId}`;
         
-        // Strip out the custom auto-increment or indexeddb id
-        const { id, ...data } = comp;
+        const newComplaint = {
+          ...comp,
+          id: newId,
+          status: comp.status || "Pending",
+          createdAt: comp.createdAt || new Date().toISOString()
+        };
 
-        // Map standard properties to Firestore REST structure
-        const fields: Record<string, any> = {};
-        for (const [key, val] of Object.entries(data)) {
-          if (val === null || val === undefined) continue;
-          if (typeof val === "string") {
-            fields[key] = { stringValue: val };
-          } else if (typeof val === "number") {
-            fields[key] = { doubleValue: val };
-          } else if (typeof val === "boolean") {
-            fields[key] = { booleanValue: val };
-          } else if (typeof val === "object") {
-            fields[key] = { stringValue: JSON.stringify(val) };
-          }
+        serverMockDbStore[dbKey] = newComplaint;
+        updates[dbKey] = newComplaint;
+        syncCount++;
+
+        console.log(`[Offline Sync API] Successfully cached offline complaint for ${comp.guestName || "Guest"} to memory store as '${dbKey}'.`);
+
+        // Deliver Standard Notifications
+        try {
+          const messageText = `*🚨 [OFFLINE SECURED COMPLAINT]*\n` +
+                              `*Property:* ${targetPropertyId.toUpperCase()}\n` +
+                              `*Guest:* ${comp.guestName || "Anonymous"}\n` +
+                              `*Room/Location:* ${comp.roomNumber || "N/A"}\n` +
+                              `*Type:* ${comp.type || "Service Issue"}\n` +
+                              `*Priority:* ${comp.priority || "Medium"}\n` +
+                              `*Reporter:* ${comp.reporterName || "Not Specified"}\n` +
+                              `*Desc:* "${comp.description || "No description provided."}"`;
+          await sendToUserGoogleChat(messageText);
+        } catch (notiErr) {
+          console.error("[Offline Sync API] Notification mirror failed:", notiErr);
+        }
+      }
+
+      if (syncCount > 0) {
+        saveMockDbToDisk();
+        if (firestoreRestSync) {
+          saveMasterCloudDebounced();
         }
 
-        if (!fields["status"]) {
-          fields["status"] = { stringValue: "Pending" };
-        }
-        if (!fields["createdAt"]) {
-          fields["createdAt"] = { timestampValue: new Date().toISOString() };
-        }
-
-        const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/${collectionName}?key=${apiKey}`;
-        
-        const firestoreRes = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fields })
+        // Broadcast to SSE clients
+        const broadcastPayload = JSON.stringify({
+          type: "update",
+          updates: updates,
+          deletedKeys: []
         });
-
-        if (!firestoreRes.ok) {
-          const errText = await firestoreRes.text();
-          console.error(`[Offline Sync API] Failed to push document to ${collectionName}:`, errText);
-        } else {
-          syncCount++;
-          console.log(`[Offline Sync API] Successfully pushed offline complaint for ${comp.guestName || "Guest"} to ${collectionName}.`);
-
-          // Deliver Standard Notifications mirroring handleLodgeComplaint in App.tsx
+        sseClients.forEach((client) => {
           try {
-            const messageText = `*🚨 [OFFLINE SYCURED COMPLAINT]*\n` +
-                                `*Property:* ${targetPropertyId.toUpperCase()}\n` +
-                                `*Guest:* ${comp.guestName || "Anonymous"}\n` +
-                                `*Room/Location:* ${comp.roomNumber || "N/A"}\n` +
-                                `*Type:* ${comp.type || "Service Issue"}\n` +
-                                `*Priority:* ${comp.priority || "Medium"}\n` +
-                                `*Reporter:* ${comp.reporterName || "Not Specified"}\n` +
-                                `*Desc:* "${comp.description || "No description provided."}"`;
-            await sendToUserGoogleChat(messageText);
-          } catch (notiErr) {
-            console.error("[Offline Sync API] Notification mirror failed:", notiErr);
-          }
-        }
+            client.write(`data: ${broadcastPayload}\n\n`);
+          } catch (e) {}
+        });
       }
 
       res.json({ success: true, count: syncCount });
@@ -1434,67 +1424,77 @@ async function startServer() {
 
       for (const dbId of sortedCandidates) {
         try {
-          // 1. Try listing documents under hybrid_sandbox collection to merge chunks
-          const listUrl = this.getUrl(undefined, dbId) + "&pageSize=300";
-          
-          let res: Response | null = null;
-          let attempts = 0;
-          let delayMs = 1500;
-          let success = false;
+          let nextPageToken = "";
+          const combinedStore: Record<string, any> = {};
+          let pageCount = 0;
+          let fetchFailed = false;
 
-          while (attempts < 3 && !success) {
-            try {
-              res = await fetch(listUrl);
-              if (res.status === 429) {
+          do {
+            let listUrl = this.getUrl(undefined, dbId) + "&pageSize=300";
+            if (nextPageToken) {
+              listUrl += `&pageToken=${nextPageToken}`;
+            }
+
+            let res: Response | null = null;
+            let attempts = 0;
+            let delayMs = 1500;
+            let success = false;
+
+            while (attempts < 3 && !success) {
+              try {
+                res = await fetch(listUrl);
+                if (res.status === 429) {
+                  attempts++;
+                  console.log(`[MOCK_DB] Received 429 for listUrl on database '${dbId}', attempt ${attempts}/3. Backing off for ${delayMs}ms...`);
+                  await new Promise(resolve => setTimeout(resolve, delayMs));
+                  delayMs *= 2;
+                } else {
+                  success = true;
+                }
+              } catch (e: any) {
                 attempts++;
-                console.log(`[MOCK_DB] Received 429 for listUrl on database '${dbId}', attempt ${attempts}/3. Backing off for ${delayMs}ms...`);
-                await new Promise(resolve => setTimeout(resolve, delayMs));
-                delayMs *= 2;
-              } else {
-                success = true;
-              }
-            } catch (e: any) {
-              attempts++;
-              console.log(`[MOCK_DB] Exception fetching listUrl on database '${dbId}' (attempt ${attempts}/3): ${e.message || e}`);
-              if (attempts < 3) {
-                await new Promise(resolve => setTimeout(resolve, delayMs));
-                delayMs *= 2;
+                console.log(`[MOCK_DB] Exception fetching listUrl on database '${dbId}' (attempt ${attempts}/3): ${e.message || e}`);
+                if (attempts < 3) {
+                  await new Promise(resolve => setTimeout(resolve, delayMs));
+                  delayMs *= 2;
+                }
               }
             }
-          }
 
-          if (res && res.ok) {
-            anySuccessfulFetch = true;
-            const data = await res.json();
-            const combinedStore: Record<string, any> = {};
-            if (data && Array.isArray(data.documents)) {
-              for (const doc of data.documents) {
-                if (doc && doc.fields && doc.fields.db_json && doc.fields.db_json.stringValue) {
-                  try {
-                    const parsed = JSON.parse(doc.fields.db_json.stringValue);
-                    Object.assign(combinedStore, parsed);
-                  } catch (e) {
-                    console.warn(`[MOCK_DB] Failed to parse stringValue for a doc chunk:`, e);
+            if (res && res.ok) {
+              anySuccessfulFetch = true;
+              const data = await res.json();
+              if (data && Array.isArray(data.documents)) {
+                for (const doc of data.documents) {
+                  if (doc && doc.fields && doc.fields.db_json && doc.fields.db_json.stringValue) {
+                    try {
+                      const parsed = JSON.parse(doc.fields.db_json.stringValue);
+                      Object.assign(combinedStore, parsed);
+                    } catch (e) {
+                      console.warn(`[MOCK_DB] Failed to parse stringValue for a doc chunk:`, e);
+                    }
                   }
                 }
               }
-              console.log(`[MOCK_DB] Successfully listed, parsed, and merged ${Object.keys(combinedStore).length} keys from '${dbId}'`);
-              this.databaseId = dbId;
-              return combinedStore;
+              nextPageToken = data.nextPageToken || "";
+              pageCount++;
             } else {
-              // No documents array means the collection might be empty/new
-              console.log(`[MOCK_DB] Collection listings empty or new in database '${dbId}'`);
-              this.databaseId = dbId;
-              return {};
+              const status = res ? res.status : 0;
+              if (status === 400 || status === 403 || status === 404) {
+                console.log(`[MOCK_DB] Database '${dbId}' is unusable or unauthorized (${status}). Excluding from future sync attempts.`);
+                this.unusableDatabaseIds.add(dbId);
+              } else {
+                console.log(`[MOCK_DB] Database '${dbId}' listing status: ${status}.`);
+              }
+              fetchFailed = true;
+              break;
             }
-          } else {
-            const status = res ? res.status : 0;
-            if (status === 400 || status === 403 || status === 404) {
-              console.log(`[MOCK_DB] Database '${dbId}' is unusable or unauthorized (${status}). Excluding from future sync attempts.`);
-              this.unusableDatabaseIds.add(dbId);
-            } else {
-              console.log(`[MOCK_DB] Database '${dbId}' listing status: ${status}. Checking direct master_db fallback.`);
-            }
+          } while (nextPageToken && pageCount < 20); // safety cap
+
+          if (!fetchFailed && (anySuccessfulFetch || pageCount > 0)) {
+            console.log(`[MOCK_DB] Successfully listed, parsed, and merged ${Object.keys(combinedStore).length} keys from '${dbId}' in ${pageCount} pages.`);
+            this.databaseId = dbId;
+            return combinedStore;
           }
         } catch (e: any) {
           console.log(`[MOCK_DB] Exception listing database '${dbId}':`, e.message || e);
@@ -1556,7 +1556,8 @@ async function startServer() {
 
     private sanitizeValue(val: any): any {
       if (typeof val === "string") {
-        if (val.startsWith("data:") && val.length > 2048) {
+        // Do not truncate flipbook page base64 strings!
+        if (val.startsWith("data:") && val.length > 2048 && !val.includes(";base64,")) {
           return "[Truncated large binary/base64 for Cloud Sync]";
         }
         return val;
@@ -1581,16 +1582,20 @@ async function startServer() {
       // Group keys into chunks by their category prefix to avoid the 1MB Firestore document limit
       const chunks: Record<string, Record<string, any>> = {};
       for (const [key, value] of Object.entries(db)) {
-        if (key.startsWith("flipbooks") || key.includes("/pages/") || key.includes("page")) {
-          continue;
+        if (key.includes("/pages/") || key.includes("/page/")) {
+          // Individual pages contain base64 string, so we save each page as its own document in hybrid_sandbox to avoid hitting 1MB document limit
+          const escapedKey = key.replace(/[^a-zA-Z0-9]/g, '_');
+          const chunkName = `page_${escapedKey}`;
+          chunks[chunkName] = { [key]: this.sanitizeValue(value) };
+        } else {
+          // Regular keys, including flipbook metadata, complaints, lost-and-found, rewards, newsletter subscribers, etc.
+          const firstPart = key.split('/')[0] || "misc";
+          const chunkName = `chunk_${firstPart}`;
+          if (!chunks[chunkName]) {
+            chunks[chunkName] = {};
+          }
+          chunks[chunkName][key] = this.sanitizeValue(value);
         }
-        
-        const firstPart = key.split('/')[0] || "misc";
-        const chunkName = `chunk_${firstPart}`;
-        if (!chunks[chunkName]) {
-          chunks[chunkName] = {};
-        }
-        chunks[chunkName][key] = this.sanitizeValue(value);
       }
 
       let overallSuccess = false;
@@ -1663,9 +1668,7 @@ async function startServer() {
           
           // Populate previouslySyncedKeys with successfully saved keys
           for (const key of Object.keys(db)) {
-            if (!(key.startsWith("flipbooks") || key.includes("/pages/") || key.includes("page"))) {
-              previouslySyncedKeys.add(key);
-            }
+            previouslySyncedKeys.add(key);
           }
           break; // Saved successfully to primary candidate database, skip other candidates
         }
@@ -1680,6 +1683,21 @@ async function startServer() {
     }
     async set(k: string, val: any): Promise<void> {}
     async delete(k: string): Promise<void> {}
+
+    async deleteMasterDocument(docId: string): Promise<boolean> {
+      try {
+        const url = this.getUrl(docId);
+        const res = await fetch(url, { method: "DELETE" });
+        if (res.ok) {
+          console.log(`[MOCK_DB] Successfully deleted master document 'hybrid_sandbox/${docId}' from Cloud Firestore.`);
+          return true;
+        }
+        return false;
+      } catch (err: any) {
+        console.error(`[MOCK_DB] Exception deleting master document 'hybrid_sandbox/${docId}':`, err.message || err);
+        return false;
+      }
+    }
 
     async saveDirectDocument(collectionName: string, docId: string, docData: any): Promise<boolean> {
       try {
@@ -1833,149 +1851,8 @@ async function startServer() {
 
     // Helper to fetch direct collections from Firestore to recover any missing items
     const importDirectCollectionsFromFirestore = async () => {
-      if (!firestoreRestSync) return;
-      const companies = ["cml", "ramada", "wyndham"];
-      const databaseId = firestoreRestSync.getDatabaseId();
-      
-      console.log("[MOCK_DB] Actively scanning live Firestore collections to restore any missing subscribers/guests/complaints...");
-      let mutated = false;
-      
-      for (const activeCompanyId of companies) {
-        // 1. Recover newsletter-subscribers
-        try {
-          const subCollection = `newsletter-subscribers-${activeCompanyId}`;
-          const url = `https://firestore.googleapis.com/v1/projects/${firestoreRestSync.projectId}/databases/${databaseId}/documents/${subCollection}?pageSize=100&key=${firestoreRestSync.apiKey}`;
-          const res = await fetch(url);
-          if (res.ok) {
-            const data = await res.json();
-            if (data && Array.isArray(data.documents)) {
-              let restoredCount = 0;
-              for (const docObj of data.documents) {
-                const decoded = decodeFirestoreFields(docObj.fields);
-                const id = decoded.id || docObj.name.split("/").pop();
-                decoded.id = id;
-                const dbKey = `newsletter-subscribers-${activeCompanyId}/${id}`;
-                
-                const originalData = serverMockDbStore[dbKey];
-                if (JSON.stringify(originalData) !== JSON.stringify(decoded)) {
-                  serverMockDbStore[dbKey] = decoded;
-                  restoredCount++;
-                  mutated = true;
-                }
-              }
-              if (restoredCount > 0) {
-                console.log(`[MOCK_DB_RECOVERY] Restored/Updated ${restoredCount} subscribers from Firestore collection '${subCollection}'`);
-              }
-            }
-          }
-        } catch (e) {
-          // silent warning
-        }
-
-        // 2. Recover restaurant-guests
-        try {
-          const guestCollection = `restaurant-guests-${activeCompanyId}`;
-          const url = `https://firestore.googleapis.com/v1/projects/${firestoreRestSync.projectId}/databases/${databaseId}/documents/${guestCollection}?pageSize=100&key=${firestoreRestSync.apiKey}`;
-          const res = await fetch(url);
-          if (res.ok) {
-            const data = await res.json();
-            if (data && Array.isArray(data.documents)) {
-              let restoredCount = 0;
-              for (const docObj of data.documents) {
-                const decoded = decodeFirestoreFields(docObj.fields);
-                const id = decoded.id || docObj.name.split("/").pop();
-                decoded.id = id;
-                const dbKey = `restaurant-guests-${activeCompanyId}/${id}`;
-                
-                const originalData = serverMockDbStore[dbKey];
-                if (JSON.stringify(originalData) !== JSON.stringify(decoded)) {
-                  serverMockDbStore[dbKey] = decoded;
-                  restoredCount++;
-                  mutated = true;
-                }
-              }
-              if (restoredCount > 0) {
-                console.log(`[MOCK_DB_RECOVERY] Restored/Updated ${restoredCount} guests from Firestore collection '${guestCollection}'`);
-              }
-            }
-          }
-        } catch (e) {
-          // silent warning
-        }
-
-        // 3. Recover guest-complaints (Customer Recovery)
-        try {
-          const complaintCollection = `complaints-${activeCompanyId}`;
-          const url = `https://firestore.googleapis.com/v1/projects/${firestoreRestSync.projectId}/databases/${databaseId}/documents/${complaintCollection}?pageSize=100&key=${firestoreRestSync.apiKey}`;
-          const res = await fetch(url);
-          if (res.ok) {
-            const data = await res.json();
-            if (data && Array.isArray(data.documents)) {
-              let restoredCount = 0;
-              for (const docObj of data.documents) {
-                const decoded = decodeFirestoreFields(docObj.fields);
-                const id = decoded.id || docObj.name.split("/").pop();
-                if (id === "comp_1" || id === "comp_2") {
-                  continue; // Skip seeded complaints
-                }
-                decoded.id = id;
-                const dbKey = `complaints-${activeCompanyId}/${id}`;
-                
-                const originalData = serverMockDbStore[dbKey];
-                if (JSON.stringify(originalData) !== JSON.stringify(decoded)) {
-                  serverMockDbStore[dbKey] = decoded;
-                  restoredCount++;
-                  mutated = true;
-                }
-              }
-              if (restoredCount > 0) {
-                console.log(`[MOCK_DB_RECOVERY] Restored/Updated ${restoredCount} complaints from Firestore collection '${complaintCollection}'`);
-              }
-            }
-          }
-        } catch (e) {
-          // silent warning
-        }
-
-        // 4. Recover lost-and-found
-        try {
-          const lfCollection = `lost-and-found-${activeCompanyId}`;
-          const url = `https://firestore.googleapis.com/v1/projects/${firestoreRestSync.projectId}/databases/${databaseId}/documents/${lfCollection}?pageSize=100&key=${firestoreRestSync.apiKey}`;
-          const res = await fetch(url);
-          if (res.ok) {
-            const data = await res.json();
-            if (data && Array.isArray(data.documents)) {
-              let restoredCount = 0;
-              for (const docObj of data.documents) {
-                const decoded = decodeFirestoreFields(docObj.fields);
-                const id = decoded.id || docObj.name.split("/").pop();
-                if (id === "item_1" || id === "item_2") {
-                  continue; // Skip seeded items
-                }
-                decoded.id = id;
-                const dbKey = `lost-and-found-${activeCompanyId}/${id}`;
-                
-                const originalData = serverMockDbStore[dbKey];
-                if (JSON.stringify(originalData) !== JSON.stringify(decoded)) {
-                  serverMockDbStore[dbKey] = decoded;
-                  restoredCount++;
-                  mutated = true;
-                }
-              }
-              if (restoredCount > 0) {
-                console.log(`[MOCK_DB_RECOVERY] Restored/Updated ${restoredCount} lost items from Firestore collection '${lfCollection}'`);
-              }
-            }
-          }
-        } catch (e) {
-          // silent warning
-        }
-      }
-
-      if (mutated) {
-        saveMockDbToDisk();
-        saveMasterCloudDebounced();
-      }
+      console.log("[MOCK_DB] Bypassing active scanning of direct collections as per user directive. All entries and data pulling are directed exclusively from hybrid_sandbox.");
+      return;
     };
 
     // 2. Then merge from central cloud Firestore using REST
