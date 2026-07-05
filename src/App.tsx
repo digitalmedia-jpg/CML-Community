@@ -1656,13 +1656,7 @@ export default function App() {
     }
   }, [complaints, selectedComplaint]);
   const [complaintSearch, setComplaintSearch] = useState("");
-  const [guestRecoveryPropertyFilter, setGuestRecoveryPropertyFilter] = useState<string>("wyndham");
-
-  useEffect(() => {
-    if (selectedCompany) {
-      setGuestRecoveryPropertyFilter(selectedCompany);
-    }
-  }, [selectedCompany]);
+  const [guestRecoveryPropertyFilter, setGuestRecoveryPropertyFilter] = useState<string>("active");
 
   const [offlineComplaintsCount, setOfflineComplaintsCount] = useState<number>(0);
   const [isOfflineSyncing, setIsOfflineSyncing] = useState<boolean>(false);
@@ -3659,6 +3653,11 @@ export default function App() {
   };
 
   const parsedComplaintsList = complaints.filter(c => {
+    // 1. Strictly isolate to the currently selected property/company only
+    const targetProperty = (selectedCompany || "wyndham").toLowerCase();
+    const cProperty = (c.propertyId || "").toLowerCase();
+    if (cProperty !== targetProperty) return false;
+
     const matchesSearch = 
       (c.guestName || "").toLowerCase().includes(complaintSearch.toLowerCase()) ||
       (c.roomNumber || "").toLowerCase().includes(complaintSearch.toLowerCase()) ||
@@ -3703,9 +3702,8 @@ export default function App() {
       const isMyApprovalNeeded = (needsHOD && isHOD) || (needsSuperAdmin && isSuperAdmin);
       return matchesSearch && isMyApprovalNeeded;
     } else {
-      if (c.isArchived === true) return false;
-      const matchesTab = guestRecoveryPropertyFilter === "all" || c.propertyId === guestRecoveryPropertyFilter;
-      return matchesSearch && matchesTab;
+      // Otherwise, active logs
+      return matchesSearch && c.isArchived !== true;
     }
   });
 
@@ -6104,15 +6102,24 @@ export default function App() {
                 {/* Real-time Property Syndicate Navigator */}
                 <div className="flex border-b border-slate-100 pb-2 mb-6 gap-6 text-[10px] font-display uppercase tracking-widest overflow-x-auto scrollbar-none">
                   {[
-                    { id: "all", label: "All Properties Combined" },
-                    { id: "wyndham", label: "Wyndham Garden Active Logs" },
-                    { id: "ramada", label: "Ramada Suites Active Logs" },
-                    { id: "cml", label: "CML Corporate Active Logs" },
+                    { 
+                      id: "active", 
+                      label: (selectedCompany || "wyndham").toLowerCase() === "wyndham"
+                        ? "Wyndham Garden Active Logs"
+                        : (selectedCompany || "wyndham").toLowerCase() === "ramada"
+                        ? "Ramada Suites Active Logs"
+                        : "CML Corporate Active Logs"
+                    },
                     { id: "pending-approvals", label: "My Pending Approvals" },
                     { id: "archived", label: "Disposed / Archived Logs" }
                   ].map((tab) => {
                     const isActive = guestRecoveryPropertyFilter === tab.id;
                     const count = complaints.filter(c => {
+                      // 1. Force strict property isolation for the tab count
+                      const targetProperty = (selectedCompany || "wyndham").toLowerCase();
+                      const cProperty = (c.propertyId || "").toLowerCase();
+                      if (cProperty !== targetProperty) return false;
+
                       let matchesDateRange = true;
                       if (recoveryStartDate || recoveryEndDate) {
                         const ts = parseDateToMs(c.createdAt);
@@ -6149,8 +6156,7 @@ export default function App() {
                         
                         return (needsHOD && isHOD) || (needsSuperAdmin && isSuperAdmin);
                       } else {
-                        if (c.isArchived === true) return false;
-                        return tab.id === "all" || c.propertyId === tab.id;
+                        return c.isArchived !== true;
                       }
                     }).length;
                     return (

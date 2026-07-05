@@ -720,6 +720,13 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
 
   // Tier calculation helper
   const getTierDetails = (points: number) => {
+    const getSafeString = (val: any): string => {
+      if (typeof val === "string") return val;
+      if (Array.isArray(val)) return val.join(", ");
+      if (val && typeof val === "object") return JSON.stringify(val);
+      return "";
+    };
+
     if (tiersConfig && tiersConfig.length > 0) {
       // Find the active tier: the tier with the highest minPoints that is <= points
       let activeIndex = -1;
@@ -745,15 +752,15 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
         }
 
         return {
-          currentTier: active.name,
-          nextTier: next ? next.name : null,
+          currentTier: getSafeString(active.name),
+          nextTier: next ? getSafeString(next.name) : null,
           nextTierPoints,
           progressPercent,
           pointsToNext,
-          color: active.color || "from-blue-400 to-indigo-500",
-          bg: active.bg || "bg-blue-500",
-          badgeColor: active.badgeColor || "bg-blue-100 text-blue-950 border-blue-200",
-          benefits: active.benefits || ""
+          color: getSafeString(active.color) || "from-blue-400 to-indigo-500",
+          bg: getSafeString(active.bg) || "bg-blue-500",
+          badgeColor: getSafeString(active.badgeColor) || "bg-blue-100 text-blue-950 border-blue-200",
+          benefits: getSafeString(active.benefits) || ""
         };
       }
     }

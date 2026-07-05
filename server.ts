@@ -1473,8 +1473,12 @@ async function startServer() {
             } else {
               const status = res ? res.status : 0;
               if (status === 400 || status === 403 || status === 404) {
-                console.log(`[MOCK_DB] Database '${dbId}' is unusable or unauthorized (${status}). Excluding from future sync attempts.`);
-                this.unusableDatabaseIds.add(dbId);
+                if (dbId !== this.configDatabaseId) {
+                  console.log(`[MOCK_DB] Database '${dbId}' is unusable or unauthorized (${status}). Excluding from future sync attempts.`);
+                  this.unusableDatabaseIds.add(dbId);
+                } else {
+                  console.log(`[MOCK_DB] Primary database '${dbId}' returned status ${status}. Retrying on subsequent syncs.`);
+                }
               } else {
                 console.log(`[MOCK_DB] Database '${dbId}' listing status: ${status}.`);
               }

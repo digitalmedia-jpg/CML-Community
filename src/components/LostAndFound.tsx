@@ -980,35 +980,7 @@ export const LostAndFound: React.FC<{
         </div>
       </div>
 
-      {/* Property Registry Selector */}
-      <div className="flex border-b border-slate-100 pb-2 gap-6 text-[10px] font-display uppercase tracking-widest overflow-x-auto scrollbar-none">
-        {[
-          { id: "all", label: "All Properties Combined" },
-          { id: "wyndham", label: "Wyndham Garden Wailoaloa" },
-          { id: "ramada", label: "Ramada Suites Wailoaloa" },
-          { id: "cml", label: "CML Corporate Office" }
-        ].map((prop) => {
-          const isActive = activeCompanyId === prop.id;
-          return (
-            <button
-              key={prop.id}
-              onClick={() => handleCompanyChange(prop.id)}
-              className={cn(
-                "pb-2 font-extrabold transition-all relative flex items-center gap-1.5 whitespace-nowrap cursor-pointer",
-                isActive ? "text-gold border-b-2 border-gold font-black" : "text-slate-400 hover:text-slate-600"
-              )}
-            >
-              {prop.label}
-              <span className={cn(
-                "text-[8px] font-mono px-1.5 py-0.2 rounded-full",
-                isActive ? "bg-gold text-white" : "bg-slate-100 text-slate-500"
-              )}>
-                {isActive ? items.length : "-"}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {/* Property Registry Selector hidden as requested */}
 
       {/* Controls */}
       <div className="flex flex-col gap-5">

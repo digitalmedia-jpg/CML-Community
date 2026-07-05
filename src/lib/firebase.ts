@@ -440,7 +440,7 @@ class HybridAuth {
 }
 
 export const auth = new HybridAuth();
-export const db = { _isMock: true };
+export const db = initializedRealFirebase ? productionDb : { _isMock: true };
 
 export const onAuthStateChanged = (...args: any[]) => {
   if (args[0] && typeof args[0] === 'object') {
@@ -451,6 +451,9 @@ export const onAuthStateChanged = (...args: any[]) => {
 };
 
 export const collection = (firestoreDb: any, path?: string, ...rest: any[]) => {
+  if (initializedRealFirebase && firestoreDb && !firestoreDb._isMock) {
+    return fbCollection(firestoreDb, path!, ...rest);
+  }
   if (!path) {
     const resolvedPath = typeof firestoreDb === 'string' ? firestoreDb : (firestoreDb?.path || '');
     return new MockCollectionRef(resolvedPath);
@@ -465,6 +468,12 @@ export const collection = (firestoreDb: any, path?: string, ...rest: any[]) => {
 };
 
 export const doc = (first: any, second?: any, ...rest: any[]) => {
+  if (initializedRealFirebase && first && !first._isMock) {
+    if (second === undefined) {
+      return fbDoc(first);
+    }
+    return fbDoc(first, second, ...rest);
+  }
   if (second === undefined) {
     if (typeof first === 'object' && first !== null) {
       const parentPath = first.path || '';
@@ -500,6 +509,9 @@ export const doc = (first: any, second?: any, ...rest: any[]) => {
 };
 
 export const getDoc = async (docRef: any) => {
+  if (initializedRealFirebase && docRef && !docRef._isMock) {
+    return fbGetDoc(docRef);
+  }
   const pathKey = docRef.path;
   const data = MOCK_STORE[pathKey];
   return new MockDocSnapshot(docRef, data);
@@ -556,6 +568,9 @@ function normalizeWrite(pathKey: string, data: any) {
 }
 
 export const getDocs = async (queryOrRef: any) => {
+  if (initializedRealFirebase && queryOrRef && !queryOrRef._isMock) {
+    return fbGetDocs(queryOrRef);
+  }
   const collectionPath = queryOrRef.path || queryOrRef.collectionRef?.path || '';
   const matchedDocs: MockDocSnapshot[] = [];
   
@@ -575,6 +590,9 @@ export const getDocs = async (queryOrRef: any) => {
 };
 
 export const setDoc = async (docRef: any, data: any, options?: any) => {
+  if (initializedRealFirebase && docRef && !docRef._isMock) {
+    return fbSetDoc(docRef, data, options);
+  }
   const pathKey = docRef.path;
   const normalized = normalizeWrite(pathKey, data);
   if (normalized) {
@@ -598,6 +616,9 @@ export const setDoc = async (docRef: any, data: any, options?: any) => {
 };
 
 export const updateDoc = async (docRef: any, data: any) => {
+  if (initializedRealFirebase && docRef && !docRef._isMock) {
+    return fbUpdateDoc(docRef, data);
+  }
   const pathKey = docRef.path;
   const normalized = normalizeWrite(pathKey, data);
   if (normalized) {
@@ -613,6 +634,9 @@ export const updateDoc = async (docRef: any, data: any) => {
 };
 
 export const addDoc = async (collectionRef: any, data: any) => {
+  if (initializedRealFirebase && collectionRef && !collectionRef._isMock) {
+    return fbAddDoc(collectionRef, data);
+  }
   const collectionPath = collectionRef.path || '';
   if (collectionPath === "hybrid_sandbox") {
     let targetCollection = data.collection;
@@ -646,6 +670,9 @@ export const addDoc = async (collectionRef: any, data: any) => {
 };
 
 export const deleteDoc = async (docRef: any) => {
+  if (initializedRealFirebase && docRef && !docRef._isMock) {
+    return fbDeleteDoc(docRef);
+  }
   const pathKey = docRef.path;
   if (pathKey.startsWith("hybrid_sandbox/")) {
     const virtualDocId = pathKey.replace("hybrid_sandbox/", "");
@@ -667,8 +694,11 @@ export const deleteDoc = async (docRef: any) => {
   return Promise.resolve();
 };
 
-export const onSnapshot = (queryOrRef: any, ...args: any[]) => {
-  let callback = typeof args[0] === 'function' ? args[0] : (typeof args[1] === 'function' ? args[1] : undefined);
+export const onSnapshot = (queryOrRef: any, onNext: any, onError?: any) => {
+  if (initializedRealFirebase && queryOrRef && !queryOrRef._isMock) {
+    return fbOnSnapshot(queryOrRef, onNext, onError);
+  }
+  let callback = typeof onNext === 'function' ? onNext : (typeof onError === 'function' ? onError : undefined);
   if (!callback) {
     callback = () => {};
   }
@@ -707,21 +737,65 @@ export const onSnapshot = (queryOrRef: any, ...args: any[]) => {
 };
 
 export const query = (collectionRef: any, ...constraints: any[]) => {
+  if (initializedRealFirebase && collectionRef && !collectionRef._isMock) {
+    return fbQuery(collectionRef, ...constraints);
+  }
   return new MockQuery(collectionRef, constraints);
 };
 
-export const where = (field: string, op: string, value: any) => ({ type: 'where', field, op, value });
-export const orderBy = (field: string, direction?: string) => ({ type: 'orderBy', field, direction });
-export const limit = (num: number) => ({ type: 'limit', num });
-export const serverTimestamp = () => new Date().toISOString();
-export const increment = (n: number) => n;
-export const arrayUnion = (...items: any[]) => items;
-export const writeBatch = (...args: any[]) => ({
-  set: (docRef: any, data: any) => setDoc(docRef, data),
-  update: (docRef: any, data: any) => updateDoc(docRef, data),
-  delete: (docRef: any) => deleteDoc(docRef),
-  commit: () => Promise.resolve()
-});
+export const where = (field: string, op: string, value: any) => {
+  if (initializedRealFirebase) {
+    return fbWhere(field, op as any, value);
+  }
+  return { type: 'where', field, op, value };
+};
+
+export const orderBy = (field: string, direction?: string) => {
+  if (initializedRealFirebase) {
+    return fbOrderBy(field, direction as any);
+  }
+  return { type: 'orderBy', field, direction };
+};
+
+export const limit = (num: number) => {
+  if (initializedRealFirebase) {
+    return fbLimit(num);
+  }
+  return { type: 'limit', num };
+};
+
+export const serverTimestamp = () => {
+  if (initializedRealFirebase) {
+    return fbServerTimestamp();
+  }
+  return new Date().toISOString();
+};
+
+export const increment = (n: number) => {
+  if (initializedRealFirebase) {
+    return fbIncrement(n);
+  }
+  return n;
+};
+
+export const arrayUnion = (...items: any[]) => {
+  if (initializedRealFirebase) {
+    return fbArrayUnion(...items);
+  }
+  return items;
+};
+
+export const writeBatch = (firestoreDb: any) => {
+  if (initializedRealFirebase && firestoreDb && !firestoreDb._isMock) {
+    return fbWriteBatch(firestoreDb);
+  }
+  return {
+    set: (docRef: any, data: any) => setDoc(docRef, data),
+    update: (docRef: any, data: any) => updateDoc(docRef, data),
+    delete: (docRef: any) => deleteDoc(docRef),
+    commit: () => Promise.resolve()
+  };
+};
 
 export enum OperationType {
   CREATE = 'create',

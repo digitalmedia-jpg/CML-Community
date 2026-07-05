@@ -28,6 +28,10 @@ service cloud.firestore {
       return isSignedIn();
     }
 
+    function startsWith(str, prefix) {
+      return str.size() >= prefix.size() && str[0:prefix.size()] == prefix;
+    }
+
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
@@ -166,22 +170,22 @@ service cloud.firestore {
     // 5. Dynamic & Multi-Tenant Sandbox Collections (Allows read/write for both JS SDK client & anonymous server sync)
     match /{collectionName}/{document=**} {
       allow read, write: if 
-        collectionName.matches('^complaints-.*') ||
-        collectionName.matches('^lost-and-found-.*') ||
-        collectionName.matches('^restaurant-guests-.*') ||
-        collectionName.matches('^hrms-.*') ||
-        collectionName.matches('^cml-signin-.*') ||
-        collectionName.matches('^cml-geofence-.*') ||
-        collectionName.matches('^huddle-tasks-.*') ||
-        collectionName.matches('^mailer-contacts-.*') ||
-        collectionName.matches('^mailer-logs-.*') ||
-        collectionName.matches('^flipbooks-.*') ||
-        collectionName.matches('^newsletter-subscribers-.*') ||
-        collectionName.matches('^rewards-config-.*') ||
-        collectionName.matches('^forms-.*') ||
-        collectionName.matches('^cml-forms-submissions-.*') ||
-        collectionName.matches('^google-chat-messages-.*') ||
-        collectionName.matches('^business-cards-.*') ||
+        startsWith(collectionName, 'complaints-') ||
+        startsWith(collectionName, 'lost-and-found-') ||
+        startsWith(collectionName, 'restaurant-guests-') ||
+        startsWith(collectionName, 'hrms-') ||
+        startsWith(collectionName, 'cml-signin-') ||
+        startsWith(collectionName, 'cml-geofence-') ||
+        startsWith(collectionName, 'huddle-tasks-') ||
+        startsWith(collectionName, 'mailer-contacts-') ||
+        startsWith(collectionName, 'mailer-logs-') ||
+        startsWith(collectionName, 'flipbooks-') ||
+        startsWith(collectionName, 'newsletter-subscribers-') ||
+        startsWith(collectionName, 'rewards-config-') ||
+        startsWith(collectionName, 'forms-') ||
+        startsWith(collectionName, 'cml-forms-submissions-') ||
+        startsWith(collectionName, 'google-chat-messages-') ||
+        startsWith(collectionName, 'business-cards-') ||
         collectionName == "daily-news" ||
         collectionName == "ramada_form_submissions" ||
         collectionName == "managed_cases" ||
