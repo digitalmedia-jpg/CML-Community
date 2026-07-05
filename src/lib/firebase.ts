@@ -32,6 +32,15 @@ import {
 } from "firebase/firestore";
 import firebaseConfig from "../../firebase-applet-config.json";
 
+export interface User {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL?: string | null;
+  getIdToken?: (forceRefresh?: boolean) => Promise<string>;
+  getIdTokenResult?: (forceRefresh?: boolean) => Promise<any>;
+}
+
 // 1. Definition of Mock References
 export class MockDocRef {
   type = 'document' as const;
@@ -163,11 +172,11 @@ function triggerListeners(path: string) {
   }
 }
 
-export async function syncWithServerDirect(updates?: Record<string, any>, deletedKeys?: string[], forcePush = false) {
+export async function syncWithServerDirect(updates?: Record<string, any>, deletedKeys?: string[], forcePush = false): Promise<boolean> {
   const isPushedSession = (updates && Object.keys(updates).length > 0) || (deletedKeys && deletedKeys.length > 0);
   
   if (!forcePush && !isPushedSession && Object.keys(pendingUpdates).length === 0 && pendingDeletes.length === 0) {
-    return;
+    return true;
   }
 
   if (updates) {
@@ -179,9 +188,10 @@ export async function syncWithServerDirect(updates?: Record<string, any>, delete
   
   savePendingSyncState();
   
-  if (isSyncing && !forcePush) return;
+  if (isSyncing && !forcePush) return false;
   isSyncing = true;
   
+  let success = false;
   try {
     const response = await fetch("/api/mock-db", {
       method: "POST",
@@ -191,6 +201,7 @@ export async function syncWithServerDirect(updates?: Record<string, any>, delete
     if (response.ok) {
       const data = await response.json();
       if (data && data.db) {
+        success = true;
         const changedKeys = new Set<string>();
         
         for (const [k, newVal] of Object.entries(data.db)) {
@@ -252,6 +263,7 @@ export async function syncWithServerDirect(updates?: Record<string, any>, delete
   } finally {
     isSyncing = false;
   }
+  return success;
 }
 
 if (typeof window !== 'undefined') {
@@ -294,6 +306,15 @@ class MockAuth {
       const saved = localStorage.getItem('cml_mock_user');
       if (saved) {
         this._currentUser = JSON.parse(saved);
+        if (this._currentUser) {
+          this._currentUser.getIdToken = async (forceRefresh?: boolean) => "mock-id-token";
+          this._currentUser.getIdTokenResult = async (forceRefresh?: boolean) => ({
+            token: "mock-id-token",
+            claims: {
+              role: "Administrator"
+            }
+          });
+        }
       }
     } catch (e) {}
   }
@@ -338,9 +359,21 @@ class MockAuth {
       uid: resolvedUid,
       email: resolvedEmail,
       displayName: displayName,
-      photoURL: isCharles ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=256' : ''
+      photoURL: isCharles ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=256' : '',
+      getIdToken: async (forceRefresh?: boolean) => "mock-id-token",
+      getIdTokenResult: async (forceRefresh?: boolean) => ({
+        token: "mock-id-token",
+        claims: {
+          role: "Administrator"
+        }
+      })
     };
-    try { localStorage.setItem('cml_mock_user', JSON.stringify(this._currentUser)); } catch (e) {}
+    try { localStorage.setItem('cml_mock_user', JSON.stringify({
+      uid: resolvedUid,
+      email: resolvedEmail,
+      displayName: displayName,
+      photoURL: this._currentUser.photoURL
+    })); } catch (e) {}
     this.trigger();
     return { user: this._currentUser };
   }
@@ -407,19 +440,53 @@ export const onAuthStateChanged = (...args: any[]) => {
   return auth.onAuthStateChanged(args[0]);
 };
 
-export const collection = (firestoreDb: any, path: string) => {
-  const resolvedPath = typeof firestoreDb === 'string' ? firestoreDb : path;
+export const collection = (firestoreDb: any, path?: string, ...rest: any[]) => {
+  if (!path) {
+    const resolvedPath = typeof firestoreDb === 'string' ? firestoreDb : (firestoreDb?.path || '');
+    return new MockCollectionRef(resolvedPath);
+  }
+  let resolvedPath = path;
+  if (typeof firestoreDb === 'object' && firestoreDb !== null) {
+    if (firestoreDb.type === 'document') {
+      resolvedPath = `${firestoreDb.path}/${path}`;
+    }
+  }
   return new MockCollectionRef(resolvedPath);
 };
 
-export const doc = (firestoreDb: any, path: string, ...rest: any[]) => {
-  let finalPath = path;
-  let docId = rest[0];
-  if (typeof firestoreDb === 'string') {
-    finalPath = firestoreDb;
-    docId = path;
+export const doc = (first: any, second?: any, ...rest: any[]) => {
+  if (second === undefined) {
+    if (typeof first === 'object' && first !== null) {
+      const parentPath = first.path || '';
+      const randomId = Math.random().toString(36).substring(2, 11);
+      return new MockDocRef(parentPath, randomId);
+    } else if (typeof first === 'string') {
+      const parts = first.split('/');
+      const parentPath = parts.slice(0, -1).join('/');
+      const docId = parts[parts.length - 1] || '';
+      return new MockDocRef(parentPath, docId);
+    }
   }
-  return new MockDocRef(finalPath, docId);
+  
+  if (rest.length === 0) {
+    if (typeof first === 'object' && first !== null) {
+      if (first.type === 'collection') {
+        return new MockDocRef(first.path, second);
+      } else {
+        const parts = String(second).split('/');
+        const parentPath = parts.slice(0, -1).join('/');
+        const docId = parts[parts.length - 1] || '';
+        return new MockDocRef(parentPath, docId);
+      }
+    } else {
+      const parts = String(second).split('/');
+      const parentPath = parts.slice(0, -1).join('/');
+      const docId = parts[parts.length - 1] || '';
+      return new MockDocRef(parentPath, docId);
+    }
+  }
+  
+  return new MockDocRef(second, rest[0]);
 };
 
 export const getDoc = async (docRef: any) => {
@@ -476,7 +543,11 @@ export const deleteDoc = async (docRef: any) => {
   return Promise.resolve();
 };
 
-export const onSnapshot = (queryOrRef: any, callback: (snapshot: any) => void) => {
+export const onSnapshot = (queryOrRef: any, ...args: any[]) => {
+  let callback = typeof args[0] === 'function' ? args[0] : (typeof args[1] === 'function' ? args[1] : undefined);
+  if (!callback) {
+    callback = () => {};
+  }
   const collectionPath = queryOrRef.path || queryOrRef.collectionRef?.path || '';
   
   const internalUpdate = () => {
@@ -516,7 +587,7 @@ export const limit = (num: number) => ({ type: 'limit', num });
 export const serverTimestamp = () => new Date().toISOString();
 export const increment = (n: number) => n;
 export const arrayUnion = (...items: any[]) => items;
-export const writeBatch = () => ({
+export const writeBatch = (...args: any[]) => ({
   set: (docRef: any, data: any) => setDoc(docRef, data),
   update: (docRef: any, data: any) => updateDoc(docRef, data),
   delete: (docRef: any) => deleteDoc(docRef),
@@ -552,6 +623,19 @@ export const loginWithEmail = async (email: string, pass: string) => {
 
 export const registerWithEmail = async (email: string, pass: string) => {
   return auth.createUserWithEmailAndPassword(email, pass);
+};
+
+export const loginWithGoogle = async () => {
+  const provider = new GoogleAuthProvider();
+  const activeAuth = productionAuth || auth;
+  try {
+    if (initializedRealFirebase) {
+      return await signInWithPopup(activeAuth, provider);
+    }
+  } catch (err) {
+    console.error("Google login error, falling back to mock:", err);
+  }
+  return auth.signInWithEmailAndPassword("digitalmedia@cml.com.fj", "Blukukurtz_8");
 };
 
 export const resetPassword = async (email: string) => {

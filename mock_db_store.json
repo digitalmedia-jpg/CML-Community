@@ -20939,48 +20939,105 @@
     "propertyId": "wyndham",
     "createdAt": "2026-06-21T02:02:53.459Z"
   },
-  "google-chat-messages-ramada-general-announcements/kw73jp4rs": {
-    "senderName": "Charles Cebujano",
-    "senderEmail": "digitalmedia@cml.com.fj",
-    "content": "Welcome to the integrated CML Chat channel! This widget connects our CML Portfolio Portal directly with CML Chat spaces in real-time.",
-    "timestamp": "2026-07-03T18:49:41.915Z",
-    "reactions": {
-      "👍": [
-        "Charles Cebujano"
-      ]
-    }
+  "complaints-radisson/comp_1": {
+    "id": "comp_1",
+    "guestName": "Deborah Jenkins",
+    "roomNumber": "305",
+    "title": "Air Conditioner Noise",
+    "description": "Guest complained that the air conditioner hummed loudly during the night, interrupting sleep. Requested room move or urgent service.",
+    "severity": "High",
+    "status": "Resolved",
+    "owner": "Engineering",
+    "createdAt": "2026-06-22T21:02:53.459Z",
+    "updates": [
+      {
+        "message": "Assigned technician Savenaca to inspect unit.",
+        "timestamp": "2026-06-22T22:02:53.459Z",
+        "user": "Operational Manager"
+      },
+      {
+        "message": "Technician tightened housing brackets and balanced the fan. Noise successfully resolved.",
+        "timestamp": "2026-06-23T00:02:53.459Z",
+        "user": "Engineering Dept"
+      }
+    ]
   },
-  "google-chat-messages-wyndham-general-announcements/8wjyqyp9x": {
-    "senderName": "Charles Cebujano",
-    "senderEmail": "digitalmedia@cml.com.fj",
-    "content": "Welcome to the integrated CML Chat channel! This widget connects our CML Portfolio Portal directly with CML Chat spaces in real-time.",
-    "timestamp": "2026-07-03T18:49:41.923Z",
-    "reactions": {
-      "👍": [
-        "Charles Cebujano"
-      ]
-    }
+  "complaints-radisson/comp_2": {
+    "id": "comp_2",
+    "guestName": "Marc-Antoine Dupont",
+    "roomNumber": "102",
+    "title": "Delayed Airport Shuttle",
+    "description": "Guest missed their lunch booking due to the 11:30 AM airport shuttle arriving 25 minutes late because of local pipeline roadworks.",
+    "severity": "Medium",
+    "status": "In Progress",
+    "owner": "Front Office",
+    "createdAt": "2026-06-23T00:02:53.459Z",
+    "updates": [
+      {
+        "message": "Offered complimentary welcome mocktails and a $40 F&B voucher to apologize for the delay.",
+        "timestamp": "2026-06-23T01:02:53.459Z",
+        "user": "Front Desk Duty Manager"
+      }
+    ]
   },
-  "google-chat-messages-ramada-general-announcements/z63ggjb4x": {
-    "senderName": "Priyesh Narayan",
-    "senderEmail": "graphics@cml.com.fj",
-    "content": "Excellent! I've linked the central marketing assets here. Let me know if you need high-resolution banners.",
-    "timestamp": "2026-07-03T20:49:41.915Z",
-    "reactions": {
-      "👍": [
-        "Charles Cebujano"
-      ]
-    }
+  "lost-and-found-radisson/item_1": {
+    "id": "item_1",
+    "itemName": "Silver Rolex Wristwatch",
+    "description": "Oyster Perpetual model, silver band, slightly scratched on the face.",
+    "locationFound": "Room 402 Bedside Table",
+    "staffName": "Anita Prasad",
+    "staffPosition": "Housekeeping",
+    "imageUrl": "https://images.unsplash.com/photo-1547996160-81dfa63595dd?q=80&w=1000&auto=format&fit=crop",
+    "status": "Found",
+    "propertyId": "radisson",
+    "createdAt": "2026-06-22T02:02:53.459Z"
   },
-  "google-chat-messages-wyndham-general-announcements/wje7uces7": {
-    "senderName": "Priyesh Narayan",
-    "senderEmail": "graphics@cml.com.fj",
-    "content": "Excellent! I've linked the central marketing assets here. Let me know if you need high-resolution banners.",
-    "timestamp": "2026-07-03T20:49:41.923Z",
-    "reactions": {
-      "👍": [
-        "Charles Cebujano"
-      ]
-    }
+  "lost-and-found-radisson/item_2": {
+    "id": "item_2",
+    "itemName": "Blue Leather Wallet",
+    "description": "Contains Fiji national ID and various credit cards. No cash found.",
+    "locationFound": "Gym Changing Room",
+    "staffName": "Rajesh Kumar",
+    "staffPosition": "Security",
+    "imageUrl": "https://images.unsplash.com/photo-1627123424574-724758594e93?q=80&w=1000&auto=format&fit=crop",
+    "status": "Found",
+    "propertyId": "radisson",
+    "createdAt": "2026-06-21T02:02:53.459Z"
+  },
+  "restaurant-guests-radisson/guest_1": {
+    "id": "guest_1",
+    "fullName": "Akisi Ravuvu",
+    "room": "405",
+    "pax": 2,
+    "plan": "Half Board (HB)",
+    "status": "Active",
+    "visitCount": 1,
+    "rewardPoints": 100,
+    "notes": "Vegetarian meals preferred. Allergic to pineapples."
+  },
+  "restaurant-guests-radisson/guest_1/visits/v1": {
+    "id": "v1",
+    "timestamp": "2026-06-22T02:02:53.459Z",
+    "servedBy": "Waisake L.",
+    "meal": "Breakfast",
+    "notes": "Enjoyed the fresh tropical fruit platter."
+  },
+  "mailer-contacts-radisson/contact_1": {
+    "id": "contact_1",
+    "name": "Tevita Waqanidrola",
+    "email": "tevitaw@ramadawailoaloafiji.com",
+    "department": "Food & Beverage",
+    "role": "F&B Captain",
+    "active": true,
+    "lastEmailed": "2026-05-25"
+  },
+  "mailer-contacts-radisson/contact_2": {
+    "id": "contact_2",
+    "name": "Litia Naulumatua",
+    "email": "litian@ramadawailoaloafiji.com",
+    "department": "Housekeeping",
+    "role": "Floor Supervisor",
+    "active": true,
+    "lastEmailed": "2026-05-26"
   }
 }
