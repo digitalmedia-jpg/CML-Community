@@ -35,22 +35,13 @@ function isDirectCollectionKey(key: string): boolean {
   const [collectionName] = key.split('/');
   if (!collectionName) return false;
 
-  // Direct categories are directed exclusively to/from hybrid_sandbox per Charles's instruction:
-  // customer recovery (complaints-*), lost and found (lost-and-found-*, lost-and-found), cml rewards (restaurant-guests-*, rewards-config-*),
-  // newsletter subscriber (newsletter-subscribers-*), flip books (flipbooks-*).
-  if (
+  return (
     collectionName.startsWith("newsletter-subscribers-") ||
     collectionName.startsWith("lost-and-found-") ||
     collectionName.startsWith("restaurant-guests-") ||
     collectionName.startsWith("complaints-") ||
     collectionName.startsWith("flipbooks-") ||
     collectionName.startsWith("rewards-config-") ||
-    collectionName === "lost-and-found"
-  ) {
-    return false;
-  }
-
-  return (
     collectionName.startsWith("hrms-") ||
     collectionName.startsWith("cml-signin-") ||
     collectionName.startsWith("cml-geofence-") ||
@@ -61,6 +52,7 @@ function isDirectCollectionKey(key: string): boolean {
     collectionName.startsWith("cml-forms-submissions-") ||
     collectionName.startsWith("google-chat-messages-") ||
     collectionName.startsWith("business-cards-") ||
+    collectionName === "lost-and-found" ||
     collectionName === "daily-news" ||
     collectionName === "ramada_form_submissions" ||
     collectionName === "managed_cases" ||
@@ -1855,6 +1847,30 @@ async function startServer() {
       return;
     };
 
+    const backfillDirectCollections = async () => {
+      if (!firestoreRestSync) return;
+      console.log("[MOCK_DB] Starting background backfill of direct collections from central ledger...");
+      const directKeys = Object.entries(serverMockDbStore).filter(([k]) => isDirectCollectionKey(k));
+      console.log(`[MOCK_DB] Found ${directKeys.length} direct keys to verify/restore in Firestore.`);
+      
+      let successCount = 0;
+      for (const [key, value] of directKeys) {
+        const parts = key.split('/');
+        if (parts.length === 2) {
+          const [collectionName, docId] = parts;
+          try {
+            const ok = await firestoreRestSync.saveDirectDocument(collectionName, docId, value);
+            if (ok) successCount++;
+            // Prevent hitting rate limits
+            await new Promise(resolve => setTimeout(resolve, 150));
+          } catch (e: any) {
+            console.error(`[MOCK_DB] Error backfilling key ${key}:`, e.message || e);
+          }
+        }
+      }
+      console.log(`[MOCK_DB] Finished background backfill of direct collections. Restored/Synced ${successCount}/${directKeys.length} documents.`);
+    };
+
     // 2. Then merge from central cloud Firestore using REST
     if (firestoreRestSync) {
       try {
@@ -1884,6 +1900,9 @@ async function startServer() {
           // Trigger recovery scan
           triggerActiveRecoveryScan = importDirectCollectionsFromFirestore;
           await importDirectCollectionsFromFirestore();
+          
+          // Fire direct collection backfill in the background
+          backfillDirectCollections();
         } else {
           console.warn("[MOCK_DB] Cloud Firestore REST connection returned null (rate-limited or unreachable). Will retry hydration shortly...");
           isCloudHydrated = false; // Guard saving/overwriting until successfully hydrated
