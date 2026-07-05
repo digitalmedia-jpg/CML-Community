@@ -9,6 +9,7 @@ import {
   orderBy,
   doc,
   updateDoc,
+  setDoc,
   connectGoogleWorkspace,
   getGoogleAccessToken,
   getGoogleWorkspaceConnections,
@@ -751,6 +752,77 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     return () => unsubscribe();
   }, [companyId]);
 
+  // Synchronize Google Chat messages from space AAAAApnKTIM to CML widget (ramada-forum-sync)
+  useEffect(() => {
+    if (companyId !== "ramada" || activeSpaceId !== "forum-discussions-sync") {
+      return;
+    }
+
+    let intervalId: any = null;
+
+    const syncMessagesFromGoogleChat = async () => {
+      const token = workspaceAccessToken || getGoogleAccessToken("ramada");
+      if (!token) {
+        return;
+      }
+
+      try {
+        const spaceId = "AAAAEpnKTIM";
+        const response = await fetch(`https://chat.googleapis.com/v1/spaces/${spaceId}/messages?pageSize=30`, {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          }
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = await response.json();
+        const googleMessages = data.messages || [];
+
+        for (const gMsg of googleMessages) {
+          if (gMsg.text && (gMsg.text.includes("(CML Widget)") || gMsg.text.includes("📢 Forum Sync") || gMsg.text.includes("🛡️ Guest Recovery Monitor"))) {
+            continue;
+          }
+
+          const msgId = `gchat_${gMsg.name.replace(/\//g, "_")}`;
+          const senderName = gMsg.sender?.displayName || "Google Chat Member";
+          const senderEmail = gMsg.sender?.email || "gchat@ramadawailoaloafiji.com";
+          const content = gMsg.text || "";
+          const timestamp = gMsg.createTime || new Date().toISOString();
+
+          const targetCol = `google-chat-messages-ramada-forum-discussions-sync`;
+          const payload = {
+            senderName,
+            senderEmail,
+            content,
+            timestamp,
+            reactions: {}
+          };
+
+          const docRef = doc(db, "hybrid_sandbox", msgId);
+          await setDoc(docRef, {
+            collection: targetCol,
+            db_json: JSON.stringify(payload),
+            payload_json: JSON.stringify(payload),
+            createdAt: timestamp
+          });
+        }
+      } catch (err) {
+        console.error("Error syncing Google Chat messages:", err);
+      }
+    };
+
+    syncMessagesFromGoogleChat();
+    intervalId = setInterval(syncMessagesFromGoogleChat, 10000);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [companyId, activeSpaceId, workspaceAccessToken]);
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() && !simulatedAttachment) return;
@@ -777,6 +849,26 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
         payload_json: JSON.stringify(payload),
         createdAt: new Date().toISOString()
       });
+
+      // Two-way Google Chat space webhook sync for Ramada Forum
+      if (companyId === "ramada" && activeSpaceId === "forum-discussions-sync") {
+        try {
+          let text = `*${payload.senderName}* (CML Widget):\n${payload.content}`;
+          if (payload.attachmentUrl) {
+            text += `\n📎 *Attachment:* [${payload.attachmentName || "File"}](${payload.attachmentUrl})`;
+          }
+          await fetch("https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=vPwVpjTZY-LCMzE-k99FArPmX0r1icantvbCflTP6bk", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ text })
+          });
+        } catch (webhookErr) {
+          console.error("Webhook POST failed:", webhookErr);
+        }
+      }
+
       setNewMessage("");
       setSimulatedAttachment(null);
     } catch (err) {
