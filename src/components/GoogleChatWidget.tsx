@@ -40,7 +40,10 @@ import {
   VideoOff,
   Mic,
   MicOff,
-  Mail
+  Mail,
+  Settings,
+  Trash2,
+  Copy
 } from "lucide-react";
 import { toastService } from "../services/toastService";
 
@@ -61,6 +64,7 @@ interface ChatSpace {
   name: string;
   description: string;
   unreadCount: number;
+  webhookUrl?: string;
 }
 
 interface MemberPresence {
@@ -147,6 +151,25 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
 
   const initialLoadRef = useRef(true);
   const knownMessageIdsRef = useRef<Set<string>>(new Set());
+  const ringIntervalRef = useRef<any>(null);
+  const callConnectTimeoutRef = useRef<any>(null);
+
+  const clearCallTimers = () => {
+    if (ringIntervalRef.current) {
+      clearInterval(ringIntervalRef.current);
+      ringIntervalRef.current = null;
+    }
+    if (callConnectTimeoutRef.current) {
+      clearTimeout(callConnectTimeoutRef.current);
+      callConnectTimeoutRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      clearCallTimers();
+    };
+  }, []);
 
   // Reset tracking on activeSpaceId change
   useEffect(() => {
@@ -163,9 +186,19 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     }
   });
 
+  const [deletedSpaceIds, setDeletedSpaceIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(`cml_deleted_spaces_${companyId}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
   const [isCreatingSpace, setIsCreatingSpace] = useState(false);
   const [newSpaceName, setNewSpaceName] = useState("");
   const [newSpaceDesc, setNewSpaceDesc] = useState("");
+  const [newSpaceWebhookUrl, setNewSpaceWebhookUrl] = useState("");
 
   // Simulated Space Config
   const baseSpaces: ChatSpace[] = [
@@ -216,12 +249,13 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
       unreadCount: 0
     }));
 
-  const spaces = [...baseSpaces, ...customSpaces, ...formattedRealSpaces];
+  const spaces = [...baseSpaces, ...customSpaces, ...formattedRealSpaces]
+    .filter(space => !deletedSpaceIds.includes(space.id));
 
   // Call & Video Simulation state
   const [activeCall, setActiveCall] = useState<{
     type: "voice" | "video";
-    status: "ringing" | "connected" | "ended";
+    status: "ringing" | "dialing" | "connected" | "ended";
     participantName: string;
     hasVideo: boolean;
     hasMic: boolean;
@@ -232,20 +266,24 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     try {
       const saved = localStorage.getItem(`cml_custom_spaces_${companyId}`);
       setCustomSpaces(saved ? JSON.parse(saved) : []);
+      const savedDeleted = localStorage.getItem(`cml_deleted_spaces_${companyId}`);
+      setDeletedSpaceIds(savedDeleted ? JSON.parse(savedDeleted) : []);
     } catch (e) {
       setCustomSpaces([]);
+      setDeletedSpaceIds([]);
     }
   }, [companyId]);
 
   // Create new Group Space/Forum
-  const handleAddSpace = (name: string, description: string) => {
+  const handleAddSpace = (name: string, description: string, webhookUrl?: string) => {
     if (!name.trim()) return;
     const cleanName = name.trim().toLowerCase().replace(/\s+/g, '-');
     const newSpace: ChatSpace = {
       id: `custom-space-${cleanName}-${Date.now()}`,
       name: `📁 ${cleanName}`,
       description: description.trim() || "Custom staff group discussion forum",
-      unreadCount: 0
+      unreadCount: 0,
+      webhookUrl: webhookUrl?.trim() || undefined
     };
     const updated = [...customSpaces, newSpace];
     setCustomSpaces(updated);
@@ -254,7 +292,58 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     setIsCreatingSpace(false);
     setNewSpaceName("");
     setNewSpaceDesc("");
+    setNewSpaceWebhookUrl("");
     toastService.success(`Successfully created and synchronized group space #${cleanName}!`);
+  };
+
+  // Delete Space action
+  const handleDeleteSpace = (spaceId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (spaceId === "general-announcements") {
+      toastService.error("The general-announcements space is a core system requirement and cannot be deleted.");
+      return;
+    }
+    if (window.confirm("Are you sure you want to delete this space? This will remove it from your active list.")) {
+      const updated = [...deletedSpaceIds, spaceId];
+      setDeletedSpaceIds(updated);
+      localStorage.setItem(`cml_deleted_spaces_${companyId}`, JSON.stringify(updated));
+      if (activeSpaceId === spaceId) {
+        setActiveSpaceId("general-announcements");
+      }
+      toastService.success("Space removed successfully.");
+    }
+  };
+
+  // Simple ring tone generator for high-fidelity communication dialing
+  const playRingTone = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc1.frequency.value = 440;
+      osc2.frequency.value = 480;
+      
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(ctx.destination);
+      
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.08, ctx.currentTime + 1.2);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 1.3);
+      
+      osc1.start();
+      osc2.start();
+      
+      osc1.stop(ctx.currentTime + 1.5);
+      osc2.stop(ctx.currentTime + 1.5);
+    } catch (e) {
+      console.warn("AudioContext failed:", e);
+    }
   };
 
   // Start Private Chat with a member
@@ -993,21 +1082,34 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
         }
       }
 
-      // Two-way Google Chat space webhook sync for Ramada / Wyndham Forum
-      const isRamadaForum = companyId === "ramada" && (activeSpaceId === "forum-discussions-sync" || activeSpaceId === "spaces/AAAAEpnKTIM");
-      const isWyndhamForum = companyId === "wyndham" && (activeSpaceId === "forum-discussions-sync" || activeSpaceId === "spaces/AAQAOj5WBis");
+      // Universal Google Chat Space Webhook Forwarding for all spaces/chats
+      const activeSpaceObj = spaces.find(s => s.id === activeSpaceId);
+      const customWebhook = activeSpaceObj?.webhookUrl;
 
-      if (isRamadaForum || isWyndhamForum) {
+      // Select target webhook
+      let targetWebhookUrl = customWebhook || null;
+
+      // Fallback default webhooks for forum sync spaces if no custom webhook is defined
+      if (!targetWebhookUrl) {
+        const isRamadaForum = companyId === "ramada" && (activeSpaceId === "forum-discussions-sync" || activeSpaceId === "spaces/AAAAEpnKTIM");
+        const isWyndhamForum = companyId === "wyndham" && (activeSpaceId === "forum-discussions-sync" || activeSpaceId === "spaces/AAQAOj5WBis");
+        
+        if (isRamadaForum) {
+          targetWebhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=vPwVpjTZY-LCMzE-k99FArPmX0r1icantvbCflTP6bk";
+        } else if (isWyndhamForum) {
+          targetWebhookUrl = "https://chat.googleapis.com/v1/spaces/AAQAOj5WBis/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=X-LcP3tlqoGOT1uM1pIVeTV9am3eIhMJrPxy7zUmvTI";
+        }
+      }
+
+      if (targetWebhookUrl) {
         try {
-          let text = `*${payload.senderName}* (CML Widget):\n${payload.content}`;
+          const spaceNameLabel = activeSpaceObj?.name || activeSpaceId;
+          let text = `*${payload.senderName}* (${payload.senderEmail}) [Space: ${spaceNameLabel}]:\n${payload.content}`;
           if (payload.attachmentUrl) {
             text += `\n📎 *Attachment:* [${payload.attachmentName || "File"}](${payload.attachmentUrl})`;
           }
-          const webhookUrl = isRamadaForum 
-            ? "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=vPwVpjTZY-LCMzE-k99FArPmX0r1icantvbCflTP6bk"
-            : "https://chat.googleapis.com/v1/spaces/AAQAOj5WBis/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=X-LcP3tlqoGOT1uM1pIVeTV9am3eIhMJrPxy7zUmvTI";
 
-          await fetchGChat(webhookUrl, {
+          await fetchGChat(targetWebhookUrl, {
             method: "POST",
             headers: {
               "Content-Type": "application/json"
@@ -1327,20 +1429,79 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
               </p>
             </div>
             <div className="flex items-center gap-1.5 text-slate-400">
+              {/* Webhook Configuration for Custom Spaces and Sync Spaces */}
+              {activeSpace && (activeSpace.id.startsWith("custom-space-") || activeSpace.id === "forum-discussions-sync") && (
+                <button
+                  onClick={() => {
+                    const url = window.prompt(
+                      `Enter or update the Google Chat Incoming Webhook URL for #${activeSpace.name.replace(/^[^\s]+\s/, "")}:`, 
+                      activeSpace.webhookUrl || ""
+                    );
+                    if (url !== null) {
+                      const cleanUrl = url.trim();
+                      if (cleanUrl && !cleanUrl.startsWith("https://chat.googleapis.com/")) {
+                        toastService.error("Invalid Webhook URL. It must start with https://chat.googleapis.com/");
+                        return;
+                      }
+                      const updatedSpaces = customSpaces.map(s => 
+                        s.id === activeSpace.id ? { ...s, webhookUrl: cleanUrl || undefined } : s
+                      );
+                      setCustomSpaces(updatedSpaces);
+                      localStorage.setItem(`cml_custom_spaces_${companyId}`, JSON.stringify(updatedSpaces));
+                      toastService.success(cleanUrl ? "Google Chat Incoming Webhook configured successfully!" : "Webhook config cleared.");
+                    }
+                  }}
+                  className="p-1 hover:bg-slate-200 transition-colors"
+                  style={{ color: primaryColor }}
+                  title="Configure Google Chat Webhook Sync"
+                >
+                  <Settings size={13} className={activeSpace.webhookUrl ? "text-emerald-500 animate-pulse" : "text-slate-400"} />
+                </button>
+              )}
+
+              {/* Copy Inbound Webhook URL option */}
+              {activeSpace && (activeSpace.id.startsWith("custom-space-") || activeSpace.id === "forum-discussions-sync") && (
+                <button
+                  onClick={() => {
+                    const inboundUrl = `${window.location.origin}/api/inbound-webhook/${companyId}/${activeSpace.id}`;
+                    navigator.clipboard.writeText(inboundUrl);
+                    toastService.success(`Inbound Webhook URL copied! Post JSON text/content to this URL to receive messages in #${activeSpace.name.replace(/^[^\s]+\s/, "")} from Google Chat or other apps.`);
+                  }}
+                  className="p-1 hover:bg-slate-200 transition-colors"
+                  style={{ color: primaryColor }}
+                  title="Copy Inbound Webhook URL (for actual Google Chat)"
+                >
+                  <Copy size={13} className="text-slate-500 hover:text-emerald-500" />
+                </button>
+              )}
+
+              {/* Call Controls */}
               <button 
                 onClick={() => {
+                  clearCallTimers();
                   const name = isDM ? dmName : (spaces.find(s => s.id === activeSpaceId)?.name.replace(/^[^\s]+\s/, '') || "Team Members");
                   setActiveCall({
                     type: "voice",
-                    status: "ringing",
+                    status: "dialing",
                     participantName: name,
                     hasVideo: false,
                     hasMic: true
                   });
                   toastService.info(`Calling ${name}...`);
-                  setTimeout(() => {
-                    setActiveCall(prev => prev ? { ...prev, status: "connected" } : null);
-                  }, 2500);
+                  playRingTone();
+                  ringIntervalRef.current = setInterval(() => {
+                    playRingTone();
+                  }, 1500);
+                  callConnectTimeoutRef.current = setTimeout(() => {
+                    clearCallTimers();
+                    setActiveCall(prev => {
+                      if (prev && prev.status === "dialing") {
+                        toastService.success("Call connected.");
+                        return { ...prev, status: "connected" };
+                      }
+                      return prev;
+                    });
+                  }, 4000);
                 }}
                 className="p-1 hover:bg-slate-200 transition-colors"
                 style={{ color: primaryColor }}
@@ -1350,18 +1511,30 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
               </button>
               <button 
                 onClick={() => {
+                  clearCallTimers();
                   const name = isDM ? dmName : (spaces.find(s => s.id === activeSpaceId)?.name.replace(/^[^\s]+\s/, '') || "Team Members");
                   setActiveCall({
                     type: "video",
-                    status: "ringing",
+                    status: "dialing",
                     participantName: name,
                     hasVideo: true,
                     hasMic: true
                   });
                   toastService.info(`Starting video call with ${name}...`);
-                  setTimeout(() => {
-                    setActiveCall(prev => prev ? { ...prev, status: "connected" } : null);
-                  }, 2500);
+                  playRingTone();
+                  ringIntervalRef.current = setInterval(() => {
+                    playRingTone();
+                  }, 1500);
+                  callConnectTimeoutRef.current = setTimeout(() => {
+                    clearCallTimers();
+                    setActiveCall(prev => {
+                      if (prev && prev.status === "dialing") {
+                        toastService.success("Video link established.");
+                        return { ...prev, status: "connected" };
+                      }
+                      return prev;
+                    });
+                  }, 4000);
                 }}
                 className="p-1 hover:bg-slate-200 transition-colors"
                 style={{ color: primaryColor }}
@@ -1369,6 +1542,17 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
               >
                 <Video size={13} />
               </button>
+
+              {/* Delete Active Space button (if it's not general-announcements) */}
+              {activeSpaceId !== "general-announcements" && (
+                <button
+                  onClick={(e) => handleDeleteSpace(activeSpaceId, e)}
+                  className="p-1 hover:bg-slate-200 text-rose-500 hover:text-rose-600 transition-colors"
+                  title="Delete/Hide This Space"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
 
               {/* Email Straight to Person (Quick Action) */}
               {isDM && (
@@ -1462,17 +1646,11 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                 {spaces.map((space) => {
                   const isActive = space.id === activeSpaceId;
                   return (
-                    <button
+                    <div
                       key={space.id}
-                      onClick={() => {
-                        setActiveSpaceId(space.id);
-                        setShowSearch(false);
-                        setSearchQuery("");
-                        setIsCreatingSpace(false);
-                      }}
-                      className={`w-full text-left px-2.5 py-2 text-[10px] border-b border-slate-100 flex flex-col gap-0.5 transition-all outline-none ${
+                      className={`w-full group text-left px-2.5 py-2 text-[10px] border-b border-slate-100 flex items-center justify-between gap-1.5 transition-all outline-none ${
                         isActive 
-                          ? "border-l-2 font-bold" 
+                          ? "border-l-2 font-bold bg-white" 
                           : "text-slate-600 hover:bg-slate-100"
                       }`}
                       style={isActive ? {
@@ -1481,8 +1659,28 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                         color: primaryColor
                       } : {}}
                     >
-                      <span className="truncate font-sans font-medium flex items-center gap-1 text-[10px]">{space.name}</span>
-                    </button>
+                      <button
+                        onClick={() => {
+                          setActiveSpaceId(space.id);
+                          setShowSearch(false);
+                          setSearchQuery("");
+                          setIsCreatingSpace(false);
+                        }}
+                        className="flex-1 min-w-0 text-left outline-none cursor-pointer"
+                      >
+                        <span className="truncate font-sans font-medium flex items-center gap-1 text-[10px]">{space.name}</span>
+                      </button>
+
+                      {space.id !== "general-announcements" && (
+                        <button
+                          onClick={(e) => handleDeleteSpace(space.id, e)}
+                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 transition-opacity p-0.5 shrink-0 cursor-pointer"
+                          title="Delete space"
+                        >
+                          <Trash2 size={10} />
+                        </button>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -1506,6 +1704,35 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                         Cancel
                       </button>
                     </div>
+
+                    {/* Restore default spaces if deleted */}
+                    {baseSpaces.filter(s => deletedSpaceIds.includes(s.id)).length > 0 && (
+                      <div className="bg-slate-100 p-2 border border-slate-200 rounded-sm mb-3">
+                        <p className="text-[8px] uppercase tracking-wider font-sans font-bold text-slate-500 mb-1 leading-none">Restore Default Spaces</p>
+                        <div className="space-y-1 mt-1">
+                          {baseSpaces.filter(s => deletedSpaceIds.includes(s.id)).map(s => (
+                            <div key={s.id} className="flex items-center justify-between bg-white px-2 py-1 border border-slate-150">
+                              <span className="text-[9px] font-sans font-semibold text-slate-700 truncate max-w-[120px]">{s.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = deletedSpaceIds.filter(id => id !== s.id);
+                                  setDeletedSpaceIds(updated);
+                                  localStorage.setItem(`cml_deleted_spaces_${companyId}`, JSON.stringify(updated));
+                                  setActiveSpaceId(s.id);
+                                  setIsCreatingSpace(false);
+                                  toastService.success(`Restored and synchronized ${s.name}!`);
+                                }}
+                                className="px-2 py-0.5 text-[8px] font-sans font-bold text-white uppercase tracking-wider rounded-xs cursor-pointer"
+                                style={{ backgroundColor: primaryColor }}
+                              >
+                                Restore
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     
                     <div className="space-y-1">
                       <label className="text-[8px] uppercase tracking-wider font-sans font-bold text-slate-500">Space Name</label>
@@ -1525,9 +1752,33 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                         placeholder="e.g. Discuss joint marketing drives..."
                         value={newSpaceDesc}
                         onChange={(e) => setNewSpaceDesc(e.target.value)}
-                        className="w-full text-[10px] border border-slate-200 px-2 py-1.5 outline-none bg-white font-sans text-slate-700 resize-none h-16"
+                        className="w-full text-[10px] border border-slate-200 px-2 py-1.5 outline-none bg-white font-sans text-slate-700 resize-none h-14"
                         maxLength={100}
                       />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[8px] uppercase tracking-wider font-sans font-bold text-slate-500">Google Chat Webhook URL (Optional)</label>
+                      <input 
+                        type="url" 
+                        placeholder="https://chat.googleapis.com/v1/spaces/..."
+                        value={newSpaceWebhookUrl}
+                        onChange={(e) => setNewSpaceWebhookUrl(e.target.value)}
+                        className="w-full text-[10px] border border-slate-200 px-2 py-1.5 outline-none bg-white font-sans text-slate-700 animate-fade-in"
+                      />
+                      <p className="text-[7px] text-slate-400 leading-tight">
+                        Provide an Incoming Webhook URL from your Google Chat space to synchronize messages automatically.
+                      </p>
+                    </div>
+
+                    <div className="bg-emerald-50/50 border border-emerald-100 p-2 rounded-sm space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[8px] uppercase tracking-wider font-sans font-extrabold text-emerald-800">Inbound Webhook Integration</span>
+                        <span className="text-[7px] text-emerald-600 bg-emerald-100 px-1 font-bold rounded">Auto-Generated</span>
+                      </div>
+                      <p className="text-[7px] text-slate-500 leading-tight">
+                        A custom Inbound Webhook URL will be automatically provisioned for this space. You can use it in Google Chat to post messages back into this widget room in real-time.
+                      </p>
                     </div>
                   </div>
 
@@ -1535,15 +1786,15 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                     <button 
                       type="button"
                       onClick={() => setIsCreatingSpace(false)}
-                      className="flex-1 border border-slate-200 hover:bg-slate-100 text-slate-500 text-[9px] font-sans font-bold py-1.5 rounded transition-all"
+                      className="flex-1 border border-slate-200 hover:bg-slate-100 text-slate-500 text-[9px] font-sans font-bold py-1.5 rounded transition-all cursor-pointer"
                     >
                       Cancel
                     </button>
                     <button 
                       type="button"
-                      onClick={() => handleAddSpace(newSpaceName, newSpaceDesc)}
+                      onClick={() => handleAddSpace(newSpaceName, newSpaceDesc, newSpaceWebhookUrl)}
                       disabled={!newSpaceName.trim()}
-                      className="flex-1 disabled:bg-slate-200 disabled:text-slate-400 text-white text-[9px] font-sans font-bold py-1.5 rounded transition-all shadow-sm"
+                      className="flex-1 disabled:bg-slate-200 disabled:text-slate-400 text-white text-[9px] font-sans font-bold py-1.5 rounded transition-all shadow-sm cursor-pointer"
                       style={{ backgroundColor: newSpaceName.trim() ? primaryColor : undefined }}
                       onMouseEnter={(e) => newSpaceName.trim() && (e.currentTarget.style.backgroundColor = darkColor)}
                       onMouseLeave={(e) => newSpaceName.trim() && (e.currentTarget.style.backgroundColor = primaryColor)}
@@ -1577,22 +1828,11 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                                 const email = updated[companyId]?.email || "";
                                 const domain = email.trim().toLowerCase().split("@")[1] || "";
                                 
-                                let isValid = false;
-                                if (companyId === "ramada" && (domain === "cml.com.fj")) {
-                                  isValid = true;
-                                } else if (companyId === "wyndham" && (domain === "cml.com.fj")) {
-                                  isValid = true;
-                                } else if (companyId === "cml" && domain === "cml.com.fj") {
-                                  isValid = true;
-                                }
+                                let isValid = domain === "cml.com.fj";
 
                                 if (!isValid) {
                                   disconnectGoogleWorkspaceProperty(companyId);
                                   setConnections(getGoogleWorkspaceConnections());
-                                  let expected = "";
-                                  if (companyId === "ramada") expected = "ramadawailoaloafiji.com or cml.com.fj";
-                                  else if (companyId === "wyndham") expected = "wyndhamgardenwailoaloafiji.com or cml.com.fj";
-                                  else expected = "cml.com.fj";
                                   toastService.error("Linking failed: Only @cml.com.fj domain emails are authorized for this property's Google Chat Widget.");
                                   return;
                                 }
@@ -1800,7 +2040,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                       </div>
                     ) : (
                       <div className="flex flex-col items-center gap-4 py-4">
-                        <div className="w-20 h-20 rounded-full flex items-center justify-center border-2 border-dashed border-[#C5A02D]/40 bg-slate-900 animate-pulse relative">
+                        <div className={`w-20 h-20 rounded-full flex items-center justify-center border-2 border-dashed bg-slate-900 relative ${activeCall.status === "dialing" ? "border-gold animate-spin" : "border-[#C5A02D]/40 animate-pulse"}`}>
                           <div className="absolute inset-2 bg-[#0B1C33] rounded-full flex items-center justify-center">
                             <span className="text-3xl">👤</span>
                           </div>
@@ -1808,7 +2048,12 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                         <div className="text-center">
                           <h4 className="text-sm font-sans font-black text-white">{activeCall.participantName}</h4>
                           <p className="text-[9px] text-[#C5A02D] mt-1.5 uppercase font-bold tracking-widest font-sans flex items-center justify-center gap-1">
-                            {activeCall.status === "ringing" ? (
+                            {activeCall.status === "dialing" ? (
+                              <>
+                                <span className="h-1.5 w-1.5 rounded-full bg-gold animate-ping" />
+                                Establishing Secure Dialing Connection...
+                              </>
+                            ) : activeCall.status === "ringing" ? (
                               <>
                                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" />
                                 Incoming Ringing Link...
@@ -1842,12 +2087,29 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
 
                   {/* Actions Bar */}
                   <div className="border-t border-white/10 pt-4 flex flex-col gap-3 shrink-0">
-                    {activeCall.status === "ringing" ? (
+                    {activeCall.status === "dialing" ? (
+                      <div className="w-full">
+                        {/* CANCEL DIALING BUTTON */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            clearCallTimers();
+                            setActiveCall(prev => prev ? { ...prev, status: "ended" } : null);
+                            toastService.info("Call dialing canceled.");
+                            setTimeout(() => setActiveCall(null), 800);
+                          }}
+                          className="w-full py-3 bg-rose-600 hover:bg-rose-500 text-white font-extrabold rounded-sm shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-wider text-[11px]"
+                        >
+                          <PhoneOff size={14} /> Cancel Call Dialing
+                        </button>
+                      </div>
+                    ) : activeCall.status === "ringing" ? (
                       <div className="grid grid-cols-2 gap-3 w-full">
                         {/* ACCEPT / ANSWER BUTTON */}
                         <button
                           type="button"
                           onClick={() => {
+                            clearCallTimers();
                             setActiveCall(prev => prev ? { ...prev, status: "connected" } : null);
                             toastService.success("Call connected.");
                           }}
@@ -1860,6 +2122,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                         <button
                           type="button"
                           onClick={() => {
+                            clearCallTimers();
                             setActiveCall(prev => prev ? { ...prev, status: "ended" } : null);
                             toastService.info("Call declined.");
                             setTimeout(() => setActiveCall(null), 1000);
@@ -1902,10 +2165,11 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                           )}
                         </div>
 
-                        {/* END CALL BUTTON (Very big, clear, labeled) */}
+                        {/* END CALL BUTTON */}
                         <button 
                           type="button"
                           onClick={() => {
+                            clearCallTimers();
                             setActiveCall(prev => prev ? { ...prev, status: "ended" } : null);
                             toastService.info("Call ended.");
                             setTimeout(() => setActiveCall(null), 1000);

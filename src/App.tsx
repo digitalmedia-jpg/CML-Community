@@ -2946,7 +2946,35 @@ export default function App() {
         });
       }
 
-      alert("Sample data successfully seeded into Guest Recovery, Staff Directory, and Lost & Found.");
+      // Seed Newsletter Subscribers
+      const sampleNewsletterSubscribers = [
+        { email: "digitalmedia@cml.com.fj", source: "WordPress Widget", firstName: "Charles", lastName: "Cebujano", phone: "+679 998 4676" },
+        { email: "guest.relation@ramadasuitesfiji.com", source: "HTML Ingest", firstName: "Sera", lastName: "Wailoaloa", phone: "+679 672 5000" },
+        { email: "charlie.bravo@gmail.com", source: "Manual Entry", firstName: "Charlie", lastName: "Bravo", phone: "+61 412 345 678" }
+      ];
+
+      for (const sub of sampleNewsletterSubscribers) {
+        await addDoc(collection(db, `newsletter-subscribers-${seedProperty}`), {
+          ...sub,
+          createdAt: serverTimestamp()
+        });
+      }
+
+      // Seed Restaurant Guests (CML Rewards)
+      const sampleRestaurantGuests = [
+        { fullName: "Charles Cebujano", email: "digitalmedia@cml.com.fj", phone: "+679 998 4676", visitCount: 12, rewardPoints: 1250, lastVisited: new Date().toISOString() },
+        { fullName: "Rohit Lal", email: "rohit@cml.com.fj", phone: "+679 998 9499", visitCount: 8, rewardPoints: 850, lastVisited: new Date().toISOString() },
+        { fullName: "John Wick", email: "john.wick@continental.com", phone: "+1 555 0199", visitCount: 15, rewardPoints: 3400, lastVisited: new Date().toISOString() }
+      ];
+
+      for (const guest of sampleRestaurantGuests) {
+        await addDoc(collection(db, `restaurant-guests-${seedProperty}`), {
+          ...guest,
+          createdAt: serverTimestamp()
+        });
+      }
+
+      alert("Sample data successfully seeded into Guest Recovery, Staff Directory, Lost & Found, Newsletter Subscribers, and CML Rewards.");
     } catch (error) {
       console.error("Seeding error:", error);
     }
@@ -4242,6 +4270,7 @@ export default function App() {
                   lastComplaintsSnapshotTime={lastComplaintsSnapshotTime}
                   lastNewsSnapshotTime={lastNewsSnapshotTime}
                   selectedCompany={selectedCompany}
+                  onSeedData={handleSeedData}
                 />
               )}
 

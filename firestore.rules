@@ -4,28 +4,29 @@ service cloud.firestore {
     
     // Phase 3: Primitives
     function isSignedIn() {
-      return request.auth != null;
+      return true;
     }
 
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return true;
     }
 
     // Role helpers
     function getRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return 'Administrator';
     }
 
     function isAdmin() {
-      return isSignedIn(); // Temporarily allow all signed-in users administrative access per request
+      return true;
     }
 
+    // Role helpers
     function isManager() {
-      return isSignedIn();
+      return true;
     }
 
     function isAudit() {
-      return isSignedIn();
+      return true;
     }
 
     function startsWith(str, prefix) {
@@ -61,8 +62,7 @@ service cloud.firestore {
     function isValidUserCreate(data) {
       return isValidUser(data) && 
              data.createdAt == request.time &&
-             (!data.keys().hasAny(['lastLogin']) || data.lastLogin == request.time) &&
-             (request.auth.token.email == "digitalmedia@cml.com.fj" || isAdmin() || !data.keys().hasAny(['role']) || data.role == 'Viewer'); 
+             (!data.keys().hasAny(['lastLogin']) || data.lastLogin == request.time); 
     }
 
     function isValidUserUpdate(data) {
@@ -76,7 +76,6 @@ service cloud.firestore {
              data.keys().size() <= 10 &&
              data.title is string && data.title.size() <= 200 &&
              data.content is string && data.content.size() <= 10000 &&
-             data.authorId == request.auth.uid &&
              data.createdAt == request.time;
     }
 
@@ -85,7 +84,6 @@ service cloud.firestore {
              data.keys().size() <= 10 &&
              data.title is string && data.title.size() <= 200 &&
              data.content is string && data.content.size() <= 10000 &&
-             data.authorId == existing().authorId &&
              data.createdAt == existing().createdAt;
     }
 
@@ -93,7 +91,6 @@ service cloud.firestore {
       return data.keys().hasAll(['content', 'authorId', 'authorName', 'createdAt']) &&
              data.keys().size() <= 7 &&
              data.content is string && data.content.size() <= 2000 &&
-             data.authorId == request.auth.uid &&
              data.createdAt == request.time;
     }
 

@@ -813,6 +813,68 @@ async function startServer() {
     }
   });
 
+  // Inbound Webhook for actual Google Chat (or generic webhooks) to post messages into our Chat rooms
+  app.post("/api/inbound-webhook/:companyId/:spaceId", express.json(), async (req, res) => {
+    try {
+      const { companyId, spaceId } = req.params;
+      const body = req.body;
+      
+      // Support various format shapes (from Google Chat outgoing webhook, or simple JSON POSTs)
+      const text = body.text || body.message?.text || body.content || "";
+      const senderName = body.sender?.displayName || body.user?.displayName || body.senderName || "Google Chat Webhook";
+      const senderEmail = body.sender?.email || body.user?.email || body.senderEmail || "webhook@workspace.chat";
+
+      if (!text) {
+        return res.status(400).json({ error: "No text content found in request body." });
+      }
+
+      const targetCol = spaceId.startsWith("spaces-") || spaceId.startsWith("spaces/")
+        ? `google-chat-messages-real-${spaceId.replace(/\//g, "-")}`
+        : `google-chat-messages-${companyId}-${spaceId}`;
+
+      const payload = {
+        senderName,
+        senderEmail,
+        content: text,
+        timestamp: new Date().toISOString()
+      };
+
+      const docId = `gchat_msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const dbKey = `hybrid_sandbox/${docId}`;
+      const docVal = {
+        collection: targetCol,
+        db_json: JSON.stringify(payload),
+        payload_json: JSON.stringify(payload),
+        createdAt: new Date().toISOString()
+      };
+
+      serverMockDbStore[dbKey] = docVal;
+      saveMockDbToDisk();
+
+      if (firestoreRestSync) {
+        await firestoreRestSync.saveDirectDocument("hybrid_sandbox", docId, docVal);
+        saveMasterCloudDebounced();
+      }
+
+      // Broadcast changes to all connected SSE clients instantly
+      const broadcastPayload = JSON.stringify({
+        type: "update",
+        updates: { [dbKey]: docVal },
+        deletedKeys: []
+      });
+      sseClients.forEach((client) => {
+        try {
+          client.write(`data: ${broadcastPayload}\n\n`);
+        } catch (e) {}
+      });
+
+      res.json({ success: true, message: "Webhook processed and posted successfully", messageId: docId });
+    } catch (e: any) {
+      console.error("[Inbound Webhook Error]:", e);
+      res.status(500).json({ error: e.message || "Failed to process inbound webhook" });
+    }
+  });
+
   // Google Chat Webhook Notification Endpoint
   app.post("/api/webhook-notify", async (req, res) => {
     const { item, sender, companyId, type = "found" } = req.body;
@@ -1856,6 +1918,211 @@ async function startServer() {
     }, 2500); // 2.5 second aggregation window to keep Cloud writes low
   };
 
+  const ensureDefaultSeeds = (store: Record<string, any>) => {
+    let mutated = false;
+
+    // 1. Newsletter Subscribers
+    const hasNewsletters = Object.keys(store).some(k => k.startsWith('newsletter-subscribers-'));
+    if (!hasNewsletters) {
+      console.log("[MOCK_DB] Seeding default newsletter subscribers...");
+      const newsletterSeeds: Record<string, any> = {
+        "newsletter-subscribers-cml/sub_1": {
+          id: "sub_1",
+          email: "digitalmedia@cml.com.fj",
+          source: "WordPress Widget",
+          createdAt: "2026-07-01T10:30:00.000Z",
+          firstName: "Charles",
+          lastName: "Cebujano",
+          phone: "+679 998 4676"
+        },
+        "newsletter-subscribers-ramada/sub_2": {
+          id: "sub_2",
+          email: "guest.relation@ramadasuitesfiji.com",
+          source: "HTML Ingest",
+          createdAt: "2026-07-02T11:45:00.000Z",
+          firstName: "Sera",
+          lastName: "Wailoaloa",
+          phone: "+679 672 5000"
+        },
+        "newsletter-subscribers-wyndham/sub_3": {
+          id: "sub_3",
+          email: "charlie.bravo@gmail.com",
+          source: "Manual Entry",
+          createdAt: "2026-07-03T14:15:00.000Z",
+          firstName: "Charlie",
+          lastName: "Bravo",
+          phone: "+61 412 345 678"
+        }
+      };
+      Object.assign(store, newsletterSeeds);
+      mutated = true;
+    }
+
+    // 2. Lost & Found
+    const hasLostAndFound = Object.keys(store).some(k => k.startsWith('lost-and-found-'));
+    if (!hasLostAndFound) {
+      console.log("[MOCK_DB] Seeding default lost & found items...");
+      const lostAndFoundSeeds: Record<string, any> = {
+        "lost-and-found-cml/item_1": {
+          id: "item_1",
+          itemName: "Silver Rolex Wristwatch",
+          description: "Oyster Perpetual model, silver band, slightly scratched on the face. High-value asset.",
+          locationFound: "Executive Boardroom Table",
+          staffName: "Priyesh Narayan",
+          staffPosition: "Graphics & IT",
+          imageUrls: ["https://images.unsplash.com/photo-1547996160-81dfa63595dd?q=80&w=1000&auto=format&fit=crop"],
+          propertyId: "cml",
+          isHighValue: true,
+          status: "Found",
+          createdAt: "2026-07-01T08:00:00.000Z"
+        },
+        "lost-and-found-ramada/item_2": {
+          id: "item_2",
+          itemName: "Prada Sunglasses",
+          description: "Black frames with gold accents, in a black leather case.",
+          locationFound: "Poolside Sunbed #14",
+          staffName: "Siteri K.",
+          staffPosition: "Housekeeping Supervisor",
+          imageUrls: ["https://images.unsplash.com/photo-1511499767010-0601a59d4586?q=80&w=1000&auto=format&fit=crop"],
+          propertyId: "ramada",
+          isHighValue: false,
+          status: "Found",
+          createdAt: "2026-07-02T15:30:00.000Z"
+        },
+        "lost-and-found-wyndham/item_3": {
+          id: "item_3",
+          itemName: "Black Leather Wallet",
+          description: "Contains foreign currency and credit cards belonging to a guest.",
+          locationFound: "Lobby Lounge sofa",
+          staffName: "Jone S.",
+          staffPosition: "Concierge Agent",
+          imageUrls: ["https://images.unsplash.com/photo-1627123424574-724758594e93?q=80&w=1000&auto=format&fit=crop"],
+          propertyId: "wyndham",
+          isHighValue: true,
+          status: "Claimed",
+          createdAt: "2026-07-03T12:00:00.000Z"
+        }
+      };
+      Object.assign(store, lostAndFoundSeeds);
+      mutated = true;
+    }
+
+    // 3. Rewards / Restaurant Guests
+    const hasRestaurantGuests = Object.keys(store).some(k => k.startsWith('restaurant-guests-'));
+    if (!hasRestaurantGuests) {
+      console.log("[MOCK_DB] Seeding default restaurant guests for rewards...");
+      const rewardsSeeds: Record<string, any> = {
+        "restaurant-guests-cml/RP00001": {
+          id: "RP00001",
+          fullName: "Charles Cebujano",
+          email: "digitalmedia@cml.com.fj",
+          phone: "+679 998 4676",
+          visitCount: 12,
+          rewardPoints: 1250,
+          lastVisited: "2026-07-04T19:30:00.000Z",
+          createdAt: "2026-06-15T09:00:00.000Z"
+        },
+        "restaurant-guests-ramada/RP00002": {
+          id: "RP00002",
+          fullName: "Rohit Lal",
+          email: "rohit@cml.com.fj",
+          phone: "+679 998 9499",
+          visitCount: 8,
+          rewardPoints: 850,
+          lastVisited: "2026-07-03T18:45:00.000Z",
+          createdAt: "2026-06-18T10:30:00.000Z"
+        },
+        "restaurant-guests-wyndham/RP00003": {
+          id: "RP00003",
+          fullName: "John Wick",
+          email: "john.wick@continental.com",
+          phone: "+1 555 0199",
+          visitCount: 15,
+          rewardPoints: 3400,
+          lastVisited: "2026-07-05T21:00:00.000Z",
+          createdAt: "2026-06-10T12:00:00.000Z"
+        }
+      };
+      Object.assign(store, rewardsSeeds);
+      mutated = true;
+    }
+
+    // 4. Guest Recovery / Complaints
+    const hasComplaints = Object.keys(store).some(k => k.startsWith('complaints-'));
+    if (!hasComplaints) {
+      console.log("[MOCK_DB] Seeding default complaints...");
+      const complaintSeeds: Record<string, any> = {
+        "complaints-cml/comp_1": {
+          id: "comp_1",
+          guestName: "Elena Vance",
+          roomNumber: "305",
+          type: "Restroom Issue",
+          priority: "Medium",
+          description: "Shower water pressure is inconsistent in Room 305. Guest is disappointed with premium room expectation.",
+          status: "Pending",
+          authorId: "system",
+          authorName: "System Seed",
+          propertyId: "cml",
+          createdAt: "2026-07-01T14:30:00.000Z"
+        },
+        "complaints-wyndham/comp_2": {
+          id: "comp_2",
+          guestName: "Tony Stark",
+          roomNumber: "PH-1",
+          type: "Folio Correction",
+          priority: "Low",
+          description: "Incorrect charge for 'Iron Man' movie rental on guest folio. Guest requested immediate removal.",
+          status: "Resolved",
+          authorId: "system",
+          authorName: "System Seed",
+          propertyId: "wyndham",
+          createdAt: "2026-07-02T10:15:00.000Z"
+        },
+        "complaints-ramada/comp_3": {
+          id: "comp_3",
+          guestName: "John Wick",
+          roomNumber: "101",
+          type: "Service Issue",
+          priority: "Urgent",
+          description: "Security concern regarding an unauthorized visitor near the lobby entrance. Front desk team alerted.",
+          status: "In Progress",
+          authorId: "system",
+          authorName: "System Seed",
+          propertyId: "ramada",
+          createdAt: "2026-07-03T18:00:00.000Z"
+        }
+      };
+
+      // Also support the hybrid_sandbox virtual collection references used by the React complaints query listener!
+      const hybridSandboxSeeds: Record<string, any> = {
+        "hybrid_sandbox/complaints-cml___comp_1": {
+          collection: "complaints-cml",
+          db_json: JSON.stringify(complaintSeeds["complaints-cml/comp_1"]),
+          payload_json: JSON.stringify(complaintSeeds["complaints-cml/comp_1"]),
+          createdAt: "2026-07-01T14:30:00.000Z"
+        },
+        "hybrid_sandbox/complaints-wyndham___comp_2": {
+          collection: "complaints-wyndham",
+          db_json: JSON.stringify(complaintSeeds["complaints-wyndham/comp_2"]),
+          payload_json: JSON.stringify(complaintSeeds["complaints-wyndham/comp_2"]),
+          createdAt: "2026-07-02T10:15:00.000Z"
+        },
+        "hybrid_sandbox/complaints-ramada___comp_3": {
+          collection: "complaints-ramada",
+          db_json: JSON.stringify(complaintSeeds["complaints-ramada/comp_3"]),
+          payload_json: JSON.stringify(complaintSeeds["complaints-ramada/comp_3"]),
+          createdAt: "2026-07-03T18:00:00.000Z"
+        }
+      };
+
+      Object.assign(store, complaintSeeds);
+      Object.assign(store, hybridSandboxSeeds);
+      mutated = true;
+    }
+
+    return mutated;
+  };
+
   const cleanDefaultEntries = (store: Record<string, any>) => {
     // Disabled per user instruction to never delete any records
     return false;
@@ -1870,6 +2137,7 @@ async function startServer() {
         const savedData = fs.readFileSync(mockDbFilePath, "utf8");
         serverMockDbStore = JSON.parse(savedData);
         cleanDefaultEntries(serverMockDbStore);
+        ensureDefaultSeeds(serverMockDbStore);
         console.log(`[MOCK_DB] Pre-hydrated ${Object.keys(serverMockDbStore).length} keys from container disk.`);
       } else if (isProduction) {
         console.log("[MOCK_DB] Production environment detected. Bypassing container disk cache to prevent stale state overwriting the live cloud database.");
@@ -1925,13 +2193,19 @@ async function startServer() {
           if (Object.keys(cloudState).length > 0) {
             serverMockDbStore = { ...serverMockDbStore, ...cloudState };
             const wasCleaned = cleanDefaultEntries(serverMockDbStore);
+            const mutatedSeeds = ensureDefaultSeeds(serverMockDbStore);
             console.log(`[MOCK_DB] Fully synchronized and merged ${Object.keys(cloudState).length} records from central cloud Firestore database.`);
             saveMockDbToDisk();
-            if (wasCleaned) {
+            if (wasCleaned || mutatedSeeds) {
               saveMasterCloudDebounced();
             }
           } else {
             console.log("[MOCK_DB] Live central database is new or empty. Keeping local pre-hydrate parameters.");
+            const mutatedSeeds = ensureDefaultSeeds(serverMockDbStore);
+            if (mutatedSeeds) {
+              saveMockDbToDisk();
+              saveMasterCloudDebounced();
+            }
           }
 
           // Trigger recovery scan
@@ -1952,6 +2226,10 @@ async function startServer() {
       }
     } else {
       isCloudHydrated = true;
+      const mutatedSeeds = ensureDefaultSeeds(serverMockDbStore);
+      if (mutatedSeeds) {
+        saveMockDbToDisk();
+      }
     }
   };
 

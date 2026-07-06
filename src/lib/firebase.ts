@@ -409,7 +409,7 @@ let initializedRealFirebase = false;
 if (firebaseConfig && firebaseConfig.apiKey) {
   try {
     firebaseApp = initializeApp(firebaseConfig);
-    productionDb = getFirestore(firebaseApp);
+    productionDb = getFirestore(firebaseApp, (firebaseConfig as any).firestoreDatabaseId || "(default)");
     productionAuth = getAuth(firebaseApp);
     initializedRealFirebase = true;
   } catch (err) {}

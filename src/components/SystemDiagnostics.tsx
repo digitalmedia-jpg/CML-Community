@@ -21,6 +21,7 @@ interface SystemDiagnosticsProps {
   lastComplaintsSnapshotTime?: Date | null;
   lastNewsSnapshotTime?: Date | null;
   selectedCompany?: string | null;
+  onSeedData?: () => void;
 }
 
 export const SystemDiagnostics: React.FC<SystemDiagnosticsProps> = ({
@@ -29,7 +30,8 @@ export const SystemDiagnostics: React.FC<SystemDiagnosticsProps> = ({
   onForceResync,
   lastComplaintsSnapshotTime,
   lastNewsSnapshotTime,
-  selectedCompany
+  selectedCompany,
+  onSeedData
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoggerOpen, setIsLoggerOpen] = useState(false);
@@ -257,19 +259,35 @@ export const SystemDiagnostics: React.FC<SystemDiagnosticsProps> = ({
               )}
 
               {/* Footer Sync Actions */}
-              <div className="border-t border-slate-100 pt-3 flex items-center justify-between mt-3 text-[11px]">
-                <div className="text-slate-400 font-mono">
-                  Sync: {lastSyncTime}
+              <div className="border-t border-slate-100 pt-3 flex flex-col gap-2 mt-3 text-[11px]">
+                {onSeedData && (
+                  <button
+                    id="sys-diagnostics-seed-btn"
+                    onClick={() => {
+                      if (window.confirm("Are you sure you want to seed sample database records for Guest Recovery, Lost & Found, Newsletters, and CML Rewards?")) {
+                        onSeedData();
+                      }
+                    }}
+                    className="w-full px-3 py-1.5 border border-dashed border-gold text-gold hover:bg-gold/5 text-center font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Database size={12} />
+                    Seed Sample Database Records
+                  </button>
+                )}
+                <div className="flex items-center justify-between">
+                  <div className="text-slate-400 font-mono">
+                    Sync: {lastSyncTime}
+                  </div>
+                  <button
+                    id="sys-diagnostics-sync-now-btn"
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                    className="px-3 py-1 bg-slate-900 text-white font-medium hover:bg-gold transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw size={11} className={isRefreshing ? "animate-spin" : ""} />
+                    {isRefreshing ? "Refreshing..." : "Force Sync Now"}
+                  </button>
                 </div>
-                <button
-                  id="sys-diagnostics-sync-now-btn"
-                  onClick={handleRefresh}
-                  disabled={isRefreshing}
-                  className="px-3 py-1 bg-slate-900 text-white font-medium hover:bg-gold transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw size={11} className={isRefreshing ? "animate-spin" : ""} />
-                  {isRefreshing ? "Refreshing..." : "Force Sync Now"}
-                </button>
               </div>
             </div>
           </div>
