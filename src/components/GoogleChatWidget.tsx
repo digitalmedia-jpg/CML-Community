@@ -433,18 +433,18 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
       description: "Live synchronization of staff forum posts and reply alerts",
       unreadCount: 0
     },
-    ...(companyId === "ramada" ? [{
+    {
       id: "spaces/AAAAEpnKTIM",
       name: "🌐 Ramada Forum",
       description: "Real-time Google Chat Space for ramadawailoaloafiji.com team workspace",
       unreadCount: 0
-    }] : []),
-    ...(companyId === "wyndham" ? [{
+    },
+    {
       id: "spaces/AAQAOj5WBis",
       name: "🌐 Wyndham Forum",
       description: "Real-time Google Chat Space for wyndhamgardenwailoaloafiji.com team workspace",
       unreadCount: 0
-    }] : [])
+    }
   ];
 
   const formattedRealSpaces: ChatSpace[] = (realSpaces || [])
@@ -731,12 +731,13 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
         const email = updated[companyId]?.email || "";
         const domain = email.trim().toLowerCase().split("@")[1] || "";
         
-        let isValid = domain === "cml.com.fj";
+        const ALLOWED_DOMAINS = ["cml.com.fj", "ramadawailoaloafiji.com", "wyndhamgardenwailoaloafiji.com"];
+        const isValid = ALLOWED_DOMAINS.includes(domain);
 
         if (!isValid) {
           disconnectGoogleWorkspaceProperty(companyId);
           setConnections(getGoogleWorkspaceConnections());
-          toastService.error("Linking failed: Only @cml.com.fj domain emails are authorized for this property's Google Chat Widget.");
+          toastService.error("Linking failed: Only @cml.com.fj, @ramadawailoaloafiji.com, and @wyndhamgardenwailoaloafiji.com domain emails are authorized.");
           return;
         }
         toastService.success(`Linked CML Chat (${email}) for ${getPropertyName(companyId)}!`);
@@ -827,7 +828,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
               timestamp: timestampDate.toISOString(),
             } as ChatMessage);
             knownMessageIdsRef.current.add(doc.id);
-          } else if (data.collection === `google-chat-messages-${companyId}-${activeSpaceId}`) {
+          } else if (data.collection === `google-chat-messages-portfolio-${activeSpaceId}`) {
             let payload: any = {};
             if (data.db_json) {
               try { payload = JSON.parse(data.db_json); } catch (e) {}
@@ -856,7 +857,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     const colRef = collection(db, "hybrid_sandbox");
     const targetCol = activeSpaceId.startsWith("spaces/") 
       ? `google-chat-messages-real-${activeSpaceId.replace(/\//g, "-")}`
-      : `google-chat-messages-${companyId}-${activeSpaceId}`;
+      : `google-chat-messages-portfolio-${activeSpaceId}`;
     const unsubscribe = onSnapshot(colRef, (snapshot) => {
       const list: ChatMessage[] = [];
       snapshot.forEach((doc) => {
@@ -897,7 +898,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
 
     spaces.forEach((space) => {
       const colRef = collection(db, "hybrid_sandbox");
-      const targetCol = `google-chat-messages-${companyId}-${space.id}`;
+      const targetCol = `google-chat-messages-portfolio-${space.id}`;
       let isFirstRun = true;
 
       const unsub = onSnapshot(colRef, (snapshot) => {
@@ -1002,7 +1003,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
   useEffect(() => {
     const checkAndSeed = async () => {
       const colRef = collection(db, "hybrid_sandbox");
-      const targetCol = `google-chat-messages-${companyId}-${activeSpaceId}`;
+      const targetCol = `google-chat-messages-portfolio-${activeSpaceId}`;
       
       // Query messages
       const checkSnapshot = onSnapshot(colRef, async (snapshot) => {
@@ -1107,7 +1108,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
               
               // Verify that we haven't already posted this forum sync message
               const syncKey = `FORUM_SYNC_${change.doc.id}`;
-              const chatCol = `google-chat-messages-${companyId}-forum-discussions-sync`;
+              const chatCol = `google-chat-messages-portfolio-forum-discussions-sync`;
               
               // Check if already synchronized in local memory/store
               const storageKey = `cml_synced_forum_${change.doc.id}`;
@@ -1169,7 +1170,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
               if (!localStorage.getItem(storageKey)) {
                 localStorage.setItem(storageKey, "true");
 
-                const chatCol = `google-chat-messages-${companyId}-wyndham-recovery-operations`;
+                const chatCol = `google-chat-messages-portfolio-wyndham-recovery-operations`;
                 const payload = {
                   senderName: "🛡️ Guest Recovery Monitor",
                   senderEmail: "recovery-sync@cml.com.fj",
@@ -1193,64 +1194,111 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
 
   // Synchronize Google Chat messages from space to CML widget (forum-discussions-sync)
   useEffect(() => {
-    if ((companyId !== "ramada" && companyId !== "wyndham") || activeSpaceId !== "forum-discussions-sync") {
+    if (activeSpaceId !== "forum-discussions-sync") {
       return;
     }
 
     let intervalId: any = null;
 
     const syncMessagesFromGoogleChat = async () => {
-      const token = workspaceAccessToken || getGoogleAccessToken(companyId);
-      if (!token) {
-        return;
+      const activeConnections = connections || getGoogleWorkspaceConnections();
+      
+      // 1. Sync Ramada Forum if token exists
+      const ramadaToken = activeConnections["ramada"]?.accessToken;
+      if (ramadaToken) {
+        try {
+          const response = await fetchGChat("https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?pageSize=30", {
+            headers: {
+              "Authorization": `Bearer ${ramadaToken}`,
+              "Content-Type": "application/json"
+            }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const googleMessages = data.messages || [];
+
+            for (const gMsg of googleMessages) {
+              if (gMsg.text && (gMsg.text.includes("(CML Widget)") || gMsg.text.includes("📢 Forum Sync") || gMsg.text.includes("🛡️ Guest Recovery Monitor"))) {
+                continue;
+              }
+
+              const msgId = `gchat_${gMsg.name.replace(/\//g, "_")}`;
+              const senderName = gMsg.sender?.displayName || "Google Chat Member";
+              const senderEmail = gMsg.sender?.email || "gchat@ramadawailoaloafiji.com";
+              const content = gMsg.text || "";
+              const timestamp = gMsg.createTime || new Date().toISOString();
+
+              const targetCol = "google-chat-messages-portfolio-forum-discussions-sync";
+              const payload = {
+                senderName,
+                senderEmail,
+                content,
+                timestamp,
+                reactions: {}
+              };
+
+              const docRef = doc(db, "hybrid_sandbox", msgId);
+              await setDoc(docRef, {
+                collection: targetCol,
+                db_json: JSON.stringify(payload),
+                payload_json: JSON.stringify(payload),
+                createdAt: timestamp
+              });
+            }
+          }
+        } catch (err) {
+          console.error("Error syncing Ramada google chat:", err);
+        }
       }
 
-      try {
-        const spaceId = companyId === "ramada" ? "AAAAEpnKTIM" : "AAQAOj5WBis";
-        const response = await fetchGChat(`https://chat.googleapis.com/v1/spaces/${spaceId}/messages?pageSize=30`, {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
-          }
-        });
-
-        if (!response.ok) {
-          return;
-        }
-
-        const data = await response.json();
-        const googleMessages = data.messages || [];
-
-        for (const gMsg of googleMessages) {
-          if (gMsg.text && (gMsg.text.includes("(CML Widget)") || gMsg.text.includes("📢 Forum Sync") || gMsg.text.includes("🛡️ Guest Recovery Monitor"))) {
-            continue;
-          }
-
-          const msgId = `gchat_${gMsg.name.replace(/\//g, "_")}`;
-          const senderName = gMsg.sender?.displayName || "Google Chat Member";
-          const senderEmail = gMsg.sender?.email || (companyId === "ramada" ? "gchat@ramadawailoaloafiji.com" : "gchat@wyndhamgardenwailoaloafiji.com");
-          const content = gMsg.text || "";
-          const timestamp = gMsg.createTime || new Date().toISOString();
-
-          const targetCol = `google-chat-messages-${companyId}-forum-discussions-sync`;
-          const payload = {
-            senderName,
-            senderEmail,
-            content,
-            timestamp,
-            reactions: {}
-          };
-
-          const docRef = doc(db, "hybrid_sandbox", msgId);
-          await setDoc(docRef, {
-            collection: targetCol,
-            db_json: JSON.stringify(payload),
-            payload_json: JSON.stringify(payload),
-            createdAt: timestamp
+      // 2. Sync Wyndham Forum if token exists
+      const wyndhamToken = activeConnections["wyndham"]?.accessToken;
+      if (wyndhamToken) {
+        try {
+          const response = await fetchGChat("https://chat.googleapis.com/v1/spaces/AAQAOj5WBis/messages?pageSize=30", {
+            headers: {
+              "Authorization": `Bearer ${wyndhamToken}`,
+              "Content-Type": "application/json"
+            }
           });
+
+          if (response.ok) {
+            const data = await response.json();
+            const googleMessages = data.messages || [];
+
+            for (const gMsg of googleMessages) {
+              if (gMsg.text && (gMsg.text.includes("(CML Widget)") || gMsg.text.includes("📢 Forum Sync") || gMsg.text.includes("🛡️ Guest Recovery Monitor"))) {
+                continue;
+              }
+
+              const msgId = `gchat_${gMsg.name.replace(/\//g, "_")}`;
+              const senderName = gMsg.sender?.displayName || "Google Chat Member";
+              const senderEmail = gMsg.sender?.email || "gchat@wyndhamgardenwailoaloafiji.com";
+              const content = gMsg.text || "";
+              const timestamp = gMsg.createTime || new Date().toISOString();
+
+              const targetCol = "google-chat-messages-portfolio-forum-discussions-sync";
+              const payload = {
+                senderName,
+                senderEmail,
+                content,
+                timestamp,
+                reactions: {}
+              };
+
+              const docRef = doc(db, "hybrid_sandbox", msgId);
+              await setDoc(docRef, {
+                collection: targetCol,
+                db_json: JSON.stringify(payload),
+                payload_json: JSON.stringify(payload),
+                createdAt: timestamp
+              });
+            }
+          }
+        } catch (err) {
+          console.error("Error syncing Wyndham google chat:", err);
         }
-      } catch (err) {
-        console.error("Error syncing Google Chat messages:", err);
       }
     };
 
@@ -1260,7 +1308,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [companyId, activeSpaceId, workspaceAccessToken]);
+  }, [connections, activeSpaceId]);
 
   // Synchronize active real Google Chat space messages from the actual Google space API
   useEffect(() => {
@@ -1346,7 +1394,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
       const user = auth.currentUser;
       const targetCol = activeSpaceId.startsWith("spaces/")
         ? `google-chat-messages-real-${activeSpaceId.replace(/\//g, "-")}`
-        : `google-chat-messages-${companyId}-${activeSpaceId}`;
+        : `google-chat-messages-portfolio-${activeSpaceId}`;
       
       const payload: Partial<ChatMessage> = {
         senderName: user?.displayName || user?.email?.split('@')[0] || "Authorized Staff",
@@ -1397,12 +1445,31 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
 
       // Fallback default webhooks for forum sync spaces if no custom webhook is defined
       if (!targetWebhookUrl) {
-        const isRamadaForum = companyId === "ramada" && (activeSpaceId === "forum-discussions-sync" || activeSpaceId === "spaces/AAAAEpnKTIM");
-        const isWyndhamForum = companyId === "wyndham" && (activeSpaceId === "forum-discussions-sync" || activeSpaceId === "spaces/AAQAOj5WBis");
-        
-        if (isRamadaForum) {
+        if (activeSpaceId === "forum-discussions-sync") {
+          // Send to BOTH webhooks so both spaces get unified communications!
+          const urls = [
+            "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=vPwVpjTZY-LCMzE-k99FArPmX0r1icantvbCflTP6bk",
+            "https://chat.googleapis.com/v1/spaces/AAQAOj5WBis/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=X-LcP3tlqoGOT1uM1pIVeTV9am3eIhMJrPxy7zUmvTI"
+          ];
+          for (const url of urls) {
+            try {
+              const spaceNameLabel = activeSpaceObj?.name || activeSpaceId;
+              let text = `*${payload.senderName}* (${payload.senderEmail}) [Space: ${spaceNameLabel}]:\n${payload.content}`;
+              if (payload.attachmentUrl) {
+                text += `\n📎 *Attachment:* [${payload.attachmentName || "File"}](${payload.attachmentUrl})`;
+              }
+              await fetchGChat(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text })
+              });
+            } catch (e) {
+              console.error("Error posting to dual webhook:", e);
+            }
+          }
+        } else if (activeSpaceId === "spaces/AAAAEpnKTIM") {
           targetWebhookUrl = "https://chat.googleapis.com/v1/spaces/AAAAEpnKTIM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=vPwVpjTZY-LCMzE-k99FArPmX0r1icantvbCflTP6bk";
-        } else if (isWyndhamForum) {
+        } else if (activeSpaceId === "spaces/AAQAOj5WBis") {
           targetWebhookUrl = "https://chat.googleapis.com/v1/spaces/AAQAOj5WBis/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=X-LcP3tlqoGOT1uM1pIVeTV9am3eIhMJrPxy7zUmvTI";
         }
       }
@@ -1681,12 +1748,13 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                                   const email = updated[propId]?.email || "";
                                   const domain = email.trim().toLowerCase().split("@")[1] || "";
                                   
-                                  let isValid = domain === "cml.com.fj";
+                                  const ALLOWED_DOMAINS = ["cml.com.fj", "ramadawailoaloafiji.com", "wyndhamgardenwailoaloafiji.com"];
+                                  const isValid = ALLOWED_DOMAINS.includes(domain);
 
                                   if (!isValid) {
                                     disconnectGoogleWorkspaceProperty(propId);
                                     setConnections(getGoogleWorkspaceConnections());
-                                    toastService.error("Linking failed: Only @cml.com.fj domain emails are authorized for this property's Google Chat Widget.");
+                                    toastService.error("Linking failed: Only @cml.com.fj, @ramadawailoaloafiji.com, and @wyndhamgardenwailoaloafiji.com domain emails are authorized.");
                                     return;
                                   }
                                   
@@ -2292,12 +2360,13 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                                 const email = updated[companyId]?.email || "";
                                 const domain = email.trim().toLowerCase().split("@")[1] || "";
                                 
-                                let isValid = domain === "cml.com.fj";
+                                const ALLOWED_DOMAINS = ["cml.com.fj", "ramadawailoaloafiji.com", "wyndhamgardenwailoaloafiji.com"];
+                                const isValid = ALLOWED_DOMAINS.includes(domain);
 
                                 if (!isValid) {
                                   disconnectGoogleWorkspaceProperty(companyId);
                                   setConnections(getGoogleWorkspaceConnections());
-                                  toastService.error("Linking failed: Only @cml.com.fj domain emails are authorized.");
+                                  toastService.error("Linking failed: Only @cml.com.fj, @ramadawailoaloafiji.com, and @wyndhamgardenwailoaloafiji.com domain emails are authorized.");
                                   return;
                                 }
                                 
