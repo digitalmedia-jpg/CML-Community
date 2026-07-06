@@ -73,6 +73,7 @@ export const DigitalFlipbook: React.FC<DigitalFlipbookProps> = ({
 }) => {
   const [flipbooks, setFlipbooks] = useState<Flipbook[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasSeededRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFlipbook, setActiveFlipbook] = useState<Flipbook | null>(null);
   const [previewFlipbook, setPreviewFlipbook] = useState<Flipbook | null>(null);
@@ -362,6 +363,90 @@ export const DigitalFlipbook: React.FC<DigitalFlipbookProps> = ({
           allMerged.push(...list);
         } catch (compErr) {
           console.error(`Error loading flipbooks from flipbooks-${comp}:`, compErr);
+        }
+      }
+
+      if (allMerged.length === 0 && !hasSeededRef.current) {
+        hasSeededRef.current = true;
+        
+        const seeds = [
+          {
+            comp: 'cml',
+            data: {
+              title: "CML Group Corporate Overview 2026",
+              description: "Official corporate summary, digital portfolio, and brand assets for Corner Market Limited Group.",
+              createdAt: new Date(Date.now() - 3600000 * 24 * 30).toISOString(),
+              authorId: "user_charles",
+              authorName: "Charles Cebujano",
+              thumbnailUrl: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=400&q=80",
+              pages: [
+                "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=800&q=80",
+                "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80",
+                "https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&w=800&q=80",
+                "https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=800&q=80"
+              ],
+              pageCount: 4,
+              status: "published",
+              reads: 245,
+              impressions: 1890
+            }
+          },
+          {
+            comp: 'ramada',
+            data: {
+              title: "Ramada Suites Resort & Dining Guide",
+              description: "Exclusive guest services directory, local activities directory, and in-room dining menus.",
+              createdAt: new Date(Date.now() - 3600000 * 24 * 15).toISOString(),
+              authorId: "user_charles",
+              authorName: "Charles Cebujano",
+              thumbnailUrl: "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=400&q=80",
+              pages: [
+                "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=800&q=80",
+                "https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=800&q=80",
+                "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80",
+                "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=800&q=80"
+              ],
+              pageCount: 4,
+              status: "published",
+              reads: 412,
+              impressions: 2680
+            }
+          },
+          {
+            comp: 'wyndham',
+            data: {
+              title: "Club Wyndham Denarau Island Fiji Brochure",
+              description: "Experience paradise in Fiji. Accommodations layout, beachfront services, and resort map.",
+              createdAt: new Date(Date.now() - 3600000 * 24 * 10).toISOString(),
+              authorId: "user_charles",
+              authorName: "Charles Cebujano",
+              thumbnailUrl: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=400&q=80",
+              pages: [
+                "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80",
+                "https://images.unsplash.com/photo-1545231027-63b3f162d20e?auto=format&fit=crop&w=800&q=80",
+                "https://images.unsplash.com/photo-1506929562872-bb421503ef21?auto=format&fit=crop&w=800&q=80",
+                "https://images.unsplash.com/photo-1439066615861-d1af74d74000?auto=format&fit=crop&w=800&q=80"
+              ],
+              pageCount: 4,
+              status: "published",
+              reads: 320,
+              impressions: 1940
+            }
+          }
+        ];
+
+        for (const s of seeds) {
+          try {
+            const colRef = collection(db, `flipbooks-${s.comp}`);
+            const docRef = await addDoc(colRef, s.data);
+            allMerged.push({
+              id: docRef.id,
+              companyId: s.comp,
+              ...s.data
+            });
+          } catch (e) {
+            console.error("Error seeding flipbook for company " + s.comp, e);
+          }
         }
       }
 

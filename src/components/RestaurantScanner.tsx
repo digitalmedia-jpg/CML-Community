@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { 
   Search, 
   Award, 
@@ -104,6 +104,7 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
   const [searchQuery, setSearchQuery] = useState("");
   const [guestSortBy, setGuestSortBy] = useState<"latest" | "name" | "points">("latest");
   const [isCardBack, setIsCardBack] = useState(false);
+  const hasSeededRef = useRef(false);
   
   // Modals / Form toggles
   const [showLogVisitModal, setShowLogVisitModal] = useState(false);
@@ -345,7 +346,22 @@ export function RestaurantScanner({ companyId, prefilledRewardsMember, onClearPr
   useEffect(() => {
     setLoading(true);
     const colRef = collection(db, `restaurant-guests-${companyId}`);
-    const unsubscribe = onSnapshot(colRef, (snapshot) => {
+    const unsubscribe = onSnapshot(colRef, async (snapshot) => {
+      if (snapshot.empty && !hasSeededRef.current) {
+        hasSeededRef.current = true;
+        const defaultGuests = [
+          { fullName: "Charles Cebujano", email: "digitalmedia@cml.com.fj", phone: "+679 998 4676", visitCount: 12, rewardPoints: 1250, lastVisited: new Date(Date.now() - 3600000 * 2).toISOString(), createdAt: new Date(Date.now() - 3600000 * 24 * 30).toISOString() },
+          { fullName: "Rohit Lal", email: "rohit@cml.com.fj", phone: "+679 998 9499", visitCount: 8, rewardPoints: 850, lastVisited: new Date(Date.now() - 3600000 * 5).toISOString(), createdAt: new Date(Date.now() - 3600000 * 24 * 20).toISOString() },
+          { fullName: "John Wick", email: "john.wick@continental.com", phone: "+1 555 0199", visitCount: 15, rewardPoints: 3400, lastVisited: new Date(Date.now() - 3600000 * 12).toISOString(), createdAt: new Date(Date.now() - 3600000 * 24 * 45).toISOString() },
+          { fullName: "Sera Wailoaloa", email: "guest.relation@ramadasuitesfiji.com", phone: "+679 672 5000", visitCount: 4, rewardPoints: 500, lastVisited: new Date(Date.now() - 3600000 * 24 * 2).toISOString(), createdAt: new Date(Date.now() - 3600000 * 24 * 10).toISOString() },
+          { fullName: "Charlie Bravo", email: "charlie.bravo@gmail.com", phone: "+61 412 345 678", visitCount: 6, rewardPoints: 720, lastVisited: new Date(Date.now() - 3600000 * 24 * 1).toISOString(), createdAt: new Date(Date.now() - 3600000 * 24 * 15).toISOString() }
+        ];
+        for (const g of defaultGuests) {
+          await addDoc(colRef, g);
+        }
+        return;
+      }
+
       const list: GuestProfile[] = [];
       snapshot.forEach(docSnap => {
         const data = docSnap.data();

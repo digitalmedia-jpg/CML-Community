@@ -255,6 +255,21 @@ export default function NewsletterSubscribers({ companyId, userRole, onConvertSu
     setLoading(true);
     const colRef = collection(db, `newsletter-subscribers-${companyId}`);
     const unsubscribe = onSnapshot(colRef, async (snapshot) => {
+      if (snapshot.empty && !hasSeededRef.current) {
+        hasSeededRef.current = true;
+        const defaultSubs = [
+          { email: "digitalmedia@cml.com.fj", source: "WordPress Widget", firstName: "Charles", lastName: "Cebujano", phone: "+679 998 4676", createdAt: new Date(Date.now() - 3600000 * 24 * 5).toISOString(), convertedToRewards: true, rewardsCardId: "CML-8849-01" },
+          { email: "guest.relation@ramadasuitesfiji.com", source: "HTML Ingest", firstName: "Sera", lastName: "Wailoaloa", phone: "+679 672 5000", createdAt: new Date(Date.now() - 3600000 * 24 * 3).toISOString(), convertedToRewards: false },
+          { email: "charlie.bravo@gmail.com", source: "Manual Entry", firstName: "Charlie", lastName: "Bravo", phone: "+61 412 345 678", createdAt: new Date(Date.now() - 3600000 * 24 * 1).toISOString(), convertedToRewards: false },
+          { email: "rohit.lal@cml.com.fj", source: "CML Rewards Link", firstName: "Rohit", lastName: "Lal", phone: "+679 998 9499", createdAt: new Date(Date.now() - 3600000 * 6).toISOString(), convertedToRewards: true, rewardsCardId: "CML-9184-02" },
+          { email: "john.wick@continental.com", source: "WordPress Widget", firstName: "John", lastName: "Wick", phone: "+1 555 0199", createdAt: new Date(Date.now() - 3600000 * 2).toISOString(), convertedToRewards: true, rewardsCardId: "CML-4281-03" }
+        ];
+        for (const sub of defaultSubs) {
+          await addDoc(colRef, sub);
+        }
+        return;
+      }
+
       const list: Subscriber[] = [];
       snapshot.forEach((docSnap) => {
         list.push({ id: docSnap.id, ...docSnap.data() } as any);

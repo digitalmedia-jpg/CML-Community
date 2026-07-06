@@ -43,7 +43,8 @@ import {
   Mail,
   Settings,
   Trash2,
-  Copy
+  Copy,
+  X
 } from "lucide-react";
 import { toastService } from "../services/toastService";
 
@@ -71,7 +72,17 @@ interface MemberPresence {
   name: string;
   role: string;
   status: "online" | "away";
+  email: string;
 }
+
+const DEFAULT_COLLEAGUES: MemberPresence[] = [
+  { name: "Charles Cebujano", role: "Digital Media / Administrator", status: "online", email: "digitalmedia@cml.com.fj" },
+  { name: "Priyesh Narayan", role: "Graphics Designer", status: "online", email: "graphics@cml.com.fj" },
+  { name: "Rohit Lal", role: "Executive Accounts", status: "online", email: "rohit@cml.com.fj" },
+  { name: "Charlene Nand", role: "Duty Manager (Ramada)", status: "online", email: "mod@ramadawailoaloafiji.com" },
+  { name: "Nolau Malo", role: "Rooms Division Manager", status: "away", email: "roomsd@ramadawailoaloafiji.com" },
+  { name: "Neetisa Devi", role: "Human Resources Manager", status: "online", email: "hr@cml.com.fj" }
+];
 
 const CallTimer: React.FC = () => {
   const [seconds, setSeconds] = useState(0);
@@ -199,6 +210,202 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
   const [newSpaceName, setNewSpaceName] = useState("");
   const [newSpaceDesc, setNewSpaceDesc] = useState("");
   const [newSpaceWebhookUrl, setNewSpaceWebhookUrl] = useState("");
+  const [newSpaceInvitedEmails, setNewSpaceInvitedEmails] = useState<string[]>([]);
+
+  // Webhook manager modal state
+  const [showWebhookModal, setShowWebhookModal] = useState(false);
+  const [outboundWebhookInput, setOutboundWebhookInput] = useState("");
+  const [testWebhookPayloadText, setTestWebhookPayloadText] = useState("Hello from the CML Team!");
+  const [isTestingWebhook, setIsTestingWebhook] = useState(false);
+
+  // Custom general webhooks persistence
+  const [customWebhooks, setCustomWebhooks] = useState<Record<string, string>>(() => {
+    try {
+      const cached = localStorage.getItem(`cml_custom_webhooks_${companyId}`);
+      return cached ? JSON.parse(cached) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Listen for space webhooks in Firestore
+  useEffect(() => {
+    if (!db) return;
+    const colRef = collection(db, "hybrid_sandbox");
+    const targetCol = `space-webhooks-${companyId}`;
+    const unsubscribe = onSnapshot(colRef, (snapshot) => {
+      const webhooks: Record<string, string> = {};
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.collection === targetCol && data.spaceId) {
+          webhooks[data.spaceId] = data.webhookUrl || "";
+        }
+      });
+      if (Object.keys(webhooks).length > 0) {
+        setCustomWebhooks(prev => {
+          const updated = { ...prev, ...webhooks };
+          localStorage.setItem(`cml_custom_webhooks_${companyId}`, JSON.stringify(updated));
+          return updated;
+        });
+      }
+    });
+    return () => unsubscribe();
+  }, [companyId, db]);
+
+  // Space members persistence
+  const [spaceMembers, setSpaceMembers] = useState<Record<string, MemberPresence[]>>(() => {
+    try {
+      const cached = localStorage.getItem(`cml_space_members_${companyId}`);
+      return cached ? JSON.parse(cached) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Listen for space members in Firestore
+  useEffect(() => {
+    if (!db) return;
+    const colRef = collection(db, "hybrid_sandbox");
+    const targetCol = `space-members-${companyId}`;
+    const unsubscribe = onSnapshot(colRef, (snapshot) => {
+      const membersMap: Record<string, MemberPresence[]> = {};
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.collection === targetCol && data.spaceId) {
+          try {
+            const parsed = JSON.parse(data.db_json);
+            membersMap[data.spaceId] = parsed;
+          } catch (e) {
+            console.error("Error parsing space members:", e);
+          }
+        }
+      });
+      if (Object.keys(membersMap).length > 0) {
+        setSpaceMembers(prev => {
+          const updated = { ...prev, ...membersMap };
+          localStorage.setItem(`cml_space_members_${companyId}`, JSON.stringify(updated));
+          return updated;
+        });
+      }
+    });
+    return () => unsubscribe();
+  }, [companyId, db]);
+
+  const getMembersForSpace = (spaceId: string): MemberPresence[] => {
+    if (spaceMembers[spaceId]) {
+      return spaceMembers[spaceId];
+    }
+    return DEFAULT_COLLEAGUES;
+  };
+
+  const handleAddMemberToSpace = async (spaceId: string, email: string, name: string, role: string) => {
+    if (!email.trim() || !email.includes("@")) {
+      toastService.error("Please enter a valid email address.");
+      return;
+    }
+    const currentList = getMembersForSpace(spaceId);
+    if (currentList.some(m => m.email?.toLowerCase() === email.trim().toLowerCase())) {
+      toastService.warning("User with this email is already a member of this space!");
+      return;
+    }
+    
+    const newMember: MemberPresence = {
+      name: name.trim() || email.split("@")[0].split(".")[0].toUpperCase(),
+      role: role.trim() || "Team Member",
+      status: "online",
+      email: email.trim().toLowerCase()
+    };
+    const updatedList = [...currentList, newMember];
+    
+    const updatedMembers = { ...spaceMembers, [spaceId]: updatedList };
+    setSpaceMembers(updatedMembers);
+    localStorage.setItem(`cml_space_members_${companyId}`, JSON.stringify(updatedMembers));
+
+    try {
+      const docId = `members_${companyId}_${spaceId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+      await setDoc(doc(db, "hybrid_sandbox", docId), {
+        collection: `space-members-${companyId}`,
+        spaceId: spaceId,
+        db_json: JSON.stringify(updatedList),
+        createdAt: new Date().toISOString()
+      });
+      toastService.success(`Successfully added ${newMember.name} to this space!`);
+    } catch (err) {
+      console.error("Failed to save space members to Firestore:", err);
+      toastService.error("Member added locally, but Firestore sync failed.");
+    }
+  };
+
+  const handleRemoveMemberFromSpace = async (spaceId: string, email: string) => {
+    const currentList = getMembersForSpace(spaceId);
+    const updatedList = currentList.filter(m => m.email?.toLowerCase() !== email.trim().toLowerCase());
+    
+    const updatedMembers = { ...spaceMembers, [spaceId]: updatedList };
+    setSpaceMembers(updatedMembers);
+    localStorage.setItem(`cml_space_members_${companyId}`, JSON.stringify(updatedMembers));
+
+    try {
+      const docId = `members_${companyId}_${spaceId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+      await setDoc(doc(db, "hybrid_sandbox", docId), {
+        collection: `space-members-${companyId}`,
+        spaceId: spaceId,
+        db_json: JSON.stringify(updatedList),
+        createdAt: new Date().toISOString()
+      });
+      toastService.success("Member removed from space successfully!");
+    } catch (err) {
+      console.error("Failed to remove member from Firestore:", err);
+      toastService.error("Member removed locally, but Firestore sync failed.");
+    }
+  };
+
+  const handleSaveWebhook = async (spaceId: string, url: string) => {
+    const cleanUrl = url.trim();
+    const updatedWebhooks = { ...customWebhooks, [spaceId]: cleanUrl };
+    setCustomWebhooks(updatedWebhooks);
+    localStorage.setItem(`cml_custom_webhooks_${companyId}`, JSON.stringify(updatedWebhooks));
+
+    try {
+      const docId = `webhook_${companyId}_${spaceId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+      await setDoc(doc(db, "hybrid_sandbox", docId), {
+        collection: `space-webhooks-${companyId}`,
+        spaceId: spaceId,
+        webhookUrl: cleanUrl,
+        createdAt: new Date().toISOString()
+      });
+      toastService.success("Outbound Google Chat Webhook configured successfully!");
+    } catch (err) {
+      console.error("Failed to save webhook to Firestore:", err);
+      toastService.error("Webhook saved locally, but Firestore sync failed.");
+    }
+  };
+
+  const handleClearWebhook = async (spaceId: string) => {
+    const updatedWebhooks = { ...customWebhooks };
+    delete updatedWebhooks[spaceId];
+    setCustomWebhooks(updatedWebhooks);
+    localStorage.setItem(`cml_custom_webhooks_${companyId}`, JSON.stringify(updatedWebhooks));
+
+    try {
+      const docId = `webhook_${companyId}_${spaceId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+      await setDoc(doc(db, "hybrid_sandbox", docId), {
+        collection: `space-webhooks-${companyId}`,
+        spaceId: spaceId,
+        webhookUrl: "",
+        createdAt: new Date().toISOString()
+      });
+      toastService.success("Outbound webhook configuration cleared successfully!");
+    } catch (err) {
+      console.error("Failed to clear webhook in Firestore:", err);
+      toastService.error("Webhook cleared locally, but Firestore sync failed.");
+    }
+  };
+
+  // State values for Member addition forms
+  const [isAddingMember, setIsAddingMember] = useState(false);
+  const [newMemberEmail, setNewMemberEmail] = useState("");
+  const [newMemberName, setNewMemberName] = useState("");
+  const [newMemberRole, setNewMemberRole] = useState("");
 
   // Simulated Space Config
   const baseSpaces: ChatSpace[] = [
@@ -250,7 +457,19 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     }));
 
   const spaces = [...baseSpaces, ...customSpaces, ...formattedRealSpaces]
-    .filter(space => !deletedSpaceIds.includes(space.id));
+    .filter(space => !deletedSpaceIds.includes(space.id))
+    .map(space => ({
+      ...space,
+      webhookUrl: customWebhooks[space.id] || space.webhookUrl
+    }));
+
+  // Sync outbound input on active space selection
+  const selectedSpace = spaces.find(s => s.id === activeSpaceId);
+  useEffect(() => {
+    if (selectedSpace) {
+      setOutboundWebhookInput(selectedSpace.webhookUrl || "");
+    }
+  }, [activeSpaceId, customSpaces]);
 
   // Call & Video Simulation state
   const [activeCall, setActiveCall] = useState<{
@@ -261,7 +480,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     hasMic: boolean;
   } | null>(null);
 
-  // Sync custom spaces state on companyId change
+  // Sync custom spaces state on companyId change with real-time Firestore synchronization
   useEffect(() => {
     try {
       const saved = localStorage.getItem(`cml_custom_spaces_${companyId}`);
@@ -272,10 +491,51 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
       setCustomSpaces([]);
       setDeletedSpaceIds([]);
     }
+
+    if (!db) return;
+    const colRef = collection(db, "hybrid_sandbox");
+    const targetCol = `custom-spaces-${companyId}`;
+
+    const unsubscribe = onSnapshot(colRef, (snapshot) => {
+      const list: ChatSpace[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.collection === targetCol) {
+          try {
+            const space = JSON.parse(data.db_json);
+            if (!list.some(s => s.id === space.id)) {
+              list.push(space);
+            }
+          } catch (e) {
+            console.error("Error parsing custom space:", e);
+          }
+        }
+      });
+      if (list.length > 0) {
+        setCustomSpaces(prev => {
+          const merged = [...prev];
+          list.forEach(item => {
+            if (!merged.some(m => m.id === item.id)) {
+              merged.push(item);
+            } else {
+              // Update if changed (e.g. webhookUrl changed)
+              const idx = merged.findIndex(m => m.id === item.id);
+              merged[idx] = item;
+            }
+          });
+          localStorage.setItem(`cml_custom_spaces_${companyId}`, JSON.stringify(merged));
+          return merged;
+        });
+      }
+    }, (e) => {
+      console.error("Error listening to custom spaces:", e);
+    });
+
+    return () => unsubscribe();
   }, [companyId]);
 
   // Create new Group Space/Forum
-  const handleAddSpace = (name: string, description: string, webhookUrl?: string) => {
+  const handleAddSpace = async (name: string, description: string, webhookUrl?: string) => {
     if (!name.trim()) return;
     const cleanName = name.trim().toLowerCase().replace(/\s+/g, '-');
     const newSpace: ChatSpace = {
@@ -285,15 +545,69 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
       unreadCount: 0,
       webhookUrl: webhookUrl?.trim() || undefined
     };
-    const updated = [...customSpaces, newSpace];
-    setCustomSpaces(updated);
-    localStorage.setItem(`cml_custom_spaces_${companyId}`, JSON.stringify(updated));
-    setActiveSpaceId(newSpace.id);
-    setIsCreatingSpace(false);
-    setNewSpaceName("");
-    setNewSpaceDesc("");
-    setNewSpaceWebhookUrl("");
-    toastService.success(`Successfully created and synchronized group space #${cleanName}!`);
+
+    try {
+      // First, save locally
+      const updated = [...customSpaces, newSpace];
+      setCustomSpaces(updated);
+      localStorage.setItem(`cml_custom_spaces_${companyId}`, JSON.stringify(updated));
+
+      // Second, save to Firestore for team synchronization
+      await addDoc(collection(db, "hybrid_sandbox"), {
+        collection: `custom-spaces-${companyId}`,
+        db_json: JSON.stringify(newSpace),
+        payload_json: JSON.stringify(newSpace),
+        createdAt: new Date().toISOString()
+      });
+
+      // Save initial members if specified
+      const selectedColleagues = DEFAULT_COLLEAGUES.filter(colleague => 
+        newSpaceInvitedEmails.includes(colleague.email)
+      );
+
+      if (selectedColleagues.length > 0) {
+        const updatedMembers = { ...spaceMembers, [newSpace.id]: selectedColleagues };
+        setSpaceMembers(updatedMembers);
+        localStorage.setItem(`cml_space_members_${companyId}`, JSON.stringify(updatedMembers));
+
+        const docId = `members_${companyId}_${newSpace.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+        await setDoc(doc(db, "hybrid_sandbox", docId), {
+          collection: `space-members-${companyId}`,
+          spaceId: newSpace.id,
+          db_json: JSON.stringify(selectedColleagues),
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      setActiveSpaceId(newSpace.id);
+      setIsCreatingSpace(false);
+      setNewSpaceName("");
+      setNewSpaceDesc("");
+      setNewSpaceWebhookUrl("");
+      setNewSpaceInvitedEmails([]);
+      toastService.success(`Successfully created and synchronized group space #${cleanName}!`);
+    } catch (err) {
+      console.error("Failed to sync custom space to Firestore:", err);
+      
+      // Fallback is already saved locally, so select it anyway
+      const selectedColleagues = DEFAULT_COLLEAGUES.filter(colleague => 
+        newSpaceInvitedEmails.includes(colleague.email)
+      );
+
+      if (selectedColleagues.length > 0) {
+        const updatedMembers = { ...spaceMembers, [newSpace.id]: selectedColleagues };
+        setSpaceMembers(updatedMembers);
+        localStorage.setItem(`cml_space_members_${companyId}`, JSON.stringify(updatedMembers));
+      }
+
+      setActiveSpaceId(newSpace.id);
+      setIsCreatingSpace(false);
+      setNewSpaceName("");
+      setNewSpaceDesc("");
+      setNewSpaceWebhookUrl("");
+      setNewSpaceInvitedEmails([]);
+      toastService.success(`Space #${cleanName} created locally (offline mode).`);
+    }
   };
 
   // Delete Space action
@@ -365,15 +679,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     toastService.success(`Started secure private direct message with ${memberName}.`);
   };
 
-  // Active Colleagues list
-  const activeMembers: MemberPresence[] = [
-    { name: "Charles Cebujano", role: "Digital Media / Administrator", status: "online" },
-    { name: "Priyesh Narayan", role: "Graphics Designer", status: "online" },
-    { name: "Rohit Lal", role: "Executive Accounts", status: "online" },
-    { name: "Charlene Nand", role: "Duty Manager (Ramada)", status: "online" },
-    { name: "Nolau Malo", role: "Rooms Division Manager", status: "away" },
-    { name: "Neetisa Devi", role: "Human Resources Manager", status: "online" }
-  ];
+
 
   // Load real spaces from Google Chat API
   useEffect(() => {
@@ -1429,50 +1735,30 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
               </p>
             </div>
             <div className="flex items-center gap-1.5 text-slate-400">
-              {/* Webhook Configuration for Custom Spaces and Sync Spaces */}
-              {activeSpace && (activeSpace.id.startsWith("custom-space-") || activeSpace.id === "forum-discussions-sync") && (
+              {/* Webhook Configuration for all spaces */}
+              {activeSpace && !isDM && (
                 <button
-                  onClick={() => {
-                    const url = window.prompt(
-                      `Enter or update the Google Chat Incoming Webhook URL for #${activeSpace.name.replace(/^[^\s]+\s/, "")}:`, 
-                      activeSpace.webhookUrl || ""
-                    );
-                    if (url !== null) {
-                      const cleanUrl = url.trim();
-                      if (cleanUrl && !cleanUrl.startsWith("https://chat.googleapis.com/")) {
-                        toastService.error("Invalid Webhook URL. It must start with https://chat.googleapis.com/");
-                        return;
-                      }
-                      const updatedSpaces = customSpaces.map(s => 
-                        s.id === activeSpace.id ? { ...s, webhookUrl: cleanUrl || undefined } : s
-                      );
-                      setCustomSpaces(updatedSpaces);
-                      localStorage.setItem(`cml_custom_spaces_${companyId}`, JSON.stringify(updatedSpaces));
-                      toastService.success(cleanUrl ? "Google Chat Incoming Webhook configured successfully!" : "Webhook config cleared.");
-                    }
-                  }}
-                  className="p-1 hover:bg-slate-200 transition-colors"
-                  style={{ color: primaryColor }}
-                  title="Configure Google Chat Webhook Sync"
+                  onClick={() => setShowWebhookModal(true)}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 hover:text-emerald-800 border border-emerald-200/60 transition-all shadow-2xs active:scale-95 shrink-0 cursor-pointer"
+                  title="Configure & Create Google Chat Webhooks"
                 >
-                  <Settings size={13} className={activeSpace.webhookUrl ? "text-emerald-500 animate-pulse" : "text-slate-400"} />
+                  <Settings size={12} className={activeSpace.webhookUrl ? "text-emerald-600 animate-pulse" : "text-emerald-500"} />
+                  <span className="text-[9px] font-sans font-bold uppercase tracking-wider">Webhooks</span>
                 </button>
               )}
 
-              {/* Copy Inbound Webhook URL option */}
-              {activeSpace && (activeSpace.id.startsWith("custom-space-") || activeSpace.id === "forum-discussions-sync") && (
-                <button
-                  onClick={() => {
-                    const inboundUrl = `${window.location.origin}/api/inbound-webhook/${companyId}/${activeSpace.id}`;
-                    navigator.clipboard.writeText(inboundUrl);
-                    toastService.success(`Inbound Webhook URL copied! Post JSON text/content to this URL to receive messages in #${activeSpace.name.replace(/^[^\s]+\s/, "")} from Google Chat or other apps.`);
-                  }}
-                  className="p-1 hover:bg-slate-200 transition-colors"
-                  style={{ color: primaryColor }}
-                  title="Copy Inbound Webhook URL (for actual Google Chat)"
+              {/* External Real Google Chat Link */}
+              {activeSpaceId.startsWith("spaces/") && (
+                <a
+                  href={`https://chat.google.com/space/${activeSpaceId.replace("spaces/", "")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 hover:text-blue-800 border border-blue-200/60 transition-all shadow-2xs active:scale-95 shrink-0 cursor-pointer"
+                  title="Open this real space in Google Chat website"
                 >
-                  <Copy size={13} className="text-slate-500 hover:text-emerald-500" />
-                </button>
+                  <Sparkles size={11} className="text-blue-500 animate-pulse" />
+                  <span className="text-[9px] font-sans font-bold uppercase tracking-wider">Open Chat</span>
+                </a>
               )}
 
               {/* Call Controls */}
@@ -1602,24 +1888,150 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
           )}
 
           {showMembers && (
-            <div className="bg-slate-100 border-b border-slate-200 p-3 max-h-[140px] overflow-y-auto custom-scrollbar shrink-0">
-              <h4 className="text-[8px] font-display uppercase tracking-wider text-slate-500 font-black mb-1.5">Active Presence Portfolio</h4>
+            <div className="bg-slate-100 border-b border-slate-200 p-3 max-h-[220px] overflow-y-auto custom-scrollbar shrink-0">
+              <div className="flex items-center justify-between mb-1.5">
+                <h4 className="text-[8px] font-display uppercase tracking-wider text-slate-500 font-black">Active Presence Portfolio</h4>
+                {!isDM && (
+                  <button
+                    onClick={() => setIsAddingMember(!isAddingMember)}
+                    className="text-[8px] uppercase tracking-wider font-bold hover:underline transition-all cursor-pointer"
+                    style={{ color: primaryColor }}
+                  >
+                    {isAddingMember ? "Close" : "+ Add Member"}
+                  </button>
+                )}
+              </div>
+
+              {isAddingMember && !isDM && (
+                <div className="bg-white border border-slate-200 p-2 rounded mb-2.5 space-y-1.5 animate-fade-in">
+                  <div className="text-[8px] font-bold text-slate-500 uppercase">Add Google email user to space</div>
+                  <div className="grid grid-cols-1 gap-1">
+                    <input
+                      type="email"
+                      placeholder="Enter Google Email (e.g. user@gmail.com)"
+                      value={newMemberEmail}
+                      onChange={(e) => setNewMemberEmail(e.target.value)}
+                      className="w-full text-[9px] border border-slate-200 px-1.5 py-1 rounded outline-none"
+                    />
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        placeholder="Full Name (optional)"
+                        value={newMemberName}
+                        onChange={(e) => setNewMemberName(e.target.value)}
+                        className="flex-1 text-[9px] border border-slate-200 px-1.5 py-1 rounded outline-none"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Role (e.g. Accounts Coordinator)"
+                        value={newMemberRole}
+                        onChange={(e) => setNewMemberRole(e.target.value)}
+                        className="flex-1 text-[9px] border border-slate-200 px-1.5 py-1 rounded outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick Add Section */}
+                  {(() => {
+                    const currentMembers = getMembersForSpace(activeSpaceId);
+                    const nonMembers = DEFAULT_COLLEAGUES.filter(colleague => 
+                      !currentMembers.some(m => m.email.toLowerCase() === colleague.email.toLowerCase())
+                    );
+                    if (nonMembers.length > 0) {
+                      return (
+                        <div className="border-t border-slate-100 pt-1.5">
+                          <div className="text-[7.5px] font-black text-slate-400 uppercase tracking-wider mb-1">Quick Add Active Portfolio Members:</div>
+                          <div className="flex flex-wrap gap-1">
+                            {nonMembers.map((colleague, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => {
+                                  handleAddMemberToSpace(activeSpaceId, colleague.email, colleague.name, colleague.role);
+                                }}
+                                className="text-[7.5px] bg-slate-50 hover:bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 transition-all active:scale-95 flex items-center gap-0.5 font-sans font-medium cursor-pointer"
+                              >
+                                <span className="font-bold" style={{ color: primaryColor }}>+</span> {colleague.name.split(" ")[0]}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  <div className="flex justify-end gap-1.5 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingMember(false);
+                        setNewMemberEmail("");
+                        setNewMemberName("");
+                        setNewMemberRole("");
+                      }}
+                      className="text-[8px] font-bold px-2 py-0.5 border border-slate-200 text-slate-500 hover:bg-slate-50 rounded cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!newMemberEmail.trim()) {
+                          toastService.error("Email address is required.");
+                          return;
+                        }
+                        await handleAddMemberToSpace(activeSpaceId, newMemberEmail, newMemberName, newMemberRole);
+                        setNewMemberEmail("");
+                        setNewMemberName("");
+                        setNewMemberRole("");
+                        setIsAddingMember(false);
+                      }}
+                      className="text-[8px] font-bold px-2.5 py-0.5 text-white rounded hover:bg-opacity-90 shadow-xs cursor-pointer"
+                      style={{ backgroundColor: primaryColor }}
+                    >
+                      Add Member
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-1">
-                {activeMembers.map((member, i) => (
+                {getMembersForSpace(activeSpaceId).map((member, i) => (
                   <div 
                     key={i} 
-                    onClick={() => handleStartPrivateChat(member.name)}
-                    className="flex items-center justify-between text-[9px] hover:bg-slate-200/60 p-1 rounded cursor-pointer transition-all select-none"
-                    title={`Start private chat with ${member.name}`}
+                    className="flex items-center justify-between text-[9px] hover:bg-slate-200/60 p-1 rounded transition-all select-none"
                   >
-                    <div className="flex items-center gap-1.5 min-w-0">
+                    <div 
+                      onClick={() => handleStartPrivateChat(member.name)}
+                      className="flex items-center gap-1.5 min-w-0 flex-1 cursor-pointer"
+                      title={`Start private chat with ${member.name}`}
+                    >
                       <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${member.status === 'online' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-                      <span className="font-bold text-slate-800 truncate">{member.name}</span>
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-bold text-slate-800 truncate leading-tight">{member.name}</span>
+                        {member.email && <span className="text-[6.5px] text-slate-400 font-mono truncate leading-none">{member.email}</span>}
+                      </div>
                       <span className="text-[7px] text-slate-400 font-serif truncate">({member.role})</span>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <span className="text-[7px] text-slate-400 uppercase font-bold mr-1">{member.status}</span>
-                      <span className="text-[8px] hover:underline font-bold font-sans" style={{ color: primaryColor }}>Chat</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[7px] text-slate-400 uppercase font-bold">{member.status}</span>
+                      <button
+                        onClick={() => handleStartPrivateChat(member.name)}
+                        className="text-[8px] hover:underline font-bold font-sans cursor-pointer"
+                        style={{ color: primaryColor }}
+                      >
+                        Chat
+                      </button>
+                      {!isDM && member.email && member.email !== "digitalmedia@cml.com.fj" && (
+                        <button
+                          onClick={() => handleRemoveMemberFromSpace(activeSpaceId, member.email || "")}
+                          className="text-slate-400 hover:text-rose-600 transition-colors p-0.5 cursor-pointer"
+                          title="Remove from Space"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1771,6 +2183,57 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                       </p>
                     </div>
 
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[8px] uppercase tracking-wider font-sans font-bold text-slate-500">Invite Members from Active Portfolio</label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (newSpaceInvitedEmails.length === DEFAULT_COLLEAGUES.length) {
+                              setNewSpaceInvitedEmails([]);
+                            } else {
+                              setNewSpaceInvitedEmails(DEFAULT_COLLEAGUES.map(c => c.email));
+                            }
+                          }}
+                          className="text-[7.5px] font-bold underline text-slate-400 hover:text-slate-600 transition-colors"
+                        >
+                          {newSpaceInvitedEmails.length === DEFAULT_COLLEAGUES.length ? "Deselect All" : "Select All"}
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1 bg-white p-2 border border-slate-200 max-h-24 overflow-y-auto custom-scrollbar">
+                        {DEFAULT_COLLEAGUES.map((colleague) => {
+                          const isChecked = newSpaceInvitedEmails.includes(colleague.email);
+                          return (
+                            <label
+                              key={colleague.email}
+                              className={`flex items-center gap-1.5 p-1 rounded border transition-all text-[8px] cursor-pointer select-none ${
+                                isChecked
+                                  ? "border-emerald-200 bg-emerald-50/70 text-emerald-950 font-semibold"
+                                  : "border-slate-100 hover:bg-slate-50 text-slate-600"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  if (isChecked) {
+                                    setNewSpaceInvitedEmails(newSpaceInvitedEmails.filter(e => e !== colleague.email));
+                                  } else {
+                                    setNewSpaceInvitedEmails([...newSpaceInvitedEmails, colleague.email]);
+                                  }
+                                }}
+                                className="accent-emerald-600 cursor-pointer w-2.5 h-2.5"
+                              />
+                              <div className="min-w-0">
+                                <div className="truncate font-sans font-medium leading-tight">{colleague.name}</div>
+                                <div className="text-[6.5px] text-slate-400 truncate font-mono leading-none">{colleague.email}</div>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
                     <div className="bg-emerald-50/50 border border-emerald-100 p-2 rounded-sm space-y-1">
                       <div className="flex items-center justify-between">
                         <span className="text-[8px] uppercase tracking-wider font-sans font-extrabold text-emerald-800">Inbound Webhook Integration</span>
@@ -1806,15 +2269,16 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
               ) : (
                 <>
                   <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
-                    {activeSpaceId.startsWith("spaces/") && !workspaceAccessToken ? (
-                      <div className="py-16 text-center flex flex-col items-center justify-center max-w-sm mx-auto gap-4">
-                        <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center text-amber-500 animate-pulse">
-                          <MessageSquare size={24} />
+                    {activeSpaceId.startsWith("spaces/") && !workspaceAccessToken && (
+                      <div className="bg-amber-50/70 border border-amber-200/60 p-2 rounded flex items-start gap-2 animate-fade-in mb-3 shrink-0">
+                        <div className="text-amber-600 mt-0.5 shrink-0">
+                          <Sparkles size={12} className="animate-pulse" />
                         </div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-700">OAuth Connection Required</p>
-                          <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
-                            To view the active conversations and previous chats of <strong>{spaces.find(s => s.id === activeSpaceId)?.name || "Google Chat Space"}</strong>, please connect your authorized Workspace Google Account first.
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[9px] font-bold text-slate-800 leading-tight">Hybrid Workspace Sync Active</p>
+                          <p className="text-[8px] text-slate-500 leading-relaxed mt-0.5">
+                            Viewing cached Firestore discussions for <strong>{spaces.find(s => s.id === activeSpaceId)?.name || "Google Chat Space"}</strong>.
+                            Connect an authorized Workspace account to push real-time updates directly to Google Chat.
                           </p>
                         </div>
                         <button
@@ -1833,7 +2297,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                                 if (!isValid) {
                                   disconnectGoogleWorkspaceProperty(companyId);
                                   setConnections(getGoogleWorkspaceConnections());
-                                  toastService.error("Linking failed: Only @cml.com.fj domain emails are authorized for this property's Google Chat Widget.");
+                                  toastService.error("Linking failed: Only @cml.com.fj domain emails are authorized.");
                                   return;
                                 }
                                 
@@ -1846,13 +2310,13 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                               setIsConnecting(false);
                             }
                           }}
-                          className="px-4 py-2 text-white text-[10px] font-sans font-bold rounded shadow-md transition-all cursor-pointer hover:opacity-90"
-                          style={{ backgroundColor: primaryColor }}
+                          className="px-1.5 py-0.5 text-white text-[8px] font-sans font-bold rounded shadow-xs bg-slate-800 hover:bg-slate-900 transition-all shrink-0 cursor-pointer"
                         >
-                          {isConnecting ? "Connecting Workspace..." : "Link Google Account"}
+                          {isConnecting ? "Connecting..." : "Link Google"}
                         </button>
                       </div>
-                    ) : filteredMessages.length === 0 ? (
+                    )}
+                    {filteredMessages.length === 0 ? (
                       <div className="py-12 text-center flex flex-col items-center gap-1.5">
                         <MessageSquare size={20} className="text-slate-250 animate-bounce" />
                         <p className="text-[9px] text-slate-400 font-serif italic">No synchronized messages found.</p>
@@ -2185,6 +2649,181 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+      {showWebhookModal && activeSpace && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-fade-in" id="webhook-manager-modal">
+          <div className="bg-white rounded-lg shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden flex flex-col font-sans">
+            
+            {/* Modal Header */}
+            <div className="bg-slate-900 text-white px-4 py-3 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <Settings size={15} className="text-emerald-400" />
+                <div>
+                  <h3 className="text-[12px] font-bold tracking-wide">WEBHOOK MANAGER</h3>
+                  <p className="text-[9px] text-slate-400 font-serif italic">Configuring webhooks for #{activeSpace.name.replace(/^[^\s]+\s/, "")}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowWebhookModal(false)}
+                className="text-slate-400 hover:text-white transition-colors"
+                id="close-webhook-modal"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 space-y-4 overflow-y-auto max-h-[70vh] custom-scrollbar">
+              
+              {/* Outbound Webhook section */}
+              <div className="border border-slate-100 rounded bg-slate-50 p-3 space-y-2">
+                <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                  Outbound Webhook (Send to Google Chat)
+                </h4>
+                <p className="text-[9px] text-slate-500 leading-normal">
+                  Automatically forward messages typed in this widget space to an actual external Google Chat space incoming webhook URL.
+                </p>
+                
+                <div>
+                  <label className="block text-[8px] font-bold text-slate-500 uppercase mb-1">Incoming Google Chat Webhook URL</label>
+                  <input
+                    type="url"
+                    value={outboundWebhookInput}
+                    onChange={(e) => setOutboundWebhookInput(e.target.value)}
+                    placeholder="https://chat.googleapis.com/v1/spaces/.../webhooks/..."
+                    className="w-full text-[10px] p-2 bg-white border border-slate-200 rounded outline-none focus:border-[#5b58e7]"
+                  />
+                </div>
+
+                <div className="flex gap-2 justify-end pt-1">
+                  {activeSpace.webhookUrl && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await handleClearWebhook(activeSpace.id);
+                        setOutboundWebhookInput("");
+                      }}
+                      className="px-2.5 py-1 text-[9px] font-bold border border-rose-200 text-rose-600 bg-rose-50/50 hover:bg-rose-50 rounded"
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const cleanUrl = outboundWebhookInput.trim();
+                      if (cleanUrl && !cleanUrl.startsWith("https://chat.googleapis.com/")) {
+                        toastService.error("Invalid Webhook URL. It must start with https://chat.googleapis.com/");
+                        return;
+                      }
+                      await handleSaveWebhook(activeSpace.id, cleanUrl);
+                    }}
+                    className="px-2.5 py-1 text-[9px] font-bold text-white rounded hover:bg-opacity-90 shadow-xs"
+                    style={{ backgroundColor: primaryColor }}
+                  >
+                    Save Outbound
+                  </button>
+                </div>
+              </div>
+
+              {/* Inbound Webhook section */}
+              <div className="border border-slate-100 rounded bg-slate-50 p-3 space-y-2">
+                <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  Inbound Webhook (Receive in Widget)
+                </h4>
+                <p className="text-[9px] text-slate-500 leading-normal">
+                  Send data from external Google Chat, web forms, or WordPress. Anything POSTed to this URL will immediately print to this widget conversation room.
+                </p>
+
+                <div>
+                  <label className="block text-[8px] font-bold text-slate-500 uppercase mb-1">Target Inbound URL</label>
+                  <div className="flex gap-1">
+                    <input
+                      type="text"
+                      readOnly
+                      value={`${window.location.origin}/api/inbound-webhook/${companyId}/${activeSpace.id}`}
+                      className="flex-1 text-[9px] p-2 bg-slate-100 border border-slate-200 rounded outline-none font-mono select-all text-slate-600"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = `${window.location.origin}/api/inbound-webhook/${companyId}/${activeSpace.id}`;
+                        navigator.clipboard.writeText(url);
+                        toastService.success("Inbound Webhook URL copied!");
+                      }}
+                      className="px-2 bg-white border border-slate-200 rounded hover:bg-slate-50 text-slate-600"
+                      title="Copy URL"
+                    >
+                      <Copy size={11} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-1.5 border-t border-slate-200/60">
+                  <label className="block text-[8px] font-bold text-slate-500 uppercase mb-1">Developer Test Simulation Payload</label>
+                  <div className="space-y-1.5">
+                    <textarea
+                      value={testWebhookPayloadText}
+                      onChange={(e) => setTestWebhookPayloadText(e.target.value)}
+                      placeholder='Hello from the exterior application!'
+                      className="w-full text-[9px] p-2 bg-slate-800 text-slate-200 rounded font-mono h-12 outline-none"
+                    />
+                    <div className="flex justify-between items-center">
+                      <span className="text-[8px] text-slate-400 font-mono">POST JSON text body</span>
+                      <button
+                        type="button"
+                        disabled={isTestingWebhook}
+                        onClick={async () => {
+                          setIsTestingWebhook(true);
+                          try {
+                            const url = `/api/inbound-webhook/${companyId}/${activeSpace.id}`;
+                            const res = await fetch(url, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                text: testWebhookPayloadText,
+                                senderName: "Webhook Sandbox Tester",
+                                senderEmail: "webhook-tester@cml.com.fj"
+                              })
+                            });
+                            if (res.ok) {
+                              toastService.success("Inbound test post simulated successfully!");
+                            } else {
+                              toastService.error("Simulation failed to POST.");
+                            }
+                          } catch (err) {
+                            console.error("Simulation test failed:", err);
+                            toastService.error("Network sync simulation failed.");
+                          } finally {
+                            setIsTestingWebhook(false);
+                          }
+                        }}
+                        className="px-2.5 py-1 text-[9px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded disabled:opacity-50"
+                      >
+                        {isTestingWebhook ? "Simulating..." : "Test Inbound Webhook"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-slate-50 border-t border-slate-100 px-4 py-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowWebhookModal(false)}
+                className="px-3 py-1.5 text-[10px] font-bold text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+
           </div>
         </div>
       )}
