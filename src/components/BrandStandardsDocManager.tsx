@@ -15,7 +15,12 @@ import {
   Folder, 
   Calendar, 
   User, 
-  RefreshCw 
+  RefreshCw,
+  Eye,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Printer
 } from "lucide-react";
 import { 
   db, 
@@ -120,6 +125,33 @@ export const BrandStandardsDocManager: React.FC = () => {
   // New Upload Form state
   const [customDescription, setCustomDescription] = useState("");
   const [customCategory, setCustomCategory] = useState<"Logos" | "Templates" | "Manuals" | "Spreadsheets">("Templates");
+
+  // Interactive Brand File Previewer States
+  const [selectedDocForPreview, setSelectedDocForPreview] = useState<BrandDocument | null>(null);
+  const [previewBackground, setPreviewBackground] = useState<"light" | "dark" | "gold">("light");
+  const [previewZoom, setPreviewZoom] = useState<number>(100);
+  const [previewLetterBody, setPreviewLetterBody] = useState<string>(
+    "Dear team,\n\nI am pleased to share our finalized brand guidelines and letterhead layouts for Cove Management Limited. Please ensure all official guest communications, resort templates, and daily newsletters strictly conform to these approved typography, margin, and color systems.\n\nWarm regards,\n\nCharles\nGroup Digital Marketing Director"
+  );
+  const [previewSlideIndex, setPreviewSlideIndex] = useState<number>(0);
+  
+  // Interactive checklist spreadsheets states
+  const [checklistStatuses, setChecklistStatuses] = useState<Record<string, "Compliant" | "Non-Compliant" | "N/A">>({
+    "1": "Compliant",
+    "2": "Compliant",
+    "3": "Compliant",
+    "4": "Compliant",
+    "5": "Compliant",
+    "6": "Compliant",
+  });
+  const [checklistComments, setChecklistComments] = useState<Record<string, string>>({
+    "1": "All chandeliers checked on shift-start. No dimmed bulbs.",
+    "2": "Plentiful replenishment of lemongrass signature towels.",
+    "3": "Brass plating polished.",
+    "4": "Completed.",
+    "5": "Responsive average clocking 1.2s.",
+    "6": "Emergency indicators tested perfectly."
+  });
 
   const showToast = (msg: string, type: "success" | "error" | "info" = "success") => {
     setToastMessage(msg);
@@ -574,10 +606,22 @@ export const BrandStandardsDocManager: React.FC = () => {
                         </button>
                       )}
 
+                       {/* View button with custom effect */}
+                      <button 
+                        onClick={() => {
+                          setSelectedDocForPreview(docItem);
+                          setPreviewSlideIndex(0);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-[#1A1A1A] hover:bg-[#C5A02D] hover:text-white text-white transition-all text-[10px] font-display uppercase tracking-widest font-black rounded-sm shadow-sm shrink-0 cursor-pointer"
+                        title="Interact & preview brand standard"
+                      >
+                        <Eye size={11} /> View
+                      </button>
+
                       {/* Download button */}
                       <button 
                         onClick={() => handleDownload(docItem)}
-                        className="flex items-center gap-1.5 px-4.5 py-2 bg-slate-50 hover:bg-[#C5A02D] hover:text-white transition-all text-[10px] font-display uppercase tracking-widest font-black text-slate-600 border border-slate-200 hover:border-transparent rounded-sm"
+                        className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-[#C5A02D] hover:text-white transition-all text-[10px] font-display uppercase tracking-widest font-black text-slate-600 border border-slate-200 hover:border-transparent rounded-sm shrink-0 cursor-pointer"
                         title="Download file to local machine"
                       >
                         <Download size={11} /> Download
