@@ -197,9 +197,31 @@
         "updatedBy": { "type": "string" }
       },
       "required": ["approverEmails", "updatedAt"]
+    },
+    "BrandDocument": {
+      "title": "Brand Document / Template",
+      "description": "Uploaded or system-default document for logos, checklists, manuals, or design templates.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "fileType": { "type": "string", "enum": ["pdf", "docx", "xlsx", "png", "svg", "jpg", "doc", "xls"] },
+        "category": { "type": "string", "enum": ["Logos", "Templates", "Manuals", "Spreadsheets"] },
+        "fileSize": { "type": "string" },
+        "uploadedBy": { "type": "string" },
+        "uploadedById": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "fileData": { "type": "string", "description": "Base64 encoded file contents or data URI." },
+        "isDefault": { "type": "boolean" }
+      },
+      "required": ["name", "fileType", "category", "fileSize", "createdAt"]
     }
   },
   "firestore": {
+    "/brand-documents/{docId}": {
+      "schema": "BrandDocument",
+      "description": "Document vault storing brand assets, logos, and print templates."
+    },
     "/users/{userId}": {
       "schema": "User",
       "description": "User profiles for forum identification."
