@@ -654,6 +654,483 @@ export const BrandStandardsDocManager: React.FC = () => {
             </div>
           </div>
 
+          {/* Real-time Interactive Brand File Previewer Overlay */}
+          {selectedDocForPreview && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+              <div className="bg-white dark:bg-stone-900 rounded-lg w-full max-w-5xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+                {/* Header of Modal */}
+                <div className="px-6 py-4 border-b border-stone-200 dark:border-stone-800 flex items-center justify-between bg-stone-50 dark:bg-stone-950">
+                  <div className="flex items-center gap-2.5">
+                    <span className="p-2 bg-amber-500/10 text-amber-500 rounded font-bold text-xs uppercase tracking-wider font-mono">
+                      {selectedDocForPreview.fileType}
+                    </span>
+                    <div className="text-left">
+                      <h3 className="text-sm font-display font-bold tracking-tight text-stone-950 dark:text-white uppercase">
+                        {selectedDocForPreview.name}
+                      </h3>
+                      <p className="text-[10px] text-stone-400 font-sans tracking-wide">
+                        Interactive Brand Canvas • Group Digital standard for Charles
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => {
+                        window.print();
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 dark:bg-stone-800 dark:hover:bg-stone-700 dark:text-stone-300 rounded text-[10px] font-display font-semibold uppercase tracking-wider cursor-pointer"
+                    >
+                      <Printer size={12} /> Print
+                    </button>
+                    <button 
+                      onClick={() => setSelectedDocForPreview(null)}
+                      className="p-1.5 bg-stone-100 hover:bg-rose-500 hover:text-white text-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-rose-500 dark:hover:text-white rounded transition-colors cursor-pointer"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Body / Active Preview Area */}
+                <div className="flex-1 overflow-y-auto p-6 bg-stone-100/50 dark:bg-stone-950/60 flex flex-col md:flex-row gap-6 min-h-[50vh]">
+                  
+                  {/* Left Side: Interactive Work-area */}
+                  <div className="flex-1 flex flex-col bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded shadow-inner overflow-hidden min-h-[400px]">
+                    
+                    {/* Brand guidelines slide/flipbook */}
+                    {selectedDocForPreview.category === "Manuals" || selectedDocForPreview.fileType === "pdf" ? (
+                      <div className="flex-1 flex flex-col justify-between p-6">
+                        {previewSlideIndex === 0 && (
+                          <div className="flex-1 flex flex-col justify-center items-center text-center p-8 bg-stone-950 text-white rounded relative overflow-hidden">
+                            {/* Accent graphics */}
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full filter blur-3xl" />
+                            <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-yellow-500/5 rounded-full filter blur-2xl" />
+                            
+                            <div className="border border-amber-500/30 p-8 rounded flex flex-col items-center max-w-md bg-stone-900/60 backdrop-blur-sm z-10">
+                              <span className="text-[10px] font-mono tracking-[0.3em] text-[#C5A02D] uppercase mb-4">Cove Management Limited</span>
+                              <h2 className="text-xl md:text-2xl font-display font-light uppercase tracking-widest text-white leading-normal">
+                                Brand Identity <br/>Guidelines
+                              </h2>
+                              <div className="h-0.5 w-16 bg-[#C5A02D] my-6" />
+                              <p className="text-[11px] text-stone-400 font-sans tracking-wide uppercase">
+                                Version 4.1 • Enforcement Standard 2026
+                              </p>
+                              <p className="text-[9px] text-[#C5A02D]/70 font-mono mt-3 uppercase tracking-widest">
+                                FOR RAMADA SUITES & AFFILIATES
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {previewSlideIndex === 1 && (
+                          <div className="flex-1 flex flex-col justify-center p-6 bg-stone-50 dark:bg-stone-950 rounded">
+                            <h4 className="text-xs font-display font-black uppercase tracking-wider text-stone-900 dark:text-white mb-6 flex items-center gap-2">
+                              <span className="w-1.5 h-3 bg-[#C5A02D]"></span>
+                              Primary Color Palette & Strict Formulas
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div className="p-4 rounded border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 flex flex-col items-center">
+                                <div className="w-16 h-16 rounded bg-[#C5A02D] mb-3 shadow-md" />
+                                <span className="text-[10px] font-display font-bold uppercase tracking-wider text-stone-900 dark:text-stone-100">Ramada Gold</span>
+                                <span className="text-[9px] font-mono text-stone-400 mt-1">#C5A02D</span>
+                                <button 
+                                  onClick={() => {
+                                    navigator.clipboard.writeText("#C5A02D");
+                                    showToast("Copied Ramada Gold #C5A02D to clipboard", "success");
+                                  }}
+                                  className="mt-3 px-2 py-1 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded text-[8px] font-mono uppercase tracking-widest cursor-pointer"
+                                >
+                                  Copy Hex
+                                </button>
+                              </div>
+
+                              <div className="p-4 rounded border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 flex flex-col items-center">
+                                <div className="w-16 h-16 rounded bg-[#1A1A1A] mb-3 shadow-md border border-stone-800" />
+                                <span className="text-[10px] font-display font-bold uppercase tracking-wider text-stone-900 dark:text-stone-100">Luxury Charcoal</span>
+                                <span className="text-[9px] font-mono text-stone-400 mt-1">#1A1A1A</span>
+                                <button 
+                                  onClick={() => {
+                                    navigator.clipboard.writeText("#1A1A1A");
+                                    showToast("Copied Luxury Charcoal #1A1A1A to clipboard", "success");
+                                  }}
+                                  className="mt-3 px-2 py-1 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded text-[8px] font-mono uppercase tracking-widest cursor-pointer"
+                                >
+                                  Copy Hex
+                                </button>
+                              </div>
+
+                              <div className="p-4 rounded border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 flex flex-col items-center">
+                                <div className="w-16 h-16 rounded bg-[#FDFBF7] mb-3 shadow-md border border-stone-200" />
+                                <span className="text-[10px] font-display font-bold uppercase tracking-wider text-stone-900 dark:text-stone-100">Warm Alabaster</span>
+                                <span className="text-[9px] font-mono text-stone-400 mt-1">#FDFBF7</span>
+                                <button 
+                                  onClick={() => {
+                                    navigator.clipboard.writeText("#FDFBF7");
+                                    showToast("Copied Warm Alabaster #FDFBF7 to clipboard", "success");
+                                  }}
+                                  className="mt-3 px-2 py-1 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded text-[8px] font-mono uppercase tracking-widest cursor-pointer"
+                                >
+                                  Copy Hex
+                                </button>
+                              </div>
+                            </div>
+                            <p className="text-[9.5px] text-stone-400 italic mt-6 leading-relaxed">
+                              Use gold for accents, key borders, and headers only. Backgrounds must remain charcoal or soft off-white/alabaster. Avoid bright yellows or green pairings.
+                            </p>
+                          </div>
+                        )}
+
+                        {previewSlideIndex === 2 && (
+                          <div className="flex-1 flex flex-col justify-center p-6 bg-stone-50 dark:bg-stone-950 rounded">
+                            <h4 className="text-xs font-display font-black uppercase tracking-wider text-stone-900 dark:text-white mb-4 flex items-center gap-2">
+                              <span className="w-1.5 h-3 bg-[#C5A02D]"></span>
+                              Typography Hierarchy system
+                            </h4>
+                            <div className="space-y-4 text-left">
+                              <div className="p-3 bg-white dark:bg-stone-900 rounded border border-stone-200 dark:border-stone-800">
+                                <span className="text-[8px] font-mono text-[#C5A02D] uppercase block tracking-widest mb-1">Display / Primary Headings</span>
+                                <span className="text-lg font-display text-stone-900 dark:text-stone-100 uppercase tracking-widest font-black">Space Grotesk</span>
+                                <p className="text-[9px] text-stone-400">Used for hotel titles, hero sections, side navigation labels, and major headers.</p>
+                              </div>
+
+                              <div className="p-3 bg-white dark:bg-stone-900 rounded border border-stone-200 dark:border-stone-800">
+                                <span className="text-[8px] font-mono text-[#C5A02D] uppercase block tracking-widest mb-1">Body Text / Controls</span>
+                                <span className="text-sm font-sans text-stone-900 dark:text-stone-100 font-medium">Inter (Regular/Medium)</span>
+                                <p className="text-[9px] text-stone-400">Used for employee names, guest descriptions, notification lists, and text content.</p>
+                              </div>
+
+                              <div className="p-3 bg-white dark:bg-stone-900 rounded border border-stone-200 dark:border-stone-800">
+                                <span className="text-[8px] font-mono text-[#C5A02D] uppercase block tracking-widest mb-1">Technical Data / Metadata</span>
+                                <span className="text-xs font-mono text-stone-900 dark:text-stone-100 font-semibold">JetBrains Mono</span>
+                                <p className="text-[9px] text-stone-400">Used for diagnostics, timestamps, clocking metrics, and database record stats.</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {previewSlideIndex === 3 && (
+                          <div className="flex-1 flex flex-col justify-center p-6 bg-stone-50 dark:bg-stone-950 rounded">
+                            <h4 className="text-xs font-display font-black uppercase tracking-wider text-stone-900 dark:text-white mb-4 flex items-center gap-2">
+                              <span className="w-1.5 h-3 bg-[#C5A02D]"></span>
+                              Strict Logo Usage Rules
+                            </h4>
+                            <ul className="space-y-2 text-left">
+                              <li className="flex items-start gap-2 text-[10.5px] text-stone-600 dark:text-stone-300">
+                                <span className="text-green-500 font-bold mt-0.5">✔</span>
+                                <span>Always maintain a minimum safe padding equal to 20% of logo width on all sides.</span>
+                              </li>
+                              <li className="flex items-start gap-2 text-[10.5px] text-stone-600 dark:text-stone-300">
+                                <span className="text-green-500 font-bold mt-0.5">✔</span>
+                                <span>Ensure high-contrast backgrounds (either dark grey #1A1A1A or white/alabaster).</span>
+                              </li>
+                              <li className="flex items-start gap-2 text-[10.5px] text-stone-600 dark:text-stone-300">
+                                <span className="text-red-500 font-bold mt-0.5">✘</span>
+                                <span>Do not compress, stretch, skew, or rotate the official corporate emblem.</span>
+                              </li>
+                              <li className="flex items-start gap-2 text-[10.5px] text-stone-600 dark:text-stone-300">
+                                <span className="text-red-500 font-bold mt-0.5">✘</span>
+                                <span>Do not change color of emblem elements (e.g., painting CML gold monogram in red).</span>
+                              </li>
+                            </ul>
+                            <div className="mt-4 p-3 bg-amber-500/5 border border-amber-500/10 rounded text-[9.5px] text-amber-600/90 leading-relaxed italic text-center">
+                              "As Wyndham standard delegates, we honor absolute consistency across all guest touchpoints."
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Navigation Footer */}
+                        <div className="border-t border-stone-200 dark:border-stone-800 pt-4 mt-4 flex items-center justify-between">
+                          <span className="text-[10px] text-stone-400 font-mono">
+                            Page {previewSlideIndex + 1} of 4
+                          </span>
+                          <div className="flex gap-1.5">
+                            <button
+                              disabled={previewSlideIndex === 0}
+                              onClick={() => setPreviewSlideIndex(p => p - 1)}
+                              className="p-1.5 rounded border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 cursor-pointer"
+                            >
+                              <ChevronLeft size={14} />
+                            </button>
+                            <button
+                              disabled={previewSlideIndex === 3}
+                              onClick={() => setPreviewSlideIndex(p => p + 1)}
+                              className="p-1.5 rounded border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 cursor-pointer"
+                            >
+                              <ChevronRight size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : selectedDocForPreview.category === "Logos" || selectedDocForPreview.fileType === "svg" || selectedDocForPreview.fileType === "png" || selectedDocForPreview.fileType === "jpg" ? (
+                      <div className="flex-1 flex flex-col justify-between p-6">
+                        {/* Interactive Background & Zoom controls */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 bg-stone-50 dark:bg-stone-950 p-2.5 rounded border border-stone-100 dark:border-stone-800">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] font-display uppercase tracking-wider text-stone-400 font-bold">Contrast Deck:</span>
+                            <button
+                              onClick={() => setPreviewBackground("light")}
+                              className={`px-2 py-1 text-[8px] font-mono uppercase tracking-widest rounded transition-all cursor-pointer ${previewBackground === "light" ? "bg-white text-stone-950 border border-stone-300 font-bold" : "bg-stone-200 text-stone-600 dark:bg-stone-800 dark:text-stone-400"}`}
+                            >
+                              Light Alabaster
+                            </button>
+                            <button
+                              onClick={() => setPreviewBackground("dark")}
+                              className={`px-2 py-1 text-[8px] font-mono uppercase tracking-widest rounded transition-all cursor-pointer ${previewBackground === "dark" ? "bg-stone-950 text-white border border-stone-700 font-bold" : "bg-stone-200 text-stone-600 dark:bg-stone-800 dark:text-stone-400"}`}
+                            >
+                              Dark Luxury
+                            </button>
+                            <button
+                              onClick={() => setPreviewBackground("gold")}
+                              className={`px-2 py-1 text-[8px] font-mono uppercase tracking-widest rounded transition-all cursor-pointer ${previewBackground === "gold" ? "bg-[#C5A02D] text-white font-bold" : "bg-stone-200 text-stone-600 dark:bg-stone-800 dark:text-stone-400"}`}
+                            >
+                              Royal Gold
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-display uppercase tracking-wider text-stone-400 font-bold">Scaling:</span>
+                            <input 
+                              type="range" 
+                              min="50" 
+                              max="150" 
+                              value={previewZoom} 
+                              onChange={(e) => setPreviewZoom(Number(e.target.value))}
+                              className="w-24 accent-[#C5A02D] cursor-pointer"
+                            />
+                            <span className="text-[9px] font-mono font-bold text-stone-600 dark:text-stone-300 w-8 text-right">{previewZoom}%</span>
+                          </div>
+                        </div>
+
+                        {/* Logo Container Workspace */}
+                        <div 
+                          className={`flex-1 min-h-[250px] flex items-center justify-center rounded border transition-all ${
+                            previewBackground === "light" ? "bg-[#FDFBF7]" : 
+                            previewBackground === "dark" ? "bg-[#1A1A1A]" : "bg-gradient-to-br from-[#E2C055] to-[#997813]"
+                          } border-stone-200 dark:border-stone-800 relative`}
+                        >
+                          <div 
+                            style={{ transform: `scale(${previewZoom / 100})`, transformOrigin: "center" }}
+                            className="transition-transform duration-100 max-w-[80%] max-h-[80%]"
+                            dangerouslySetInnerHTML={{ 
+                              __html: selectedDocForPreview.fileData.includes("svg") 
+                                ? decodeURIComponent(selectedDocForPreview.fileData.split(",")[1] || "")
+                                : `<div className="p-4 text-center text-xs text-stone-400 font-mono">[Rendering custom image asset]</div>`
+                            }}
+                          />
+                        </div>
+
+                        <div className="mt-4 p-3 bg-stone-50 dark:bg-stone-950 rounded border border-stone-100 dark:border-stone-800">
+                          <span className="text-[8px] font-mono text-[#C5A02D] uppercase block tracking-widest mb-1.5">Official Brand Hex Specifications:</span>
+                          <div className="flex items-center gap-4 text-[9px] font-mono text-stone-500">
+                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-[#C5A02D]"></span> #C5A02D (Gold Accent)</span>
+                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-[#1A1A1A] border border-stone-400"></span> #1A1A1A (Luxury Slate)</span>
+                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-white border border-stone-200"></span> #FFFFFF (Pristine White)</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : selectedDocForPreview.category === "Templates" || selectedDocForPreview.fileType === "docx" ? (
+                      <div className="flex-1 flex flex-col justify-between p-6">
+                        {/* Stationery / Letterhead Layout */}
+                        <div className="flex-1 overflow-y-auto bg-stone-100 dark:bg-stone-950/60 p-4 rounded border border-stone-200 dark:border-stone-800">
+                          <div className="mx-auto max-w-[480px] bg-white text-[#1A1A1A] shadow-lg p-8 min-h-[460px] flex flex-col justify-between relative border-t-8 border-[#C5A02D]">
+                            
+                            {/* Letterhead Header block */}
+                            <div>
+                              <div className="flex items-start justify-between border-b border-stone-100 pb-4 mb-4">
+                                <div className="text-left font-sans">
+                                  <span className="text-[12px] font-display font-black tracking-widest block uppercase text-[#1A1A1A]">COVE MANAGEMENT LIMITED</span>
+                                  <span className="text-[7.5px] font-mono uppercase tracking-widest text-[#C5A02D]">Corporate Head Office | Wailoaloa Fiji</span>
+                                </div>
+                                <div className="w-12 h-12 shrink-0">
+                                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <circle cx="50" cy="50" r="45" fill="#1A1A1A"/>
+                                    <path d="M35 30 L45 70 L55 30 H65 L70 80 H60 L57 50 L48 85 H42 L33 50 L30 80 H20 L25 30 H35 Z" fill="#C5A02D" />
+                                  </svg>
+                                </div>
+                              </div>
+
+                              {/* Date and Sender */}
+                              <div className="text-[9.5px] text-stone-500 flex justify-between font-mono mb-4">
+                                <span>Ref: CML-HQ-2026-07</span>
+                                <span>Date: July 6, 2026</span>
+                              </div>
+
+                              {/* Interactive Body Textarea */}
+                              <div className="text-[11px] leading-relaxed text-left space-y-4">
+                                <textarea
+                                  value={previewLetterBody}
+                                  onChange={(e) => setPreviewLetterBody(e.target.value)}
+                                  className="w-full min-h-[180px] bg-amber-50/20 text-[#1A1A1A] text-[11px] font-sans border border-dashed border-stone-200 focus:border-amber-500 rounded p-3 leading-relaxed focus:outline-none placeholder-stone-400 shadow-inner resize-none"
+                                  placeholder="Type custom notification letter content here..."
+                                />
+                              </div>
+                            </div>
+
+                            {/* Sign block */}
+                            <div className="border-t border-stone-100 pt-4 mt-6 text-left">
+                              <p className="text-[7.5px] text-[#C5A02D] font-mono uppercase tracking-widest">
+                                Authorized Corporate Standard Letterhead
+                              </p>
+                              <div className="flex justify-between items-end mt-1">
+                                <div className="font-sans">
+                                  <span className="font-serif italic text-xs block text-[#1A1A1A]">Charles</span>
+                                  <span className="text-[8.5px] text-stone-500 block">Digital Director</span>
+                                </div>
+                                <div className="text-right text-[7px] text-stone-400 font-mono">
+                                  CML Community Vault Secure-ID: #B3113E
+                                </div>
+                              </div>
+                            </div>
+
+                          </div>
+                        </div>
+                        
+                        <div className="mt-4 p-2 text-stone-400 text-[9.5px] italic text-center">
+                          ✎ Feel free to edit the letterhead text directly above! You can copy or print the result.
+                        </div>
+                      </div>
+                    ) : (
+                      // Excel / Spreadsheet view (Interactive Checklist)
+                      <div className="flex-1 flex flex-col justify-between p-6">
+                        <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/20 p-2.5 rounded border border-emerald-100 dark:border-emerald-900/30 mb-4">
+                          <div className="flex items-center gap-2">
+                            <span className="px-1.5 py-0.5 bg-emerald-500 text-white rounded text-[8px] font-bold font-mono">XLSX</span>
+                            <span className="text-[10px] font-display uppercase tracking-wider text-emerald-800 dark:text-emerald-400 font-bold">
+                              Live Preventive Maintenance Sheet
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                              Compliance Status: {
+                                Math.round((Object.values(checklistStatuses).filter(v => v === "Compliant").length / Object.values(checklistStatuses).length) * 100)
+                              }% Compliant
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Spreadsheet Grid Mock */}
+                        <div className="flex-1 overflow-x-auto">
+                          <table className="w-full text-left border-collapse text-[10.5px]">
+                            <thead>
+                              <tr className="bg-stone-50 dark:bg-stone-800 border-b border-stone-200 dark:border-stone-700 text-[9px] font-display uppercase tracking-wider text-stone-400 font-bold">
+                                <th className="p-2 border border-stone-200 dark:border-stone-700 w-10 text-center">ID</th>
+                                <th className="p-2 border border-stone-200 dark:border-stone-700">Audit Parameter</th>
+                                <th className="p-2 border border-stone-200 dark:border-stone-700 w-32">Status</th>
+                                <th className="p-2 border border-stone-200 dark:border-stone-700">Inspector Observations</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {[
+                                { id: "1", param: "Grand Lobby Chandelier & Secondary Accent Sconces" },
+                                { id: "2", param: "Lemongrass Linen replenishment & Scent Diffusion" },
+                                { id: "3", param: "Brass Handrails & Elevator Threshold Polishing" },
+                                { id: "4", param: "Pristine Glass Frontage check (Windwards spray clean)" },
+                                { id: "5", param: "Wi-Fi Portal & Ramada Check-in Client latency check" },
+                                { id: "6", param: "Emergency Exit Fire Extinguisher validation" }
+                              ].map((item) => (
+                                <tr key={item.id} className="border-b border-stone-200 dark:border-stone-800 hover:bg-stone-50/50 dark:hover:bg-stone-900/50">
+                                  <td className="p-2 border border-stone-200 dark:border-stone-800 text-center font-mono text-stone-400">{item.id}</td>
+                                  <td className="p-2 border border-stone-200 dark:border-stone-800 text-stone-900 dark:text-stone-100 font-medium text-left">{item.param}</td>
+                                  <td className="p-2 border border-stone-200 dark:border-stone-800">
+                                    <select
+                                      value={checklistStatuses[item.id] || "Compliant"}
+                                      onChange={(e) => setChecklistStatuses(prev => ({ ...prev, [item.id]: e.target.value as any }))}
+                                      className="w-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded p-1 text-[10px] font-mono focus:outline-none focus:border-emerald-500 cursor-pointer"
+                                    >
+                                      <option value="Compliant">🟢 Compliant</option>
+                                      <option value="Non-Compliant">🔴 Non-Compliant</option>
+                                      <option value="N/A">⚪ N/A</option>
+                                    </select>
+                                  </td>
+                                  <td className="p-2 border border-stone-200 dark:border-stone-800">
+                                    <input 
+                                      type="text"
+                                      value={checklistComments[item.id] || ""}
+                                      onChange={(e) => setChecklistComments(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                      placeholder="No concerns reported"
+                                      className="w-full bg-transparent text-stone-700 dark:text-stone-300 placeholder-stone-400 text-[10px] px-1 py-0.5 border-b border-transparent hover:border-stone-200 focus:border-emerald-500 focus:outline-none"
+                                    />
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div className="mt-4 p-3 bg-stone-50 dark:bg-stone-950 rounded border border-stone-100 dark:border-stone-800 flex justify-between items-center text-[9px] font-mono text-stone-500">
+                          <span>Form Sheet: RM-PM-REV6</span>
+                          <span>Inspector Delegate: Charles</span>
+                          <span className="text-[#C5A02D] font-bold">Auto-Saving Enabled</span>
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+
+                  {/* Right Side: File Info Panel */}
+                  <div className="w-full md:w-64 bg-stone-50 dark:bg-stone-900/60 border border-stone-200 dark:border-stone-800 rounded p-4 flex flex-col justify-between shrink-0">
+                    <div className="text-left">
+                      <span className="text-[8px] font-mono text-[#C5A02D] uppercase block tracking-widest mb-1.5">File Metadata</span>
+                      <h4 className="text-xs font-display font-bold uppercase text-stone-800 dark:text-white mb-4">
+                        Document Blueprint
+                      </h4>
+                      
+                      <div className="space-y-4 text-left">
+                        <div className="p-2.5 bg-white dark:bg-stone-900 rounded border border-stone-100 dark:border-stone-800">
+                          <span className="text-[8px] text-stone-400 block font-mono uppercase">Category</span>
+                          <span className="text-[10px] font-display font-semibold uppercase tracking-wider text-[#C5A02D]">
+                            {selectedDocForPreview.category}
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 bg-white dark:bg-stone-900 rounded border border-stone-100 dark:border-stone-800">
+                          <span className="text-[8px] text-stone-400 block font-mono uppercase">Original Size</span>
+                          <span className="text-[10px] text-stone-700 dark:text-stone-300 font-mono">
+                            {selectedDocForPreview.fileSize}
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 bg-white dark:bg-stone-900 rounded border border-stone-100 dark:border-stone-800">
+                          <span className="text-[8px] text-stone-400 block font-mono uppercase">Uploader Account</span>
+                          <span className="text-[10px] text-stone-700 dark:text-stone-300 font-sans font-semibold">
+                            {selectedDocForPreview.uploadedBy}
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 bg-white dark:bg-stone-900 rounded border border-stone-100 dark:border-stone-800">
+                          <span className="text-[8px] text-stone-400 block font-mono uppercase">Standard Security</span>
+                          <span className="text-[9.5px] text-stone-700 dark:text-stone-300 font-mono flex items-center gap-1.5 text-green-500">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping"></span> CML Secure Vault
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 pt-4 border-t border-stone-200 dark:border-stone-800 text-[10px] text-stone-400 italic leading-relaxed text-left">
+                      "Each of these files represents the operational standard approved by our Co-Founders, Mark & Jenice Hinton."
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Footer of Modal */}
+                <div className="px-6 py-3 border-t border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-950 flex items-center justify-between">
+                  <span className="text-[10px] font-sans text-stone-400">
+                    Press ESC to cancel • Cove Management Standard 2026
+                  </span>
+                  <button
+                    onClick={() => setSelectedDocForPreview(null)}
+                    className="px-4 py-2 bg-stone-900 hover:bg-[#C5A02D] text-white transition-all text-[10px] font-display uppercase tracking-widest font-black rounded-sm cursor-pointer"
+                  >
+                    Done
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          )}
+
         </div>
 
       </div>
