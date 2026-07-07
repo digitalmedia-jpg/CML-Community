@@ -47,6 +47,7 @@ import {
   X
 } from "lucide-react";
 import { toastService } from "../services/toastService";
+import { notificationService, NotificationType } from "../services/notificationService";
 
 interface ChatMessage {
   id: string;
@@ -478,6 +479,8 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     participantName: string;
     hasVideo: boolean;
     hasMic: boolean;
+    callDocId?: string;
+    isCaller?: boolean;
   } | null>(null);
 
   // Sync custom spaces state on companyId change with real-time Firestore synchronization
@@ -898,7 +901,9 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
 
     spaces.forEach((space) => {
       const colRef = collection(db, "hybrid_sandbox");
-      const targetCol = `google-chat-messages-portfolio-${space.id}`;
+      const targetCol = space.id.startsWith("spaces/")
+        ? `google-chat-messages-real-${space.id.replace(/\//g, "-")}`
+        : `google-chat-messages-portfolio-${space.id}`;
       let isFirstRun = true;
 
       const unsub = onSnapshot(colRef, (snapshot) => {
@@ -937,12 +942,18 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                 playChime();
               }
 
-              // Native Desktop Push notification (perfect when in background/other tabs)
-              if (!isCurrentActiveSpaceFocused && window.Notification && Notification.permission === "granted") {
-                new Notification(`CML Chat: ${space.name.replace(/^[^\s]+\s/, '')}`, {
-                  body: `${msg.senderName}: ${msg.content}`,
-                  icon: "https://cml.com.fj/wp-content/uploads/2025/12/CML-Logo-White-BG-Landscape-e1780482084995.png"
-                });
+              // Native Push notification via Service Worker (compatible with mobile, tablet, PC)
+              if (!isCurrentActiveSpaceFocused) {
+                notificationService.triggerMobileNotification(
+                  `CML Chat: ${space.name.replace(/^[^\s]+\s/, '')}`,
+                  `${msg.senderName}: ${msg.content}`,
+                  {
+                    type: NotificationType.FORUM,
+                    link: "/",
+                    tag: `msg-${space.id}`,
+                    icon: "https://cml.com.fj/wp-content/uploads/2025/12/CML-Logo-White-BG-Landscape-e1780482084995.png"
+                  }
+                );
               }
 
               // Show floating Toast alert if not active and focused
@@ -998,6 +1009,178 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
       toastService.warning("Notifications not supported in this browser.");
     }
   };
+
+  // Real-time voice/video call signaling and incoming call alerts
+  useEffect(() => {
+    if (!db) return;
+
+    const colRef = collection(db, "hybrid_sandbox");
+    let isFirstRun = true;
+
+    const unsubscribeCalls = onSnapshot(colRef, (snapshot) => {
+      if (isFirstRun) {
+        isFirstRun = false;
+        return;
+      }
+
+      snapshot.docChanges().forEach((change) => {
+        const docId = change.doc.id;
+        const data = change.doc.data();
+
+        if (data && data.collection === "calls-simulation") {
+          const createdAtTime = data.createdAt ? new Date(data.createdAt).getTime() : 0;
+          const nowTime = Date.now();
+          const isRecent = (nowTime - createdAtTime) < 60000; // call initiated within last 60 seconds
+
+          const callerEmail = data.callerEmail;
+          const currentUserEmail = auth.currentUser?.email || "";
+
+          // Handle incoming/changed calls for OTHER users
+          if (callerEmail !== currentUserEmail) {
+            if (change.type === "added" || change.type === "modified") {
+              if (data.status === "ringing" && isRecent) {
+                // If we are not in an active call, show the incoming call popup!
+                setActiveCall((current) => {
+                  if (!current || current.status === "ended") {
+                    // Play ringtone and loop
+                    playRingTone();
+                    if (!ringIntervalRef.current) {
+                      ringIntervalRef.current = setInterval(() => {
+                        playRingTone();
+                      }, 1500);
+                    }
+
+                    // Mobile / tablet / PC background push alert
+                    notificationService.triggerMobileNotification(
+                      `📞 Incoming ${data.type === "video" ? "Video" : "Voice"} Call`,
+                      `From ${data.callerName || "Authorized Staff"}`,
+                      {
+                        type: NotificationType.SYSTEM,
+                        link: "/",
+                        vibrate: [200, 100, 200, 100, 200]
+                      }
+                    );
+
+                    toastService.show(
+                      `Incoming ${data.type} call from ${data.callerName || "Staff"}`,
+                      "warning",
+                      8000,
+                      "📞 PHONE CALL"
+                    );
+
+                    return {
+                      type: data.type,
+                      status: "ringing",
+                      participantName: data.callerName || "Authorized Staff",
+                      hasVideo: data.type === "video",
+                      hasMic: true,
+                      callDocId: docId,
+                      isCaller: false
+                    };
+                  }
+                  return current;
+                });
+              } else if (data.status === "connected") {
+                setActiveCall((current) => {
+                  if (current && current.callDocId === docId && current.status !== "connected") {
+                    clearCallTimers();
+                    toastService.success("Call connected.");
+                    return { ...current, status: "connected" };
+                  }
+                  return current;
+                });
+              } else if (data.status === "ended") {
+                setActiveCall((current) => {
+                  if (current && current.callDocId === docId && current.status !== "ended") {
+                    clearCallTimers();
+                    toastService.info("Call ended.");
+                    setTimeout(() => setActiveCall(null), 1000);
+                    return { ...current, status: "ended" };
+                  }
+                  return current;
+                });
+              }
+            }
+          } else {
+            // We are the caller
+            if (change.type === "modified") {
+              if (data.status === "connected") {
+                setActiveCall((current) => {
+                  if (current && current.callDocId === docId && current.status !== "connected") {
+                    clearCallTimers();
+                    toastService.success("Recipient accepted call! Connected.");
+                    return { ...current, status: "connected" };
+                  }
+                  return current;
+                });
+              } else if (data.status === "ended") {
+                setActiveCall((current) => {
+                  if (current && current.callDocId === docId && current.status !== "ended") {
+                    clearCallTimers();
+                    toastService.info("Call ended.");
+                    setTimeout(() => setActiveCall(null), 1000);
+                    return { ...current, status: "ended" };
+                  }
+                  return current;
+                });
+              }
+            }
+          }
+        }
+      });
+    });
+
+    return () => {
+      unsubscribeCalls();
+    };
+  }, [db, companyId]);
+
+  // Real-time listener for dispatching emails across properties (from StaffMailer logs)
+  useEffect(() => {
+    if (!db) return;
+
+    const colRef = collection(db, `mailer-logs-${companyId}`);
+    let isFirst = true;
+
+    const unsubscribeEmails = onSnapshot(colRef, (snapshot) => {
+      if (isFirst) {
+        isFirst = false;
+        return;
+      }
+
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === "added") {
+          const data = change.doc.data();
+          const timestamp = data.timestamp ? (data.timestamp.seconds ? data.timestamp.seconds * 1000 : new Date(data.timestamp).getTime()) : Date.now();
+          const isRecent = (Date.now() - timestamp) < 30000; // within 30 seconds
+
+          if (isRecent) {
+            // Trigger robust cross-device PWA push notification!
+            notificationService.triggerMobileNotification(
+              `📧 New Email Campaign Dispatched`,
+              `Subject: "${data.subject}" by ${data.senderName}`,
+              {
+                type: NotificationType.SYSTEM,
+                link: "/",
+                vibrate: [100, 100, 100]
+              }
+            );
+
+            toastService.show(
+              `Subject: "${data.subject}" dispatched by ${data.senderName}`,
+              "success",
+              6000,
+              "📧 EMAIL DISPATCH"
+            );
+          }
+        }
+      });
+    });
+
+    return () => {
+      unsubscribeEmails();
+    };
+  }, [db, companyId]);
 
   // Pre-seed some initial professional messages when a space is empty
   useEffect(() => {
@@ -1831,31 +2014,58 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
 
               {/* Call Controls */}
               <button 
-                onClick={() => {
+                onClick={async () => {
                   clearCallTimers();
                   const name = isDM ? dmName : (spaces.find(s => s.id === activeSpaceId)?.name.replace(/^[^\s]+\s/, '') || "Team Members");
+                  const callDocId = 'call_' + Date.now() + '_' + (auth.currentUser?.email?.replace(/[^a-zA-Z0-9]/g, '_') || 'anon');
+                  
                   setActiveCall({
                     type: "voice",
                     status: "dialing",
                     participantName: name,
                     hasVideo: false,
-                    hasMic: true
+                    hasMic: true,
+                    callDocId,
+                    isCaller: true
                   });
+                  
                   toastService.info(`Calling ${name}...`);
                   playRingTone();
                   ringIntervalRef.current = setInterval(() => {
                     playRingTone();
                   }, 1500);
-                  callConnectTimeoutRef.current = setTimeout(() => {
-                    clearCallTimers();
-                    setActiveCall(prev => {
-                      if (prev && prev.status === "dialing") {
-                        toastService.success("Call connected.");
-                        return { ...prev, status: "connected" };
-                      }
-                      return prev;
+
+                  // Set call doc in Firestore
+                  try {
+                    await setDoc(doc(db, "hybrid_sandbox", callDocId), {
+                      collection: "calls-simulation",
+                      spaceId: activeSpaceId,
+                      callerName: auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || "Authorized Staff",
+                      callerEmail: auth.currentUser?.email || "",
+                      status: "ringing",
+                      type: "voice",
+                      createdAt: new Date().toISOString()
                     });
-                  }, 4000);
+                  } catch (e) {
+                    console.error("Error setting call doc:", e);
+                  }
+
+                  // Solo testing fallback: Automatically transition to connected if unanswered after 8 seconds
+                  callConnectTimeoutRef.current = setTimeout(async () => {
+                    try {
+                      const callDocRef = doc(db, "hybrid_sandbox", callDocId);
+                      await updateDoc(callDocRef, { status: "connected" });
+                    } catch (e) {
+                      // fallback local connection
+                      setActiveCall(prev => {
+                        if (prev && prev.status === "dialing") {
+                          toastService.success("Call connected (offline/solo mode).");
+                          return { ...prev, status: "connected" };
+                        }
+                        return prev;
+                      });
+                    }
+                  }, 8000);
                 }}
                 className="p-1 hover:bg-slate-200 transition-colors"
                 style={{ color: primaryColor }}
@@ -1864,31 +2074,58 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                 <Phone size={13} />
               </button>
               <button 
-                onClick={() => {
+                onClick={async () => {
                   clearCallTimers();
                   const name = isDM ? dmName : (spaces.find(s => s.id === activeSpaceId)?.name.replace(/^[^\s]+\s/, '') || "Team Members");
+                  const callDocId = 'call_' + Date.now() + '_' + (auth.currentUser?.email?.replace(/[^a-zA-Z0-9]/g, '_') || 'anon');
+                  
                   setActiveCall({
                     type: "video",
                     status: "dialing",
                     participantName: name,
                     hasVideo: true,
-                    hasMic: true
+                    hasMic: true,
+                    callDocId,
+                    isCaller: true
                   });
+                  
                   toastService.info(`Starting video call with ${name}...`);
                   playRingTone();
                   ringIntervalRef.current = setInterval(() => {
                     playRingTone();
                   }, 1500);
-                  callConnectTimeoutRef.current = setTimeout(() => {
-                    clearCallTimers();
-                    setActiveCall(prev => {
-                      if (prev && prev.status === "dialing") {
-                        toastService.success("Video link established.");
-                        return { ...prev, status: "connected" };
-                      }
-                      return prev;
+
+                  // Set call doc in Firestore
+                  try {
+                    await setDoc(doc(db, "hybrid_sandbox", callDocId), {
+                      collection: "calls-simulation",
+                      spaceId: activeSpaceId,
+                      callerName: auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || "Authorized Staff",
+                      callerEmail: auth.currentUser?.email || "",
+                      status: "ringing",
+                      type: "video",
+                      createdAt: new Date().toISOString()
                     });
-                  }, 4000);
+                  } catch (e) {
+                    console.error("Error setting call doc:", e);
+                  }
+
+                  // Solo testing fallback: Automatically transition to connected if unanswered after 8 seconds
+                  callConnectTimeoutRef.current = setTimeout(async () => {
+                    try {
+                      const callDocRef = doc(db, "hybrid_sandbox", callDocId);
+                      await updateDoc(callDocRef, { status: "connected" });
+                    } catch (e) {
+                      // fallback local connection
+                      setActiveCall(prev => {
+                        if (prev && prev.status === "dialing") {
+                          toastService.success("Video link established (offline/solo mode).");
+                          return { ...prev, status: "connected" };
+                        }
+                        return prev;
+                      });
+                    }
+                  }, 8000);
                 }}
                 className="p-1 hover:bg-slate-200 transition-colors"
                 style={{ color: primaryColor }}
@@ -2625,8 +2862,16 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                         {/* CANCEL DIALING BUTTON */}
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             clearCallTimers();
+                            if (activeCall.callDocId) {
+                              try {
+                                const callDocRef = doc(db, "hybrid_sandbox", activeCall.callDocId);
+                                await updateDoc(callDocRef, { status: "ended" });
+                              } catch (e) {
+                                console.error("Error ending call in db:", e);
+                              }
+                            }
                             setActiveCall(prev => prev ? { ...prev, status: "ended" } : null);
                             toastService.info("Call dialing canceled.");
                             setTimeout(() => setActiveCall(null), 800);
@@ -2641,8 +2886,16 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                         {/* ACCEPT / ANSWER BUTTON */}
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             clearCallTimers();
+                            if (activeCall.callDocId) {
+                              try {
+                                const callDocRef = doc(db, "hybrid_sandbox", activeCall.callDocId);
+                                await updateDoc(callDocRef, { status: "connected" });
+                              } catch (e) {
+                                console.error("Error accepting call in db:", e);
+                              }
+                            }
                             setActiveCall(prev => prev ? { ...prev, status: "connected" } : null);
                             toastService.success("Call connected.");
                           }}
@@ -2654,8 +2907,16 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                         {/* DECLINE BUTTON */}
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             clearCallTimers();
+                            if (activeCall.callDocId) {
+                              try {
+                                const callDocRef = doc(db, "hybrid_sandbox", activeCall.callDocId);
+                                await updateDoc(callDocRef, { status: "ended" });
+                              } catch (e) {
+                                console.error("Error declining call in db:", e);
+                              }
+                            }
                             setActiveCall(prev => prev ? { ...prev, status: "ended" } : null);
                             toastService.info("Call declined.");
                             setTimeout(() => setActiveCall(null), 1000);
@@ -2701,8 +2962,16 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                         {/* END CALL BUTTON */}
                         <button 
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             clearCallTimers();
+                            if (activeCall.callDocId) {
+                              try {
+                                const callDocRef = doc(db, "hybrid_sandbox", activeCall.callDocId);
+                                await updateDoc(callDocRef, { status: "ended" });
+                              } catch (e) {
+                                console.error("Error ending call in db:", e);
+                              }
+                            }
                             setActiveCall(prev => prev ? { ...prev, status: "ended" } : null);
                             toastService.info("Call ended.");
                             setTimeout(() => setActiveCall(null), 1000);
