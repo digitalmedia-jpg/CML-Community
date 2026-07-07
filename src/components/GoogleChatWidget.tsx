@@ -102,11 +102,14 @@ const CallTimer: React.FC = () => {
   );
 };
 
-export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId }) => {
+export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolean }> = ({ companyId, isEmbedded }) => {
   const primaryColor = companyId === "ramada" ? "#D11242" : (companyId === "wyndham" ? "#0b5c4b" : "#C5A02D");
   const darkColor = companyId === "ramada" ? "#b00e35" : (companyId === "wyndham" ? "#084437" : "#a68421");
 
   const [isOpen, setIsOpen] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
+  const chatOpen = isEmbedded ? true : isOpen;
+
   const [activeSpaceId, setActiveSpaceId] = useState("general-announcements");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -721,7 +724,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
   // Sync connections from localStorage on company or widget open change
   useEffect(() => {
     setConnections(getGoogleWorkspaceConnections());
-  }, [companyId, isOpen]);
+  }, [companyId, chatOpen]);
 
   const handleConnectWorkspace = async () => {
     setIsConnecting(true);
@@ -935,7 +938,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
             const currentEmail = auth.currentUser?.email || "";
 
             if (msg.senderEmail && msg.senderEmail !== currentEmail) {
-              const isCurrentActiveSpaceFocused = isOpen && space.id === activeSpaceId;
+              const isCurrentActiveSpaceFocused = chatOpen && space.id === activeSpaceId;
 
               // Play chime
               if (soundEnabled) {
@@ -976,7 +979,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
     return () => {
       unsubscribes.forEach((unsub) => unsub());
     };
-  }, [companyId, spaces, notificationsEnabled, soundEnabled, isOpen, activeSpaceId]);
+  }, [companyId, spaces, notificationsEnabled, soundEnabled, chatOpen, activeSpaceId]);
 
   // Request browser notification permissions on mount
   useEffect(() => {
@@ -1774,32 +1777,42 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
   return (
     <>
       {/* Floating launcher button in the bottom-right corner */}
-      <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end">
-        <button
-          onClick={() => {
-            setIsOpen(!isOpen);
-            playChime();
-          }}
-          className="w-14 h-14 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-105 transition-all select-none cursor-pointer border-2 border-white"
-          style={{ backgroundColor: primaryColor }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = darkColor}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = primaryColor}
-          title="Open Integrated CML Chat"
-        >
-          {isOpen ? <Minimize2 size={24} /> : <MessageSquare size={24} />}
-          {unreadTotal > 0 && (
-            <span className="absolute -top-1 -right-1 bg-rose-600 text-white font-sans font-bold text-[9px] px-1.5 py-0.5 rounded-full shadow-md animate-bounce">
-              {unreadTotal}
-            </span>
-          )}
-        </button>
-      </div>
+      {!isEmbedded && (
+        <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end">
+          <button
+            onClick={() => {
+              setIsOpen(!isOpen);
+              playChime();
+            }}
+            className="w-14 h-14 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-105 transition-all select-none cursor-pointer border-2 border-white"
+            style={{ backgroundColor: primaryColor }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = darkColor}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = primaryColor}
+            title="Open Integrated CML Chat"
+          >
+            {isOpen ? <Minimize2 size={24} /> : <MessageSquare size={24} />}
+            {unreadTotal > 0 && (
+              <span className="absolute -top-1 -right-1 bg-rose-600 text-white font-sans font-bold text-[9px] px-1.5 py-0.5 rounded-full shadow-md animate-bounce">
+                {unreadTotal}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Main chat window */}
-      {isOpen && (
+      {chatOpen && (
         <div 
           id="google-chat-panel"
-          className="fixed bottom-24 right-6 w-[480px] h-[600px] bg-white border border-slate-200 shadow-2xl flex flex-col z-[110] overflow-hidden"
+          className={
+            isEmbedded
+              ? "w-full h-full bg-white flex flex-col overflow-hidden relative"
+              : `fixed bg-white border border-slate-200 shadow-2xl flex flex-col z-[110] overflow-hidden transition-all duration-300 ${
+                  isMaximized
+                    ? "inset-4 md:inset-10 z-[110]"
+                    : "bottom-24 right-6 w-[480px] h-[600px]"
+                }`
+          }
         >
           {/* Header */}
           <div className="text-white px-4 py-3.5 flex items-center justify-between select-none shrink-0" style={{ backgroundColor: primaryColor }}>
@@ -1835,12 +1848,26 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
                 <Bell size={16} className={notificationsEnabled ? "text-white" : "text-emerald-300 opacity-60"} />
               </button>
 
-              <button 
-                onClick={() => setIsOpen(false)} 
-                className="text-white hover:text-emerald-200 font-bold p-1"
-              >
-                ✕
-              </button>
+              {/* Maximize Toggle */}
+              {!isEmbedded && (
+                <button 
+                  onClick={() => setIsMaximized(!isMaximized)} 
+                  className="text-white hover:text-emerald-150 transition-colors p-1"
+                  title={isMaximized ? "Restore small panel" : "Maximize chat view"}
+                >
+                  {isMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                </button>
+              )}
+
+              {/* Close Button */}
+              {!isEmbedded && (
+                <button 
+                  onClick={() => setIsOpen(false)} 
+                  className="text-white hover:text-emerald-200 font-bold p-1 ml-1"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           </div>
           
@@ -2347,7 +2374,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string }> = ({ companyId })
           {/* Workspaces / Spaces and Active chat messages split view */}
           <div className="flex-1 flex overflow-hidden">
             {/* Spaces navigation rail (left) */}
-            <div className="w-[155px] bg-slate-50 border-r border-slate-200 flex flex-col select-none shrink-0 overflow-y-auto custom-scrollbar">
+            <div className={`${(isEmbedded || isMaximized) ? "w-[230px]" : "w-[155px]"} bg-slate-50 border-r border-slate-200 flex flex-col select-none shrink-0 overflow-y-auto custom-scrollbar transition-all duration-300`}>
               <div className="p-2 border-b border-slate-100 bg-slate-100/50 flex items-center justify-between">
                 <span className="text-[8px] font-display uppercase tracking-widest text-slate-400 font-black">Active Spaces</span>
                 <button 

@@ -144,6 +144,7 @@ import { SopBatchUploadModal } from "./components/SopBatchUploadModal";
 import { ImageLightboxModal } from "./components/ImageLightboxModal";
 import { AdminDashboard } from "./components/AdminDashboard";
 import { PublicNewsletterWidget } from "./components/PublicNewsletterWidget";
+import { CorporateStationery } from "./components/CorporateStationery";
 
 // Mock data for the chart
 const chartData = [
@@ -3355,11 +3356,11 @@ export default function App() {
       id: "brand-qa",
       label: "Brand & QA",
       icon: ShieldCheck,
-      disabled: true,
+      disabled: false,
       subItems: [
         { id: "qa-prep", label: "QA Preparation", icon: ClipboardList, disabled: true },
         { id: "qa-results", label: "QA Results", icon: CheckCircle, disabled: true },
-        { id: "brand-standards", label: "Brand Standards", icon: ShieldCheck, disabled: true },
+        { id: "brand-standards", label: "Brand Standards", icon: ShieldCheck, disabled: false },
         { id: "architecture-design", label: "Architecture & Design", icon: Layers, disabled: true }
       ]
     },
@@ -4789,7 +4790,8 @@ export default function App() {
                   {[
                     { id: 'rules', label: 'QA Standards & Guidelines' },
                     { id: 'maintenance', label: 'Asset Maintenance Rules' },
-                    { id: 'checklists', label: 'PM Preventive Checklist' }
+                    { id: 'checklists', label: 'PM Preventive Checklist' },
+                    ...(selectedCompany === 'ramada' ? [{ id: 'stationery', label: 'Corporate Brand Stationery' }] : [])
                   ].map((subT) => (
                     <button
                       key={subT.id}
@@ -5060,6 +5062,8 @@ export default function App() {
                        </div>
                     </div>
                   </div>
+                ) : brandSubTab === "stationery" ? (
+                  <CorporateStationery />
                 ) : (
                   <div className="space-y-8">
                     <div className="flex flex-col gap-2">
