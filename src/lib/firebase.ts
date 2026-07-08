@@ -407,6 +407,21 @@ class MockAuth {
     });
   }
 
+  updatePhotoURL(photoURL: string) {
+    if (this._currentUser) {
+      this._currentUser.photoURL = photoURL;
+      try {
+        localStorage.setItem('cml_mock_user', JSON.stringify({
+          uid: this._currentUser.uid,
+          email: this._currentUser.email,
+          displayName: this._currentUser.displayName,
+          photoURL: photoURL
+        }));
+      } catch (e) {}
+      this.trigger();
+    }
+  }
+
   async signInWithEmailAndPassword(email: string, pass: string) {
     const trimmedInput = (email || "").trim().toLowerCase();
     const matched = EXPLICIT_CREDENTIALS.find(u => 
@@ -494,6 +509,10 @@ class HybridAuth {
   }
   async signOut() {
     return mockAuthInstance.signOut();
+  }
+  async updatePhotoURL(photoURL: string) {
+    mockAuthInstance.updatePhotoURL(photoURL);
+    return Promise.resolve();
   }
 }
 

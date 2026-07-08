@@ -1590,6 +1590,7 @@ export default function App() {
   const [editedDepartment, setEditedDepartment] = useState("");
   const [editedDesignation, setEditedDesignation] = useState("");
   const [editedEmergency, setEditedEmergency] = useState("");
+  const [editedPhotoURL, setEditedPhotoURL] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSaveSuccess, setProfileSaveSuccess] = useState(false);
 
@@ -1600,6 +1601,7 @@ export default function App() {
       setEditedDepartment(userProfileData.department || "");
       setEditedDesignation(userProfileData.designation || "");
       setEditedEmergency(userProfileData.emergencyContact || "");
+      setEditedPhotoURL(userProfileData.photoURL || "");
     }
   }, [userProfileData]);
 
@@ -1615,6 +1617,7 @@ export default function App() {
         department: editedDepartment || "",
         designation: editedDesignation || "",
         emergencyContact: editedEmergency || "",
+        photoURL: editedPhotoURL || "",
       });
       setProfileSaveSuccess(true);
       setTimeout(() => setProfileSaveSuccess(false), 4000);
@@ -1623,6 +1626,20 @@ export default function App() {
       alert("Failed to save profile details.");
     } finally {
       setIsSavingProfile(false);
+    }
+  };
+
+  const handleUpdatePhoto = async (base64Image: string) => {
+    if (!currentUser) return;
+    try {
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      await updateDoc(userDocRef, {
+        photoURL: base64Image,
+      });
+      toastService.success("Profile photo updated successfully!");
+    } catch (err) {
+      console.error("Error updating photo:", err);
+      toastService.error("Failed to update profile photo.");
     }
   };
   const [workflowConfig, setWorkflowConfig] = useState<{ approverEmails?: string[]; delegations?: any[] } | null>(null);
@@ -4485,11 +4502,11 @@ export default function App() {
                     isProfileMenuOpen ? "border-gold bg-gold" : "border-slate-200 bg-white hover:border-gold"
                   )}
                 >
-                    {currentUser?.photoURL ? (
-                      <img src={currentUser.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    {userProfileData?.photoURL || currentUser?.photoURL ? (
+                      <img src={userProfileData?.photoURL || currentUser?.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
                       <div className={cn("w-full h-full flex items-center justify-center text-[10px] md:text-sm font-bold font-display uppercase", isProfileMenuOpen ? "text-white" : "text-gold")}>
-                        {currentUser?.displayName?.[0] || currentUser?.email?.[0] || "?"}
+                        {userProfileData?.displayName?.[0] || currentUser?.displayName?.[0] || currentUser?.email?.[0] || "?"}
                       </div>
                     )}
                 </button>
@@ -7636,8 +7653,7 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-                ) : (
-                  /* Room Inventory & Maintenance module */
+                ) : hotelInfoViewMode === "inventory" ? (
                   <div className="space-y-8 animate-fade-in text-left">
                     <div>
                       <span className="text-[10px] font-display uppercase tracking-widest text-gold font-extrabold block mb-1">Room Status Logs</span>
@@ -8336,7 +8352,7 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                ) : (
+                ) : null}
               </div>
             ) : activeTab === "revenue" ? (
               <div className="space-y-8 pb-32">
@@ -9321,17 +9337,69 @@ export default function App() {
             ) : activeTab === "profile" ? (
               <div className="max-w-4xl mx-auto py-12">
                 <div className="flex flex-col md:flex-row items-center gap-12 mb-16">
-                  <div className="w-32 h-32 md:w-48 md:h-48 border-2 border-gold/20 p-2 rounded-none">
-                    <div className="w-full h-full bg-luxury-black flex items-center justify-center text-gold text-4xl md:text-6xl font-serif italic overflow-hidden">
-                      {currentUser?.photoURL ? (
-                        <img src={currentUser.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                      ) : (
-                        currentUser?.displayName?.[0] || currentUser?.email?.[0] || "?"
-                      )}
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="w-32 h-32 md:w-48 md:h-48 border-2 border-gold/20 p-2 rounded-none relative overflow-hidden group bg-luxury-black">
+                      <div className="w-full h-full flex items-center justify-center text-gold text-4xl md:text-6xl font-serif italic overflow-hidden">
+                        {userProfileData?.photoURL || currentUser?.photoURL ? (
+                          <img src={userProfileData?.photoURL || currentUser?.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          userProfileData?.displayName?.[0] || currentUser?.displayName?.[0] || currentUser?.email?.[0] || "?"
+                        )}
+                      </div>
                     </div>
+                    
+                    <label className="cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-[9px] font-display uppercase tracking-widest font-black px-4 py-2 flex items-center gap-2 transition-all active:scale-95 shadow-xs">
+                      <Camera size={12} className="text-[#C5A059]" />
+                      Change Photo
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              const img = new Image();
+                              img.onload = () => {
+                                const canvas = document.createElement("canvas");
+                                const MAX_WIDTH = 250;
+                                const MAX_HEIGHT = 250;
+                                let width = img.width;
+                                let height = img.height;
+
+                                if (width > height) {
+                                  if (width > MAX_WIDTH) {
+                                    height *= MAX_WIDTH / width;
+                                    width = MAX_WIDTH;
+                                  }
+                                } else {
+                                  if (height > MAX_HEIGHT) {
+                                    width *= MAX_HEIGHT / height;
+                                    height = MAX_HEIGHT;
+                                  }
+                                }
+
+                                canvas.width = width;
+                                canvas.height = height;
+                                const ctx = canvas.getContext("2d");
+                                ctx?.drawImage(img, 0, 0, width, height);
+                                
+                                const compressedBase64 = canvas.toDataURL("image/jpeg", 0.75);
+                                setEditedPhotoURL(compressedBase64);
+                                handleUpdatePhoto(compressedBase64);
+                              };
+                              img.src = event.target?.result as string;
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
                   </div>
+
                   <div className="text-center md:text-left">
-                    <h2 className="text-5xl font-serif text-slate-900 italic mb-2">{currentUser?.displayName || "Team Member"}</h2>
+                    <h2 className="text-5xl font-serif text-slate-900 italic mb-2">{userProfileData?.displayName || currentUser?.displayName || "Team Member"}</h2>
                     <p className="luxury-label font-bold text-gold !text-sm mb-4">{userRole || "Fetching Role..."}</p>
                     <div className="flex flex-wrap justify-center md:justify-start gap-4">
                       <span className="px-4 py-2 bg-white border border-slate-100 text-[10px] font-display uppercase tracking-widest text-slate-500">{currentUser?.email}</span>
