@@ -277,7 +277,65 @@ export async function syncWithServerDirect(updates?: Record<string, any>, delete
 }
 
 if (typeof window !== 'undefined') {
+  // Setup real-time Server-Sent Events (SSE) listener to sync database updates instantly
+  let sseSource: EventSource | null = null;
+  const connectSSE = () => {
+    if (sseSource) {
+      try { sseSource.close(); } catch (e) {}
+    }
+    sseSource = new EventSource("/api/sync-stream");
+    sseSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data && data.type === "update") {
+          const changedKeys = new Set<string>();
+          const updates = data.updates || {};
+          const deletedKeys = data.deletedKeys || [];
+
+          for (const [k, newVal] of Object.entries(updates)) {
+            if (k in pendingUpdates) continue;
+            
+            const oldVal = MOCK_STORE[k];
+            if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+              MOCK_STORE[k] = newVal;
+              changedKeys.add(k);
+            }
+          }
+
+          deletedKeys.forEach((k: string) => {
+            if (MOCK_STORE[k]) {
+              delete MOCK_STORE[k];
+              changedKeys.add(k);
+            }
+          });
+
+          if (changedKeys.size > 0) {
+            try {
+              localStorage.setItem('cml_mock_db', JSON.stringify(MOCK_STORE));
+            } catch (e) {}
+
+            changedKeys.forEach(k => {
+              triggerListeners(k);
+              const parts = k.split('/');
+              if (parts.length > 1) {
+                triggerListeners(parts.slice(0, -1).join('/'));
+              }
+            });
+          }
+        }
+      } catch (err) {
+        console.error("[SSE] Error processing update:", err);
+      }
+    };
+    sseSource.onerror = (err) => {
+      console.warn("[SSE] Connection lost, retrying in 5 seconds...", err);
+      sseSource?.close();
+      setTimeout(connectSSE, 5000);
+    };
+  };
+
   setTimeout(() => {
+    connectSSE();
     syncWithServerDirect(undefined, undefined, true);
     setInterval(() => {
       syncWithServerDirect();

@@ -143,8 +143,10 @@ import { GoogleChatWidget } from "./components/GoogleChatWidget";
 import { SopBatchUploadModal } from "./components/SopBatchUploadModal";
 import { ImageLightboxModal } from "./components/ImageLightboxModal";
 import { AdminDashboard } from "./components/AdminDashboard";
+import { HotelOrgChart } from "./components/HotelOrgChart";
 import { PublicNewsletterWidget } from "./components/PublicNewsletterWidget";
 import { BrandStandardsDocManager } from "./components/BrandStandardsDocManager";
+import { INITIAL_EMPLOYEES } from "./data/initialEmployees";
 
 // Mock data for the chart
 const chartData = [
@@ -1803,14 +1805,16 @@ export default function App() {
       setSelectedRoomNumber("Room 101");
     } else {
       setSelectedRoomNumber("Room 110");
-      if (hotelInfoViewMode === "org-chart") {
-        setHotelInfoViewMode("team");
-      }
+    }
+    if (hotelInfoViewMode === "org-chart" && selectedCompany !== "ramada" && selectedCompany !== "wyndham") {
+      setHotelInfoViewMode("team");
     }
   }, [selectedCompany, hotelInfoViewMode]);
 
   const [orgSearchQuery, setOrgSearchQuery] = useState("");
   const [selectedOrgTier, setSelectedOrgTier] = useState<"all" | "board" | "executive" | "operations">("all");
+  const [selectedOrgNode, setSelectedOrgNode] = useState<any>(null);
+  const [orgViewLayout, setOrgViewLayout] = useState<"visual" | "directory">("visual");
 
   const isStaffMatch = (name: string, role: string) => {
     if (!orgSearchQuery) return false;
@@ -7168,7 +7172,7 @@ export default function App() {
                     Executive Leadership & Corporate Operations
                   </button>
                   
-                  {selectedCompany === "ramada" && (
+                  {(selectedCompany === "ramada" || selectedCompany === "wyndham") && (
                     <button
                       onClick={() => setHotelInfoViewMode("org-chart")}
                       className={cn(
@@ -7393,287 +7397,20 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-                ) : hotelInfoViewMode === "org-chart" && selectedCompany === "ramada" ? (
-                  <div className="space-y-8 animate-fade-in text-left">
-                    {/* Header */}
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-display font-bold uppercase tracking-widest bg-amber-500/10 text-[#C5A02D] px-2.5 py-1 rounded">
-                            Ramada Suites
-                          </span>
-                          <span className="text-[9px] font-mono text-slate-400">
-                            Wailoaloa Beach • Standard 2026
-                          </span>
-                        </div>
-                        <h3 className="text-2xl font-serif text-slate-950 italic">
-                          Organizational Structure & Hierarchy
-                        </h3>
-                      </div>
-                      
-                      {/* Filter/Search */}
-                      <div className="flex flex-wrap items-center gap-3">
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                            <Search size={14} />
-                          </span>
-                          <input 
-                            type="text"
-                            placeholder="Search staff or role..."
-                            value={orgSearchQuery}
-                            onChange={(e) => setOrgSearchQuery(e.target.value)}
-                            className="pl-9 pr-4 py-1.5 bg-slate-50 border border-slate-200 focus:border-[#C5A02D] focus:outline-none rounded text-xs w-52 text-slate-700"
-                          />
-                        </div>
-                        
-                        <div className="flex bg-slate-100 p-0.5 rounded border border-slate-200">
-                          {[
-                            { id: "all", label: "Full Chart" },
-                            { id: "board", label: "Board" },
-                            { id: "executive", label: "Executive" },
-                            { id: "operations", label: "Operations" }
-                          ].map(t => (
-                            <button
-                              key={t.id}
-                              onClick={() => setSelectedOrgTier(t.id as any)}
-                              className={cn(
-                                "px-3 py-1 rounded-sm text-[10px] font-display uppercase tracking-wider font-extrabold transition-all cursor-pointer",
-                                selectedOrgTier === t.id 
-                                  ? "bg-white text-slate-950 shadow-sm font-black" 
-                                  : "text-slate-500 hover:text-slate-800"
-                              )}
-                            >
-                              {t.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Chart Layout */}
-                    <div className="p-6 bg-slate-50/50 rounded-xl border border-slate-100 overflow-x-auto min-w-full scroller-premium">
-                      {/* Diagram View */}
-                      <div className="flex flex-col items-center space-y-10 py-4 min-w-[1200px]">
-                        
-                        {/* SECTION 1: BOARD OF DIRECTORS */}
-                        {(selectedOrgTier === "all" || selectedOrgTier === "board") && (
-                          <div className="flex flex-col items-center">
-                            <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-[#C5A02D] font-extrabold mb-3">Board of Directors</span>
-                            <div className="flex justify-center gap-6">
-                              {[
-                                { name: "Mark Hinton", role: "Director / Co-Founder", isHighlighted: isStaffMatch("Mark Hinton", "Director / Co-Founder") },
-                                { name: "Jenice Hinton", role: "Director / Co-Founder", isHighlighted: isStaffMatch("Jenice Hinton", "Director / Co-Founder") },
-                                { name: "Rohit Lal", role: "General Manager / Director", isHighlighted: isStaffMatch("Rohit Lal", "General Manager / Director") }
-                              ].map((b, i) => (
-                                <div 
-                                  key={i} 
-                                  className={cn(
-                                    "p-3 rounded border text-center w-52 transition-all shadow-sm bg-white",
-                                    b.isHighlighted ? "border-[#C5A02D] ring-2 ring-[#C5A02D]/10 bg-amber-50/10" : "border-slate-200"
-                                  )}
-                                >
-                                  <h4 className="text-xs font-display font-black text-slate-900 uppercase tracking-wider">{b.name}</h4>
-                                  <p className="text-[10px] font-serif text-slate-500 italic mt-1">{b.role}</p>
-                                </div>
-                              ))}
-                            </div>
-                            <div className="w-0.5 h-8 bg-slate-300 mt-4"></div>
-                          </div>
-                        )}
-
-                        {/* SECTION 2: GENERAL MANAGER (ROHIT LAL) */}
-                        {(selectedOrgTier === "all" || selectedOrgTier === "board" || selectedOrgTier === "executive") && (
-                          <div className="flex flex-col items-center">
-                            <div 
-                              className={cn(
-                                "p-4 rounded border text-center w-64 transition-all shadow-md bg-gradient-to-r from-stone-900 to-stone-950 text-white border-stone-800",
-                                isStaffMatch("Rohit Lal", "General Manager") ? "ring-4 ring-amber-500/30" : ""
-                              )}
-                            >
-                              <div className="w-1.5 h-1.5 rounded-full bg-[#C5A02D] mx-auto mb-1 animate-pulse" />
-                              <h4 className="text-xs font-display font-black uppercase tracking-widest text-white">Rohit Lal</h4>
-                              <p className="text-[10px] text-stone-300 mt-0.5">General Manager / Director</p>
-                              <p className="text-[8px] font-mono text-amber-500/90 tracking-widest uppercase mt-2">Executive Lead</p>
-                            </div>
-                            <div className="w-0.5 h-10 bg-slate-300 mt-2"></div>
-                          </div>
-                        )}
-
-                        {/* SECTION 3: CORPORATE EXECUTIVE TEAM */}
-                        {(selectedOrgTier === "all" || selectedOrgTier === "executive") && (
-                          <div className="flex flex-col items-center w-full">
-                            {/* Horizontal Line for executives */}
-                            <div className="w-[85%] h-0.5 bg-slate-300 mb-0"></div>
-                            
-                            <div className="flex justify-between w-[90%] gap-4 pt-4">
-                              {[
-                                { name: "Neetisa Devi", role: "Cluster HRM", icon: "👥", isHighlighted: isStaffMatch("Neetisa Devi", "Cluster HRM") },
-                                { name: "John Singh", role: "Group I.T Manager", icon: "⚙", isHighlighted: isStaffMatch("John Singh", "Group I.T Manager") },
-                                { 
-                                  name: "Charles Cebujano", 
-                                  role: "Group Digital Marketing Exec", 
-                                  icon: "📢",
-                                  isHighlighted: isStaffMatch("Charles Cebujano", "Group Digital Marketing Exec"),
-                                  subordinates: [
-                                    { name: "Priyesh Narayan", role: "Cluster Digital Marketing Officer", isHighlighted: isStaffMatch("Priyesh Narayan", "Cluster Digital Marketing Officer") }
-                                  ]
-                                },
-                                { name: "Shwaran Shivani", role: "Group Sales & Revenue Mgr", icon: "📊", isHighlighted: isStaffMatch("Shwaran Shivani", "Group Sales & Revenue Mgr") },
-                                { name: "Prateek Sharma", role: "Group Asset Protection & Compliance", icon: "🔍", isHighlighted: isStaffMatch("Prateek Sharma", "Group Asset Protection & Compliance") },
-                                { name: "Shahil Sharma", role: "Group Financial Controller", icon: "💰", isHighlighted: isStaffMatch("Shahil Sharma", "Group Financial Controller") }
-                              ].map((exec, idx) => (
-                                <div key={idx} className="flex flex-col items-center flex-1 min-w-[130px]">
-                                  {/* Vertical drop line to node */}
-                                  <div className="w-0.5 h-4 bg-slate-300 -mt-4 mb-2"></div>
-                                  
-                                  <div 
-                                    className={cn(
-                                      "p-3 rounded border w-full text-center bg-white transition-all shadow-sm flex flex-col justify-between h-28 relative",
-                                      exec.isHighlighted ? "border-[#C5A02D] ring-2 ring-[#C5A02D]/10 bg-amber-50/10" : "border-slate-200"
-                                    )}
-                                  >
-                                    <div>
-                                      <span className="text-base block mb-1">{exec.icon}</span>
-                                      <h5 className="text-[10px] font-display font-black text-slate-900 uppercase leading-snug">{exec.name}</h5>
-                                    </div>
-                                    <p className="text-[9px] text-slate-500 font-serif leading-snug mt-1">{exec.role}</p>
-                                  </div>
-
-                                  {/* Render subordinate if present */}
-                                  {exec.subordinates && exec.subordinates.map((sub, sIdx) => (
-                                    <div key={sIdx} className="flex flex-col items-center w-full mt-2">
-                                      <div className="w-0.5 h-4 bg-slate-300"></div>
-                                      <div 
-                                        className={cn(
-                                          "p-2 rounded border w-11/12 text-center bg-stone-50 transition-all text-[9.5px]",
-                                          sub.isHighlighted ? "border-[#C5A02D] bg-amber-50/15" : "border-slate-200"
-                                        )}
-                                      >
-                                        <h6 className="font-display font-black text-slate-800 uppercase leading-tight">{sub.name}</h6>
-                                        <p className="text-[8px] text-slate-400 mt-0.5">{sub.role}</p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ))}
-                            </div>
-                            
-                            <div className="w-0.5 h-10 bg-slate-300 mt-6"></div>
-                          </div>
-                        )}
-
-                        {/* SECTION 4: HOTEL OPERATIONS */}
-                        {(selectedOrgTier === "all" || selectedOrgTier === "operations") && (
-                          <div className="flex flex-col items-center w-full">
-                            <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-[#C5A02D] font-extrabold mb-3">Hotel Operations</span>
-                            
-                            {/* Manager on Duty Card */}
-                            <div 
-                              className={cn(
-                                "p-3 rounded border text-center w-60 transition-all shadow bg-[#C5A02D] text-white border-transparent",
-                                isStaffMatch("Manager on Duty", "Operations") ? "ring-4 ring-amber-500/30" : ""
-                              )}
-                            >
-                              <h4 className="text-xs font-display font-black uppercase tracking-widest">Manager on Duty</h4>
-                              <p className="text-[9px] text-amber-50 mt-0.5">Hotel Operations Lead</p>
-                            </div>
-                            
-                            <div className="w-0.5 h-8 bg-slate-300 mt-1"></div>
-                            
-                            {/* Horizontal operations connection line */}
-                            <div className="w-[90%] h-0.5 bg-slate-300 mb-0"></div>
-
-                            {/* Operations Departments Row */}
-                            <div className="flex justify-between w-full gap-4 pt-4">
-                              {[
-                                { 
-                                  dept: "Housekeeping", 
-                                  color: "bg-rose-500/10 text-rose-700 border-rose-200", 
-                                  lead: "Housekeeping Supervisor",
-                                  staff: ["Public Area Attendant", "Room Attendants", "Housemen"]
-                                },
-                                { 
-                                  dept: "Front Office", 
-                                  color: "bg-indigo-500/10 text-indigo-700 border-indigo-200", 
-                                  lead: "Front Office Supervisor",
-                                  staff: ["Guest Service Agent"]
-                                },
-                                { 
-                                  dept: "Concierge / Porter", 
-                                  color: "bg-amber-500/10 text-amber-800 border-amber-200", 
-                                  lead: "Head Concierge / Porter",
-                                  staff: ["Concierge / Porter"]
-                                },
-                                { 
-                                  dept: "Maintenance", 
-                                  color: "bg-amber-600/10 text-amber-900 border-amber-200", 
-                                  lead: "Maintenance Supervisor",
-                                  staff: ["Handyman", "Property Officer", "Activities Officer"]
-                                },
-                                { 
-                                  dept: "Revenue & Sales", 
-                                  color: "bg-blue-500/10 text-blue-700 border-blue-200", 
-                                  lead: "Revenue & Sales Supervisor",
-                                  staff: ["Reservations Agent", "Tour Desk"]
-                                },
-                                { 
-                                  dept: "Night Audit", 
-                                  color: "bg-purple-500/10 text-purple-700 border-purple-200", 
-                                  lead: "Night Auditor",
-                                  staff: []
-                                },
-                                { 
-                                  dept: "Accounts / Admin", 
-                                  color: "bg-emerald-500/10 text-emerald-700 border-emerald-200", 
-                                  lead: "Accounts Officer",
-                                  staff: ["Line / Stock Controller"]
-                                }
-                              ].map((dep, dIdx) => (
-                                <div key={dIdx} className="flex flex-col items-center flex-1 min-w-[110px]">
-                                  {/* vertical connection drop */}
-                                  <div className="w-0.5 h-4 bg-slate-300 -mt-4 mb-2"></div>
-
-                                  {/* Department Head Node */}
-                                  <div 
-                                    className={cn(
-                                      "p-2.5 rounded border w-full text-center bg-white transition-all shadow-sm",
-                                      isStaffMatch(dep.lead, dep.dept) ? "border-[#C5A02D] ring-2 ring-[#C5A02D]/10 bg-amber-50/10" : "border-slate-200"
-                                    )}
-                                  >
-                                    <span className={cn("px-2 py-0.5 rounded text-[8px] font-display uppercase tracking-wider font-extrabold block text-center mb-1.5", dep.color)}>
-                                      {dep.dept}
-                                    </span>
-                                    <h5 className="text-[10px] font-display font-black text-slate-900 uppercase leading-snug">{dep.lead}</h5>
-                                  </div>
-
-                                  {/* Staff Members List */}
-                                  {dep.staff.length > 0 && (
-                                    <div className="flex flex-col items-center w-full mt-2 space-y-1.5">
-                                      <div className="w-0.5 h-3 bg-slate-300"></div>
-                                      
-                                      {dep.staff.map((s, sIdx) => (
-                                        <div 
-                                          key={sIdx}
-                                          className={cn(
-                                            "p-1.5 rounded border border-slate-100 bg-stone-50 w-[95%] text-center text-[9px] font-medium text-slate-600 transition-all",
-                                            isStaffMatch(s, dep.dept) ? "border-[#C5A02D] bg-amber-50/15 text-slate-800 font-bold" : ""
-                                          )}
-                                        >
-                                          {s}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-
-                          </div>
-                        )}
-
-                      </div>
-                    </div>
-                  </div>
+                ) : hotelInfoViewMode === "org-chart" && (selectedCompany === "ramada" || selectedCompany === "wyndham") ? (
+                  <HotelOrgChart
+                    selectedCompany={selectedCompany}
+                    initialEmployees={INITIAL_EMPLOYEES}
+                    orgSearchQuery={orgSearchQuery}
+                    setOrgSearchQuery={setOrgSearchQuery}
+                    selectedOrgTier={selectedOrgTier}
+                    setSelectedOrgTier={setSelectedOrgTier}
+                    selectedOrgNode={selectedOrgNode}
+                    setSelectedOrgNode={setSelectedOrgNode}
+                    orgViewLayout={orgViewLayout}
+                    setOrgViewLayout={setOrgViewLayout}
+                    isStaffMatch={isStaffMatch}
+                  />
                 ) : hotelInfoViewMode === "property" ? (
                   /* Current physical profiles structures */
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
