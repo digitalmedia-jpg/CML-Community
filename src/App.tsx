@@ -1784,7 +1784,116 @@ export default function App() {
   const [formsLayoutView, setFormsLayoutView] = useState<"grid" | "list">("list");
   const [selectedFormCategory, setSelectedFormCategory] = useState<string>("All");
   const [isPrintFriendly, setIsPrintFriendly] = useState(false);
-  const [hotelInfoViewMode, setHotelInfoViewMode] = useState<"team" | "property" | "inventory" | "org-chart">("team");
+  const [hotelInfoViewMode, setHotelInfoViewMode] = useState<"team" | "property" | "inventory" | "org-chart" | "edit-staff">("team");
+
+  const [executiveBoard, setExecutiveBoard] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem("cml_executive_board");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      {
+        id: "exec_1",
+        name: "MARK HINTON",
+        role: "CEO / Co-Founder",
+        initials: "MH",
+        color: "from-amber-50 to-amber-100 text-amber-900 border-amber-200",
+        desc: "Steers group-wide strategy, multi-brand hospitality acquisitions, and CML property portfolios.",
+        email: "mark.hinton@cml.com.fj"
+      },
+      {
+        id: "exec_2",
+        name: "JENICE HINTON",
+        role: "Director / Co-Founder",
+        initials: "JH",
+        color: "from-[#FDFBF7] to-[#F1E9DB] text-amber-950 border-[#E4D5BE]",
+        desc: "Directs group governance protocols, stakeholder syndications, brand standards and executive advisory.",
+        email: "jenice.hinton@cml.com.fj"
+      },
+      {
+        id: "exec_3",
+        name: "ROHIT LAL",
+        role: "General Manager / Director",
+        initials: "RL",
+        color: "from-stone-100 to-stone-200 text-stone-900 border-stone-300",
+        desc: "Drives dual-property operations, resort revenue maximization, guest recovery compliance, and brand alignment.",
+        email: "rohit.lal@cml.com.fj"
+      }
+    ];
+  });
+
+  const [corporateOps, setCorporateOps] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem("cml_corporate_ops");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      {
+        id: "corp_1",
+        name: "SHAHIL SHARMA",
+        role: "Group Financial Controller",
+        initials: "SS",
+        color: "bg-slate-950 text-[#C5A059] border-gold/20",
+        email: "shahil.sharma@cml.com.fj"
+      },
+      {
+        id: "corp_2",
+        name: "NEETISA DEVI",
+        role: "Group People & Culture Manager",
+        initials: "ND",
+        color: "bg-slate-900 text-stone-100 border-slate-800",
+        email: "neetisa.devi@cml.com.fj"
+      },
+      {
+        id: "corp_3",
+        name: "JOHN SINGH",
+        role: "Group Technology & Innovation Manager",
+        initials: "JS",
+        color: "bg-[#8D6E32]/10 text-[#8D6E32] border-[#8D6E32]/25",
+        email: "john.singh@cml.com.fj"
+      },
+      {
+        id: "corp_4",
+        name: "SHWARAN SHIVANI",
+        role: "Group Sales, Marketing & Revenue Manager",
+        initials: "SS",
+        color: "bg-stone-900 text-amber-100 border-zinc-800",
+        email: "shwaran.shivani@cml.com.fj"
+      },
+      {
+        id: "corp_5",
+        name: "PRATEEK SHARMA",
+        role: "Group Asset Protection & Compliance Manager",
+        initials: "PS",
+        color: "bg-[#1C1917] text-amber-50 border-amber-900/40",
+        email: "prateek.sharma@cml.com.fj"
+      },
+      {
+        id: "corp_6",
+        name: "CHARLES CEBUJANO",
+        role: "Group Digital Marketing & I.T Executive",
+        initials: "CC",
+        color: "bg-gradient-to-br from-[#8D6E32] to-[#C5A059] text-slate-950 border-gold/40",
+        email: "digitalmedia@cml.com.fj",
+        highlight: true
+      }
+    ];
+  });
+
+  const [allEmployees, setAllEmployees] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem("cml_all_employees");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_EMPLOYEES;
+  });
+
+  // State variables for HR / Staff Editing tab
+  const [editStaffSubTab, setEditStaffSubTab] = useState<"board" | "council" | "employees">("employees");
+  const [editingMember, setEditingMember] = useState<any | null>(null);
+  const [isAddingEmployee, setIsAddingEmployee] = useState(false);
+  const [employeeSearchQuery, setEmployeeSearchQuery] = useState("");
+  const [employeeDeptFilter, setEmployeeDeptFilter] = useState("All");
   const [selectedRoomNumber, setSelectedRoomNumber] = useState("Room 101");
   const [showAddRepairModal, setShowAddRepairModal] = useState(false);
   const [maintenanceLogs, setMaintenanceLogs] = useState<any[]>(() => {
@@ -1810,6 +1919,41 @@ export default function App() {
       setHotelInfoViewMode("team");
     }
   }, [selectedCompany, hotelInfoViewMode]);
+
+  // Real-time synchronization of employees list from Firestore
+  useEffect(() => {
+    const propertyId = selectedCompany || "cml";
+    const usersRef = collection(db, `cml-signin-users-${propertyId}`);
+    
+    const unsubscribe = onSnapshot(usersRef, (snapshot) => {
+      if (!snapshot.empty) {
+        const list = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            firstName: data.firstName || "",
+            lastName: data.lastName || "",
+            name: `${data.firstName || ""} ${data.lastName || ""}`.trim(),
+            phone: data.phone || "",
+            email: data.email || "",
+            employeeCode: data.employeeCode || "",
+            role: data.role || "Staff",
+            department: data.department || "",
+            managerName: data.managerName || "",
+            dateOfBirth: data.dateOfBirth || ""
+          };
+        });
+        setAllEmployees(list);
+      } else {
+        // Fallback if empty
+        setAllEmployees(INITIAL_EMPLOYEES);
+      }
+    }, (err) => {
+      console.error("Firestore employees sync failed:", err);
+    });
+
+    return () => unsubscribe();
+  }, [selectedCompany, db]);
 
   const [orgSearchQuery, setOrgSearchQuery] = useState("");
   const [selectedOrgTier, setSelectedOrgTier] = useState<"all" | "board" | "executive" | "operations">("all");
@@ -7211,6 +7355,19 @@ export default function App() {
                     <Wrench size={14} className={hotelInfoViewMode === "inventory" ? "text-gold" : "text-slate-400"} />
                     Room Inventory & Maintenance History
                   </button>
+
+                  <button
+                    onClick={() => setHotelInfoViewMode("edit-staff")}
+                    className={cn(
+                      "px-6 py-4 text-xs font-display uppercase tracking-widest font-extrabold border-b-2 transition-all shrink-0 flex items-center gap-2.5",
+                      hotelInfoViewMode === "edit-staff" 
+                        ? "border-amber-600 text-slate-950 font-black" 
+                        : "border-transparent text-slate-400 hover:text-slate-600 font-medium"
+                    )}
+                  >
+                    <UserCog size={14} className={hotelInfoViewMode === "edit-staff" ? "text-amber-600" : "text-slate-400"} />
+                    ✏️ Edit Staff & Directory Info
+                  </button>
                 </div>
 
                 {hotelInfoViewMode === "team" ? (
@@ -7223,32 +7380,7 @@ export default function App() {
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        {[
-                          {
-                            name: "MARK HINTON",
-                            role: "CEO / Co-Founder",
-                            initials: "MH",
-                            color: "from-amber-50 to-amber-100 text-amber-900 border-amber-200",
-                            desc: "Steers group-wide strategy, multi-brand hospitality acquisitions, and CML property portfolios.",
-                            email: "mark.hinton@cml.com.fj"
-                          },
-                          {
-                            name: "JENICE HINTON",
-                            role: "Director / Co-Founder",
-                            initials: "JH",
-                            color: "from-[#FDFBF7] to-[#F1E9DB] text-amber-950 border-[#E4D5BE]",
-                            desc: "Directs group governance protocols, stakeholder syndications, brand standards and executive advisory.",
-                            email: "jenice.hinton@cml.com.fj"
-                          },
-                          {
-                            name: "ROHIT LAL",
-                            role: "General Manager / Director",
-                            initials: "RL",
-                            color: "from-stone-100 to-stone-200 text-stone-900 border-stone-300",
-                            desc: "Drives dual-property operations, resort revenue maximization, guest recovery compliance, and brand alignment.",
-                            email: "rohit.lal@cml.com.fj"
-                          }
-                        ].map((person, index) => (
+                        {executiveBoard.map((person, index) => (
                           <motion.div
                             key={index}
                             whileHover={{ y: -4 }}
@@ -7265,9 +7397,9 @@ export default function App() {
                               
                               <div className={cn(
                                 "w-36 h-36 rounded-2xl flex items-center justify-center font-display text-3xl font-black shadow-inner border tracking-wide transition-all duration-500 group-hover:scale-105 group-hover:rotate-1 bg-gradient-to-br", 
-                                person.color
+                                person.color || "from-amber-50 to-amber-100 text-amber-900 border-amber-200"
                               )}>
-                                {person.initials}
+                                {person.initials || person.name.charAt(0)}
                               </div>
                             </div>
 
@@ -7308,51 +7440,7 @@ export default function App() {
 
                       {/* Panoramic list matching the exact 6 profiles circular layouts */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8">
-                        {[
-                          {
-                            name: "SHAHIL SHARMA",
-                            role: "Group Financial Controller",
-                            initials: "SS",
-                            color: "bg-slate-950 text-[#C5A059] border-gold/20",
-                            email: "shahil.sharma@cml.com.fj"
-                          },
-                          {
-                            name: "NEETISA DEVI",
-                            role: "Group People & Culture Manager",
-                            initials: "ND",
-                            color: "bg-slate-900 text-stone-100 border-slate-800",
-                            email: "neetisa.devi@cml.com.fj"
-                          },
-                          {
-                            name: "JOHN SINGH",
-                            role: "Group Technology & Innovation Manager",
-                            initials: "JS",
-                            color: "bg-[#8D6E32]/10 text-[#8D6E32] border-[#8D6E32]/25",
-                            email: "john.singh@cml.com.fj"
-                          },
-                          {
-                            name: "SHWARAN SHIVANI",
-                            role: "Group Sales, Marketing & Revenue Manager",
-                            initials: "SS",
-                            color: "bg-stone-900 text-amber-100 border-zinc-800",
-                            email: "shwaran.shivani@cml.com.fj"
-                          },
-                          {
-                            name: "PRATEEK SHARMA",
-                            role: "Group Asset Protection & Compliance Manager",
-                            initials: "PS",
-                            color: "bg-[#1C1917] text-amber-50 border-amber-900/40",
-                            email: "prateek.sharma@cml.com.fj"
-                          },
-                          {
-                            name: "CHARLES CEBUJANO",
-                            role: "Group Digital Marketing & I.T Executive",
-                            initials: "CC",
-                            color: "bg-gradient-to-br from-[#8D6E32] to-[#C5A059] text-slate-950 border-gold/40",
-                            email: "digitalmedia@cml.com.fj",
-                            highlight: true
-                          }
-                        ].map((member, idx) => (
+                        {corporateOps.map((member, idx) => (
                           <motion.div
                             key={idx}
                             whileHover={{ y: -3 }}
@@ -7368,10 +7456,10 @@ export default function App() {
                               {/* Circle Frame */}
                               <div className={cn(
                                 "w-28 h-28 rounded-full border-2 flex items-center justify-center font-display text-xl font-bold tracking-wider relative shadow-md transition-all duration-300 z-10 bg-gradient-to-br",
-                                member.color,
+                                member.color || "bg-slate-900 text-stone-100 border-slate-800",
                                 member.highlight ? "ring-2 ring-offset-2 ring-gold" : ""
                               )}>
-                                {member.initials}
+                                {member.initials || member.name.charAt(0)}
                                 {member.highlight && (
                                   <span className="absolute -top-1 -right-1 bg-gold text-slate-950 text-[7px] font-display uppercase tracking-widest font-black px-1.5 py-0.5 rounded-full shadow-lg">
                                     Current
@@ -7400,7 +7488,7 @@ export default function App() {
                 ) : hotelInfoViewMode === "org-chart" && (selectedCompany === "ramada" || selectedCompany === "wyndham") ? (
                   <HotelOrgChart
                     selectedCompany={selectedCompany}
-                    initialEmployees={INITIAL_EMPLOYEES}
+                    initialEmployees={allEmployees}
                     orgSearchQuery={orgSearchQuery}
                     setOrgSearchQuery={setOrgSearchQuery}
                     selectedOrgTier={selectedOrgTier}
@@ -7814,7 +7902,441 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                )}
+                ) : hotelInfoViewMode === "edit-staff" ? (
+                  <div className="space-y-8 animate-fade-in text-left">
+                    {/* Header */}
+                    <div className="flex items-center justify-between flex-wrap gap-4 bg-[#FAF8F5] p-6 border border-slate-100 rounded-lg shadow-xs">
+                      <div>
+                        <span className="text-[10px] font-display uppercase tracking-widest text-[#C5A059] font-black block mb-1">Human Resources Command</span>
+                        <h3 className="text-xl font-serif text-slate-950 italic">Staff & Leadership Editor</h3>
+                        <p className="text-xs text-slate-500 italic mt-1">Manage executive leadership, corporate managers, and property-specific employees with real-time cloud sync.</p>
+                      </div>
+                      
+                      {editStaffSubTab === "employees" && (
+                        <button
+                          onClick={() => {
+                            setEditingMember(null);
+                            setIsAddingEmployee(true);
+                          }}
+                          className="bg-slate-950 hover:bg-gold hover:text-slate-950 text-white text-[10px] font-display uppercase tracking-widest font-black px-4 py-2.5 rounded-none transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Plus size={12} />
+                          ADD NEW EMPLOYEE
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Sub-Tabs Selector */}
+                    <div className="flex border-b border-slate-100 pb-px gap-4 overflow-x-auto scroller-hidden">
+                      <button
+                        onClick={() => { setEditStaffSubTab("employees"); setEditingMember(null); setIsAddingEmployee(false); }}
+                        className={cn(
+                          "px-6 py-4 text-xs font-display uppercase tracking-widest font-extrabold border-b-2 transition-all shrink-0 flex items-center gap-2",
+                          editStaffSubTab === "employees" 
+                            ? "border-amber-600 text-slate-950 font-black" 
+                            : "border-transparent text-slate-400 hover:text-slate-600 font-medium"
+                        )}
+                      >
+                        👥 Property Employees Directory ({selectedCompany === "ramada" ? "Ramada" : selectedCompany === "wyndham" ? "Wyndham" : "CML"})
+                      </button>
+                      <button
+                        onClick={() => { setEditStaffSubTab("board"); setEditingMember(null); setIsAddingEmployee(false); }}
+                        className={cn(
+                          "px-6 py-4 text-xs font-display uppercase tracking-widest font-extrabold border-b-2 transition-all shrink-0 flex items-center gap-2",
+                          editStaffSubTab === "board" 
+                            ? "border-amber-600 text-slate-950 font-black" 
+                            : "border-transparent text-slate-400 hover:text-slate-600 font-medium"
+                        )}
+                      >
+                        👑 Executive Board / Leaders
+                      </button>
+                      <button
+                        onClick={() => { setEditStaffSubTab("council"); setEditingMember(null); setIsAddingEmployee(false); }}
+                        className={cn(
+                          "px-6 py-4 text-xs font-display uppercase tracking-widest font-extrabold border-b-2 transition-all shrink-0 flex items-center gap-2",
+                          editStaffSubTab === "council" 
+                            ? "border-amber-600 text-slate-950 font-black" 
+                            : "border-transparent text-slate-400 hover:text-slate-600 font-medium"
+                        )}
+                      >
+                        🏢 Corporate Council Managers
+                      </button>
+                    </div>
+
+                    {/* 1. EMPLOYEE DIRECTORY SUBTAB */}
+                    {editStaffSubTab === "employees" && (
+                      <div className="space-y-6">
+                        {/* Search and Filter Row */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-4 border border-slate-100 shadow-xs">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                            <input
+                              type="text"
+                              placeholder="Search employees by name, role, code..."
+                              value={employeeSearchQuery}
+                              onChange={(e) => setEmployeeSearchQuery(e.target.value)}
+                              className="w-full pl-9 pr-4 py-2 border border-slate-200 text-xs focus:border-gold outline-none rounded-none"
+                            />
+                          </div>
+                          <div>
+                            <select
+                              value={employeeDeptFilter}
+                              onChange={(e) => setEmployeeDeptFilter(e.target.value)}
+                              className="w-full border border-slate-200 p-2 text-xs focus:border-gold outline-none bg-white rounded-none"
+                            >
+                              <option value="All">All Departments</option>
+                              {Array.from(new Set(allEmployees.map(e => e.department).filter(Boolean))).map(dept => (
+                                <option key={dept} value={dept}>{dept}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="text-right text-[10px] text-slate-400 flex items-center justify-end">
+                            Showing {
+                              allEmployees.filter(e => {
+                                const matchesSearch = !employeeSearchQuery || 
+                                  `${e.firstName || ""} ${e.lastName || ""}`.toLowerCase().includes(employeeSearchQuery.toLowerCase()) ||
+                                  (e.employeeCode || "").toLowerCase().includes(employeeSearchQuery.toLowerCase()) ||
+                                  (e.role || "").toLowerCase().includes(employeeSearchQuery.toLowerCase());
+                                const matchesDept = employeeDeptFilter === "All" || e.department === employeeDeptFilter;
+                                return matchesSearch && matchesDept;
+                              }).length
+                            } of {allEmployees.length} employees
+                          </div>
+                        </div>
+
+                        {/* Employee Add or Edit Inline Panel */}
+                        {(isAddingEmployee || (editingMember && editStaffSubTab === "employees")) && (
+                          <motion.div 
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="bg-[#FAF8F5] p-6 border border-[#C5A059]/40 rounded-lg space-y-4 text-left"
+                          >
+                            <h4 className="text-xs font-display uppercase tracking-wider text-slate-900 font-extrabold pb-2 border-b border-slate-200 flex items-center gap-2">
+                              <span>{isAddingEmployee ? "➕ Add New Staff Record" : "✏️ Edit Staff Record"}</span>
+                            </h4>
+
+                            <form onSubmit={async (e) => {
+                              e.preventDefault();
+                              const formData = new FormData(e.currentTarget);
+                              const fName = formData.get("firstName") as string;
+                              const lName = formData.get("lastName") as string;
+                              const email = formData.get("email") as string;
+                              const phone = formData.get("phone") as string;
+                              const empCode = formData.get("employeeCode") as string;
+                              const role = formData.get("role") as string;
+                              const department = formData.get("department") as string;
+                              const managerName = formData.get("managerName") as string;
+                              const dob = formData.get("dateOfBirth") as string;
+
+                              if (!fName || !lName || !email) {
+                                toastService.error("First Name, Last Name, and Email are required.");
+                                return;
+                              }
+
+                              const propId = selectedCompany || "cml";
+                              const recordId = isAddingEmployee ? `emp_${Date.now()}` : editingMember.id;
+                              
+                              const employeeData = {
+                                firstName: fName,
+                                lastName: lName,
+                                email,
+                                phone: phone || "",
+                                employeeCode: empCode || "",
+                                role: role || "Staff",
+                                department: department || "Operations",
+                                managerName: managerName || "",
+                                dateOfBirth: dob || "",
+                                updatedAt: new Date().toISOString()
+                              };
+
+                              try {
+                                const docRef = doc(db, `cml-signin-users-${propId}`, recordId);
+                                await setDoc(docRef, employeeData, { merge: true });
+                                toastService.success(isAddingEmployee ? "Added employee successfully!" : "Updated employee details successfully!");
+                                setIsAddingEmployee(false);
+                                setEditingMember(null);
+                              } catch (err) {
+                                console.error("Error writing employee:", err);
+                                toastService.error("Database connection failure. Please retry.");
+                              }
+                            }} className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                              <div className="space-y-1">
+                                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-black">First Name *</label>
+                                <input type="text" name="firstName" required defaultValue={editingMember?.firstName || ""} className="w-full border border-slate-200 p-2 bg-white" />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-black">Last Name *</label>
+                                <input type="text" name="lastName" required defaultValue={editingMember?.lastName || ""} className="w-full border border-slate-200 p-2 bg-white" />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-black">Email Address *</label>
+                                <input type="email" name="email" required defaultValue={editingMember?.email || ""} className="w-full border border-slate-200 p-2 bg-white" />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-black">Phone Number</label>
+                                <input type="text" name="phone" defaultValue={editingMember?.phone || ""} className="w-full border border-slate-200 p-2 bg-white" />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-black">Employee Code</label>
+                                <input type="text" name="employeeCode" defaultValue={editingMember?.employeeCode || ""} className="w-full border border-slate-200 p-2 bg-white" />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-black">Job Role / Designation</label>
+                                <input type="text" name="role" defaultValue={editingMember?.role || ""} className="w-full border border-slate-200 p-2 bg-white" />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-black">Department</label>
+                                <select name="department" defaultValue={editingMember?.department || "Operations"} className="w-full border border-slate-200 p-2 bg-white">
+                                  <option value="Front Office">Front Office</option>
+                                  <option value="Housekeeping">Housekeeping</option>
+                                  <option value="Maintenance">Maintenance</option>
+                                  <option value="Food & Beverage">Food & Beverage</option>
+                                  <option value="Spa & Recreation">Spa & Recreation</option>
+                                  <option value="Sales & Marketing">Sales & Marketing</option>
+                                  <option value="Human Resources">Human Resources</option>
+                                  <option value="IT & Security">IT & Security</option>
+                                  <option value="Finance">Finance</option>
+                                  <option value="Operations">Operations</option>
+                                </select>
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-black">Manager Name</label>
+                                <input type="text" name="managerName" defaultValue={editingMember?.managerName || ""} className="w-full border border-slate-200 p-2 bg-white" />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-black">Date of Birth</label>
+                                <input type="date" name="dateOfBirth" defaultValue={editingMember?.dateOfBirth || ""} className="w-full border border-slate-200 p-2 bg-white" />
+                              </div>
+
+                              <div className="md:col-span-3 pt-4 border-t border-slate-200/50 flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => { setIsAddingEmployee(false); setEditingMember(null); }}
+                                  className="px-4 py-2 border border-slate-300 hover:bg-slate-100 rounded-none cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="submit"
+                                  className="px-6 py-2 bg-slate-950 hover:bg-gold hover:text-slate-950 text-white font-bold rounded-none cursor-pointer"
+                                >
+                                  {isAddingEmployee ? "Add To Database" : "Save Record Updates"}
+                                </button>
+                              </div>
+                            </form>
+                          </motion.div>
+                        )}
+
+                        {/* Employees Directory List Table */}
+                        <div className="bg-white border border-slate-100 shadow-sm overflow-x-auto">
+                          <table className="w-full text-left border-collapse min-w-[700px]">
+                            <thead>
+                              <tr className="bg-slate-50 text-slate-400 text-[10px] uppercase font-display tracking-wider border-b border-slate-100">
+                                <th className="p-4 font-black">Employee Code / Name</th>
+                                <th className="p-4 font-black">Department / Role</th>
+                                <th className="p-4 font-black">Email / Phone</th>
+                                <th className="p-4 font-black">Reporting To</th>
+                                <th className="p-4 font-black text-right">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-xs">
+                              {allEmployees
+                                .filter(e => {
+                                  const matchesSearch = !employeeSearchQuery || 
+                                    `${e.firstName || ""} ${e.lastName || ""}`.toLowerCase().includes(employeeSearchQuery.toLowerCase()) ||
+                                    (e.employeeCode || "").toLowerCase().includes(employeeSearchQuery.toLowerCase()) ||
+                                    (e.role || "").toLowerCase().includes(employeeSearchQuery.toLowerCase());
+                                  const matchesDept = employeeDeptFilter === "All" || e.department === employeeDeptFilter;
+                                  return matchesSearch && matchesDept;
+                                })
+                                .map((employee) => (
+                                  <tr key={employee.id} className="hover:bg-slate-50/50 transition-colors">
+                                    <td className="p-4">
+                                      <p className="font-bold text-slate-900">{employee.firstName} {employee.lastName}</p>
+                                      <p className="text-[10px] font-mono text-slate-400 font-bold">{employee.employeeCode || "N/A"}</p>
+                                    </td>
+                                    <td className="p-4">
+                                      <p className="text-slate-800 font-semibold">{employee.role}</p>
+                                      <span className="text-[9px] bg-slate-100 text-slate-600 font-display font-bold uppercase tracking-wider px-2 py-0.5 rounded-sm">
+                                        {employee.department || "Operations"}
+                                      </span>
+                                    </td>
+                                    <td className="p-4">
+                                      <p className="text-slate-600 font-mono text-[11px]">{employee.email}</p>
+                                      <p className="text-slate-400 font-mono text-[10px]">{employee.phone || "No phone record"}</p>
+                                    </td>
+                                    <td className="p-4 font-serif italic text-slate-500">
+                                      {employee.managerName || "Direct Reporting"}
+                                    </td>
+                                    <td className="p-4 text-right space-x-2 shrink-0">
+                                      <button
+                                        onClick={() => {
+                                          setEditingMember(employee);
+                                          setIsAddingEmployee(false);
+                                        }}
+                                        className="text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 text-[11px] rounded transition-colors font-bold"
+                                      >
+                                        ✏️ Edit
+                                      </button>
+                                      <button
+                                        onClick={async () => {
+                                          if (window.confirm(`Are you absolutely sure you want to delete ${employee.firstName} ${employee.lastName} from the cloud directory?`)) {
+                                            try {
+                                              await deleteDoc(doc(db, `cml-signin-users-${selectedCompany || 'cml'}`, employee.id));
+                                              toastService.success(`Deleted ${employee.firstName} from the live staff directory.`);
+                                            } catch (err) {
+                                              console.error("Error deleting:", err);
+                                              toastService.error("Delete failed. Check Firebase network permissions.");
+                                            }
+                                          }
+                                        }}
+                                        className="text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2.5 py-1 text-[11px] rounded transition-colors font-bold"
+                                      >
+                                        ❌ Delete
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 2. DIRECTORS BOARD AND COUNCIL SUBTABS */}
+                    {(editStaffSubTab === "board" || editStaffSubTab === "council") && (
+                      <div className="space-y-6">
+                        {editingMember && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="bg-[#FAF8F5] p-6 border border-[#C5A059]/40 rounded-lg space-y-4 text-left"
+                          >
+                            <h4 className="text-xs font-display uppercase tracking-wider text-slate-900 font-extrabold pb-2 border-b border-slate-200">
+                              ✏️ Edit {editStaffSubTab === "board" ? "Executive Board Member" : "Corporate Council Leader"} Details
+                            </h4>
+
+                            <form onSubmit={(e) => {
+                              e.preventDefault();
+                              const formData = new FormData(e.currentTarget);
+                              const name = formData.get("name") as string;
+                              const role = formData.get("role") as string;
+                              const email = formData.get("email") as string;
+                              const initials = formData.get("initials") as string;
+                              const color = formData.get("color") as string;
+                              const desc = formData.get("desc") as string;
+
+                              if (!name || !role || !email) {
+                                toastService.error("Name, role, and email are required.");
+                                return;
+                              }
+
+                              const updatedMember = {
+                                ...editingMember,
+                                name,
+                                role,
+                                email,
+                                initials: initials || name.substring(0, 2).toUpperCase(),
+                                color,
+                                ...(editStaffSubTab === "board" && { desc })
+                              };
+
+                              if (editStaffSubTab === "board") {
+                                const list = executiveBoard.map(b => b.id === editingMember.id ? updatedMember : b);
+                                setExecutiveBoard(list);
+                                localStorage.setItem("cml_executive_board", JSON.stringify(list));
+                              } else {
+                                const list = corporateOps.map(c => c.id === editingMember.id ? updatedMember : c);
+                                setCorporateOps(list);
+                                localStorage.setItem("cml_corporate_ops", JSON.stringify(list));
+                              }
+
+                              toastService.success("Leader record saved successfully!");
+                              setEditingMember(null);
+                            }} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                              <div className="space-y-1">
+                                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-black">Full Name *</label>
+                                <input type="text" name="name" required defaultValue={editingMember.name} className="w-full border border-slate-200 p-2 bg-white" />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-black">Designation / Role *</label>
+                                <input type="text" name="role" required defaultValue={editingMember.role} className="w-full border border-slate-200 p-2 bg-white" />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-black">Initials</label>
+                                <input type="text" name="initials" defaultValue={editingMember.initials} maxLength={3} className="w-full border border-slate-200 p-2 bg-white" />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-black">Email Address *</label>
+                                <input type="email" name="email" required defaultValue={editingMember.email} className="w-full border border-slate-200 p-2 bg-white" />
+                              </div>
+                              <div className="space-y-1 md:col-span-2">
+                                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-black">Visual Badge Style Class</label>
+                                <input type="text" name="color" defaultValue={editingMember.color} placeholder="e.g. bg-slate-900 text-stone-100" className="w-full border border-slate-200 p-2 bg-white" />
+                              </div>
+
+                              {editStaffSubTab === "board" && (
+                                <div className="space-y-1 md:col-span-2">
+                                  <label className="text-[9px] uppercase tracking-wider text-slate-500 font-black">Professional Biography / Bio Quote</label>
+                                  <textarea name="desc" defaultValue={editingMember.desc || ""} rows={3} className="w-full border border-slate-200 p-2 bg-white resize-none" />
+                                </div>
+                              )}
+
+                              <div className="md:col-span-2 pt-4 border-t border-slate-200/50 flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingMember(null)}
+                                  className="px-4 py-2 border border-slate-300 hover:bg-slate-100 rounded-none cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="submit"
+                                  className="px-6 py-2 bg-slate-950 hover:bg-gold hover:text-slate-950 text-white font-bold rounded-none cursor-pointer"
+                                >
+                                  Save Leader Updates
+                                </button>
+                              </div>
+                            </form>
+                          </motion.div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {(editStaffSubTab === "board" ? executiveBoard : corporateOps).map((leader) => (
+                            <div key={leader.id} className="bg-white border border-slate-100 p-5 shadow-sm flex flex-col justify-between group">
+                              <div>
+                                <div className="flex items-center gap-3 mb-4">
+                                  <div className={cn("w-12 h-12 rounded-full flex items-center justify-center font-bold font-display text-sm tracking-wide bg-gradient-to-br border border-slate-100", leader.color)}>
+                                    {leader.initials || leader.name.charAt(0)}
+                                  </div>
+                                  <div>
+                                    <h4 className="font-bold text-slate-900 text-sm group-hover:text-gold transition-colors">{leader.name}</h4>
+                                    <p className="text-[10px] text-slate-400 uppercase font-display tracking-wider font-extrabold">{leader.role}</p>
+                                  </div>
+                                </div>
+                                <p className="text-slate-500 font-mono text-[11px] mb-3">{leader.email}</p>
+                                {leader.desc && (
+                                  <p className="text-[11px] text-slate-500 font-serif italic mb-4 leading-relaxed bg-slate-50 p-2.5 border-l-2 border-gold/40">
+                                    "{leader.desc}"
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="pt-3 border-t border-slate-50 flex justify-end">
+                                <button
+                                  onClick={() => setEditingMember(leader)}
+                                  className="text-xs text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-3.5 py-1.5 font-bold transition-all"
+                                >
+                                  ✏️ Edit Leader Information
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
               </div>
             ) : activeTab === "revenue" ? (
               <div className="space-y-8 pb-32">

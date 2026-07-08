@@ -119,6 +119,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [unreadTotal, setUnreadTotal] = useState(0);
+  const [showSpacesMobile, setShowSpacesMobile] = useState(false);
 
   // Google Workspace Integration States
   const [connections, setConnections] = useState<Record<string, any>>(() => getGoogleWorkspaceConnections());
@@ -156,6 +157,25 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
   const currentConnection = connections[companyId];
   const workspaceAccessToken = currentConnection?.accessToken || null;
   const isWorkspaceConnected = !!workspaceAccessToken;
+
+  const getSymmetricDmId = (email1: string, email2: string): string => {
+    const sorted = [email1.toLowerCase().trim(), email2.toLowerCase().trim()].sort();
+    const clean1 = sorted[0].replace(/[^a-zA-Z0-9]/g, "_");
+    const clean2 = sorted[1].replace(/[^a-zA-Z0-9]/g, "_");
+    return `dm-${clean1}-${clean2}`;
+  };
+
+  const getDmPartnerInfo = (spaceId: string) => {
+    const currentUserEmail = auth.currentUser?.email || "staff@cml.com.fj";
+    for (const colleague of DEFAULT_COLLEAGUES) {
+      if (colleague.email.toLowerCase() === currentUserEmail.toLowerCase()) continue;
+      const cleanEmail = colleague.email.toLowerCase().replace(/[^a-zA-Z0-9]/g, "_");
+      if (spaceId.includes(cleanEmail)) {
+        return colleague;
+      }
+    }
+    return null;
+  };
 
   // Attachment Simulation
   const [simulatedAttachment, setSimulatedAttachment] = useState<{ url: string; name: string } | null>(null);
@@ -296,6 +316,18 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
   }, [companyId, db]);
 
   const getMembersForSpace = (spaceId: string): MemberPresence[] => {
+    if (spaceId.startsWith("dm-")) {
+      const currentUserEmail = auth.currentUser?.email || "staff@cml.com.fj";
+      const currentUserName = auth.currentUser?.displayName || "Authorized Staff";
+      const partner = getDmPartnerInfo(spaceId);
+      const list: MemberPresence[] = [
+        { name: currentUserName, role: "Staff", status: "online", email: currentUserEmail }
+      ];
+      if (partner) {
+        list.push(partner);
+      }
+      return list;
+    }
     if (spaceMembers[spaceId]) {
       return spaceMembers[spaceId];
     }
@@ -462,10 +494,31 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
 
   const spaces = [...baseSpaces, ...customSpaces, ...formattedRealSpaces]
     .filter(space => !deletedSpaceIds.includes(space.id))
-    .map(space => ({
-      ...space,
-      webhookUrl: customWebhooks[space.id] || space.webhookUrl
-    }));
+    .filter(space => {
+      if (space.id.startsWith("dm-")) {
+        const currentUserEmail = auth.currentUser?.email || "staff@cml.com.fj";
+        const cleanEmail = currentUserEmail.toLowerCase().replace(/[^a-zA-Z0-9]/g, "_");
+        return space.id.includes(cleanEmail);
+      }
+      return true;
+    })
+    .map(space => {
+      let name = space.name;
+      let description = space.description;
+      if (space.id.startsWith("dm-")) {
+        const partner = getDmPartnerInfo(space.id);
+        if (partner) {
+          name = `👤 ${partner.name}`;
+          description = `Private communication with ${partner.name}`;
+        }
+      }
+      return {
+        ...space,
+        name,
+        description,
+        webhookUrl: customWebhooks[space.id] || space.webhookUrl
+      };
+    });
 
   // Sync outbound input on active space selection
   const selectedSpace = spaces.find(s => s.id === activeSpaceId);
@@ -668,13 +721,23 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
 
   // Start Private Chat with a member
   const handleStartPrivateChat = (memberName: string) => {
-    const dmId = `dm-${memberName.toLowerCase().replace(/\s+/g, '-')}`;
+    const colleague = DEFAULT_COLLEAGUES.find(c => c.name.toLowerCase() === memberName.toLowerCase() || memberName.toLowerCase().includes(c.name.split(" ")[0].toLowerCase()));
+    if (!colleague) {
+      // Fallback if not found in list
+      const dmId = `dm-${memberName.toLowerCase().replace(/\s+/g, '-')}`;
+      setActiveSpaceId(dmId);
+      return;
+    }
+    
+    const currentUserEmail = auth.currentUser?.email || "staff@cml.com.fj";
+    const dmId = getSymmetricDmId(currentUserEmail, colleague.email);
+    
     const existing = spaces.find(s => s.id === dmId);
     if (!existing) {
       const newSpace: ChatSpace = {
         id: dmId,
-        name: `👤 ${memberName}`,
-        description: `Private secure communication with ${memberName}`,
+        name: `👤 ${colleague.name}`,
+        description: `Private communication with ${colleague.name}`,
         unreadCount: 0
       };
       const updated = [...customSpaces, newSpace];
@@ -682,7 +745,8 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
       localStorage.setItem(`cml_custom_spaces_${companyId}`, JSON.stringify(updated));
     }
     setActiveSpaceId(dmId);
-    toastService.success(`Started secure private direct message with ${memberName}.`);
+    setShowSpacesMobile(false); // Close spaces sidebar on mobile when starting a DM!
+    toastService.success(`Started private secure chat with ${colleague.name}.`);
   };
 
 
@@ -860,6 +924,15 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
       return () => unsubscribe();
     }
 
+    if (activeSpaceId.startsWith("dm-")) {
+      const currentUserEmail = auth.currentUser?.email || "";
+      const cleanEmail = currentUserEmail.toLowerCase().replace(/[^a-zA-Z0-9]/g, "_");
+      if (!activeSpaceId.includes(cleanEmail)) {
+        setMessages([]);
+        return;
+      }
+    }
+
     const colRef = collection(db, "hybrid_sandbox");
     const targetCol = activeSpaceId.startsWith("spaces/") 
       ? `google-chat-messages-real-${activeSpaceId.replace(/\//g, "-")}`
@@ -903,6 +976,14 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
     const unsubscribes: (() => void)[] = [];
 
     spaces.forEach((space) => {
+      if (space.id.startsWith("dm-")) {
+        const currentUserEmail = auth.currentUser?.email || "";
+        const cleanEmail = currentUserEmail.toLowerCase().replace(/[^a-zA-Z0-9]/g, "_");
+        if (!space.id.includes(cleanEmail)) {
+          return; // Skip DMs the current user is not a part of!
+        }
+      }
+
       const colRef = collection(db, "hybrid_sandbox");
       const targetCol = space.id.startsWith("spaces/")
         ? `google-chat-messages-real-${space.id.replace(/\//g, "-")}`
@@ -1695,12 +1776,23 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
-      // Simulated upload path
-      setSimulatedAttachment({
-        name: file.name,
-        url: "https://images.unsplash.com/photo-1457369804613-52c61a468e7d?q=80&w=256"
-      });
-      toastService.success(`Attached file "${file.name}" successfully!`);
+      const isImage = file.type.startsWith("image/");
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        setSimulatedAttachment({
+          name: file.name,
+          url: dataUrl
+        });
+        toastService.success(`Attached file "${file.name}" successfully!`);
+      };
+      
+      if (isImage) {
+        reader.readAsDataURL(file);
+      } else {
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -1760,19 +1852,22 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
   };
 
   const getMemberEmail = (name: string): string => {
+    const colleague = DEFAULT_COLLEAGUES.find(c => c.name.toLowerCase() === name.toLowerCase() || name.toLowerCase().includes(c.name.split(" ")[0].toLowerCase()));
+    if (colleague) return colleague.email;
     const n = name.toLowerCase();
     if (n.includes("charles")) return "digitalmedia@cml.com.fj";
     if (n.includes("priyesh")) return "graphics@cml.com.fj";
-    if (n.includes("rohit")) return "accounts@cml.com.fj";
-    if (n.includes("charlene")) return "dutymanager.ramada@cml.com.fj";
-    if (n.includes("nolau")) return "rooms@cml.com.fj";
+    if (n.includes("rohit")) return "rohit@cml.com.fj";
+    if (n.includes("charlene")) return "mod@ramadawailoaloafiji.com";
+    if (n.includes("nolau")) return "roomsd@ramadawailoaloafiji.com";
     if (n.includes("neetisa")) return "hr@cml.com.fj";
     return "staff@cml.com.fj";
   };
 
   const activeSpace = spaces.find(s => s.id === activeSpaceId);
   const isDM = activeSpaceId.startsWith("dm-");
-  const dmName = isDM ? (activeSpace ? getCleanSpaceName(activeSpace.name) : activeSpaceId.replace("dm-", "").split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")) : "";
+  const partnerInfo = isDM ? getDmPartnerInfo(activeSpaceId) : null;
+  const dmName = isDM ? (partnerInfo ? partnerInfo.name : (activeSpace ? getCleanSpaceName(activeSpace.name) : activeSpaceId.replace("dm-", "").split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" "))) : "";
 
   return (
     <>
@@ -1810,7 +1905,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
               : `fixed bg-white border border-slate-200 shadow-2xl flex flex-col z-[110] overflow-hidden transition-all duration-300 ${
                   isMaximized
                     ? "inset-4 md:inset-10 z-[110]"
-                    : "bottom-24 right-6 w-[480px] h-[600px]"
+                    : "bottom-20 sm:bottom-24 right-4 sm:right-6 w-[calc(100vw-32px)] sm:w-[480px] h-[500px] sm:h-[600px]"
                 }`
           }
         >
@@ -2000,14 +2095,24 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
           )}
 
           {/* Subheader / Description */}
-          <div className="bg-slate-50 border-b border-slate-100 px-4 py-2 flex items-center justify-between shrink-0">
+          <div className="bg-slate-50 border-b border-slate-100 px-4 py-2 flex items-center justify-between shrink-0 gap-2">
             <div className="flex-1 min-w-0 pr-2">
-              <p className="text-[10px] text-slate-800 font-sans font-extrabold truncate flex items-center gap-1">
-                {isDM ? `👤 DM: ${dmName}` : spaces.find(s => s.id === activeSpaceId)?.name}
-                {isDM && (
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping inline-block" />
-                )}
-              </p>
+              <div className="flex items-center gap-1 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => setShowSpacesMobile(!showSpacesMobile)}
+                  className="sm:hidden p-1 rounded hover:bg-slate-200 text-slate-600 transition-colors shrink-0 flex items-center justify-center cursor-pointer"
+                  title="Toggle Spaces List"
+                >
+                  <MessageSquare size={11} style={{ color: primaryColor }} />
+                </button>
+                <p className="text-[10px] text-slate-800 font-sans font-extrabold truncate flex items-center gap-1">
+                  {isDM ? `👤 DM: ${dmName}` : spaces.find(s => s.id === activeSpaceId)?.name}
+                  {isDM && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping inline-block" />
+                  )}
+                </p>
+              </div>
               <p className="text-[8px] text-slate-400 font-serif italic truncate">
                 {isDM ? `Private encrypted staff correspondence with ${dmName}` : spaces.find(s => s.id === activeSpaceId)?.description}
               </p>
@@ -2017,11 +2122,11 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
               {activeSpace && !isDM && (
                 <button
                   onClick={() => setShowWebhookModal(true)}
-                  className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 hover:text-emerald-800 border border-emerald-200/60 transition-all shadow-2xs active:scale-95 shrink-0 cursor-pointer"
+                  className="flex items-center gap-1 px-1.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 hover:text-emerald-800 border border-emerald-200/60 transition-all shadow-2xs active:scale-95 shrink-0 cursor-pointer"
                   title="Configure & Create Google Chat Webhooks"
                 >
                   <Settings size={12} className={activeSpace.webhookUrl ? "text-emerald-600 animate-pulse" : "text-emerald-500"} />
-                  <span className="text-[9px] font-sans font-bold uppercase tracking-wider">Webhooks</span>
+                  <span className="text-[9px] font-sans font-bold uppercase tracking-wider hidden sm:inline">Webhooks</span>
                 </button>
               )}
 
@@ -2031,11 +2136,11 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
                   href={`https://chat.google.com/space/${activeSpaceId.replace("spaces/", "")}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1 px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 hover:text-blue-800 border border-blue-200/60 transition-all shadow-2xs active:scale-95 shrink-0 cursor-pointer"
+                  className="flex items-center gap-1 px-1.5 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 hover:text-blue-800 border border-blue-200/60 transition-all shadow-2xs active:scale-95 shrink-0 cursor-pointer"
                   title="Open this real space in Google Chat website"
                 >
                   <Sparkles size={11} className="text-blue-500 animate-pulse" />
-                  <span className="text-[9px] font-sans font-bold uppercase tracking-wider">Open Chat</span>
+                  <span className="text-[9px] font-sans font-bold uppercase tracking-wider hidden sm:inline">Open Chat</span>
                 </a>
               )}
 
@@ -2372,19 +2477,28 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
           )}
 
           {/* Workspaces / Spaces and Active chat messages split view */}
-          <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 flex overflow-hidden relative">
             {/* Spaces navigation rail (left) */}
-            <div className={`${(isEmbedded || isMaximized) ? "w-[230px]" : "w-[155px]"} bg-slate-50 border-r border-slate-200 flex flex-col select-none shrink-0 overflow-y-auto custom-scrollbar transition-all duration-300`}>
+            <div className={`${(isEmbedded || isMaximized) ? "w-[230px]" : "w-[155px]"} ${showSpacesMobile ? "flex absolute inset-y-0 left-0 z-40 shadow-xl border-r" : "hidden sm:flex"} bg-slate-50 border-r border-slate-200 flex flex-col select-none shrink-0 overflow-y-auto custom-scrollbar transition-all duration-300`}>
               <div className="p-2 border-b border-slate-100 bg-slate-100/50 flex items-center justify-between">
                 <span className="text-[8px] font-display uppercase tracking-widest text-slate-400 font-black">Active Spaces</span>
-                <button 
-                  onClick={() => setIsCreatingSpace(true)}
-                  className="transition-colors p-0.5"
-                  style={{ color: primaryColor }}
-                  title="Add Space"
-                >
-                  <PlusCircle size={12} />
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button 
+                    onClick={() => setIsCreatingSpace(true)}
+                    className="transition-colors p-0.5"
+                    style={{ color: primaryColor }}
+                    title="Add Space"
+                  >
+                    <PlusCircle size={12} />
+                  </button>
+                  <button
+                    onClick={() => setShowSpacesMobile(false)}
+                    className="sm:hidden text-slate-400 hover:text-slate-600 p-0.5 font-bold"
+                    title="Close spaces sidebar"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
               <div className="flex-1 py-1">
                 {spaces.map((space) => {
@@ -2409,6 +2523,7 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
                           setShowSearch(false);
                           setSearchQuery("");
                           setIsCreatingSpace(false);
+                          setShowSpacesMobile(false);
                         }}
                         className="flex-1 min-w-0 text-left outline-none cursor-pointer"
                       >
@@ -2689,20 +2804,52 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
 
                               {/* Render Attachment if any */}
                               {msg.attachmentUrl && (
-                                <div className="mt-1.5 border border-slate-200 bg-white text-slate-800 p-1.5 rounded-[2px] flex items-center gap-1 max-w-[150px] overflow-hidden">
-                                  <Paperclip size={10} className="text-gold shrink-0" />
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-[7px] font-bold truncate">{msg.attachmentName}</p>
-                                    <a 
-                                      href={msg.attachmentUrl} 
-                                      target="_blank" 
-                                      rel="noreferrer" 
-                                      className="text-[6px] font-bold hover:underline"
-                                      style={{ color: primaryColor }}
-                                    >
-                                      View mock upload
-                                    </a>
-                                  </div>
+                                <div className="mt-2 border border-slate-200/80 bg-white p-1.5 rounded-md max-w-[220px] overflow-hidden shadow-xs text-slate-800">
+                                  {/* Check if image */}
+                                  {(msg.attachmentUrl.startsWith("data:image/") || 
+                                    /\.(jpeg|jpg|gif|png|webp|svg)$/i.test(msg.attachmentName || "") || 
+                                    msg.attachmentUrl.includes("unsplash.com")) ? (
+                                    <div className="flex flex-col gap-1">
+                                      <a href={msg.attachmentUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded border border-slate-200/50">
+                                        <img 
+                                          src={msg.attachmentUrl} 
+                                          alt={msg.attachmentName || "Attached Image"} 
+                                          className="w-full max-h-40 object-cover hover:scale-105 transition-all duration-300"
+                                          referrerPolicy="no-referrer"
+                                        />
+                                      </a>
+                                      <div className="flex items-center justify-between px-0.5 mt-0.5">
+                                        <span className="text-[7.5px] font-bold font-sans text-slate-500 truncate max-w-[150px]" title={msg.attachmentName}>
+                                          {msg.attachmentName}
+                                        </span>
+                                        <a 
+                                          href={msg.attachmentUrl} 
+                                          target="_blank" 
+                                          rel="noreferrer" 
+                                          className="text-[7px] font-extrabold hover:underline select-none"
+                                          style={{ color: primaryColor }}
+                                        >
+                                          Open
+                                        </a>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <Paperclip size={12} style={{ color: primaryColor }} className="shrink-0" />
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-[8px] font-bold text-slate-700 truncate leading-tight" title={msg.attachmentName}>{msg.attachmentName}</p>
+                                        <a 
+                                          href={msg.attachmentUrl} 
+                                          target="_blank" 
+                                          rel="noreferrer" 
+                                          className="text-[7px] font-bold hover:underline leading-none block mt-0.5"
+                                          style={{ color: primaryColor }}
+                                        >
+                                          Download File
+                                        </a>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -2741,18 +2888,28 @@ export const GoogleChatWidget: React.FC<{ companyId: string; isEmbedded?: boolea
                     className="border-t border-slate-150 p-2 bg-slate-50 flex flex-col gap-1.5 shrink-0"
                   >
                     {simulatedAttachment && (
-                      <div className={`text-[8px] px-2 py-1 flex items-center justify-between border rounded-sm ${
+                      <div className={`text-[8.5px] px-2.5 py-1.5 flex items-center justify-between border rounded-md shadow-xs ${
                         companyId === "ramada" 
                           ? "bg-red-50 text-red-800 border-red-100" 
                           : (companyId === "wyndham" 
                               ? "bg-teal-50 text-teal-800 border-teal-100" 
                               : "bg-amber-50 text-amber-800 border-amber-100")
                       }`}>
-                        <span className="truncate">📎 {simulatedAttachment.name}</span>
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          {simulatedAttachment.url.startsWith("data:image/") && (
+                            <img 
+                              src={simulatedAttachment.url} 
+                              alt="thumbnail" 
+                              className="w-6 h-6 object-cover rounded border border-white/40 shadow-2xs"
+                              referrerPolicy="no-referrer"
+                            />
+                          )}
+                          <span className="truncate font-sans font-medium">📎 {simulatedAttachment.name}</span>
+                        </div>
                         <button 
                           type="button" 
                           onClick={() => setSimulatedAttachment(null)} 
-                          className="font-bold font-sans text-[10px] hover:scale-110 transition-transform"
+                          className="font-bold font-sans text-[10px] hover:scale-110 transition-transform p-1 ml-1"
                           style={{ color: primaryColor }}
                         >
                           ✕

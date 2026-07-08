@@ -759,7 +759,7 @@ export function HotelOrgChart({
                     className={cn("py-2.5 text-white font-display text-[10px] font-black uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer hover:opacity-90", orgButtonBg)}
                   >
                     <MessageSquare size={13} />
-                    Message Team
+                    Chat
                   </button>
                   <button
                     onClick={() => {
